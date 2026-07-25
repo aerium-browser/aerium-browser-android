@@ -1,0 +1,49 @@
+name: auto-resume
+# When a build fails AND left a checkpoint behind, re-dispatch it with
+# resume_run_id so it continues without a human noticing. This covers two
+# distinct cases here:
+#   1. transient runner deaths (e.g. run 29987438454's "runner lost
+#      communication with the server" at stage 11)
+#   2. the by-design "did not finish within 16 stages" failure from
+#      check-completion, which previously required a manual re-dispatch to
+#      keep a long build going
+# A run that failed WITHOUT a checkpoint hit a real error at its first stage
+# (fetch/patch/gn failure) - resuming would fail identically, so it is left
+# alone. The cap is higher than the Windows repo's because case 2 means one
+# commit can legitimately need several auto-continues.
+on:
+  workflow_run:
+    workflows: [Build]
+    types: [completed]
+
+permissions:
+  actions: write
+
+jobs:
+  resume:
+    if: github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resume from the failed run's checkpoint
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          if ! gh api "repos/$REPO/actions/runs/$RUN_ID/artifacts" --jq '.artifacts[].name' | grep -qx 'build-artifact-android'; then
+            echo "Run $RUN_ID saved no checkpoint - real error, not a transient crash. Not resuming."
+            exit 0
+          fi
+          # Cap the auto-retry chain per commit. Dispatches made with the
+          # workflow token show actor github-actions[bot], so manual resumes
+          # by a human don't count against the cap.
+          attempts=$(gh api "repos/$REPO/actions/workflows/build.yml/runs?head_sha=$HEAD_SHA&per_page=100" \
+            --jq '[.workflow_runs[] | select(.actor.login == "github-actions[bot]")] | length')
+          if [ "$attempts" -ge 5 ]; then
+            echo "Already auto-resumed $attempts times for $HEAD_SHA - giving up, this needs a human."
+            exit 0
+          fi
+          echo "Dispatching resume of run $RUN_ID (auto-attempt $((attempts + 1)))"
+          gh api -X POST "repos/$REPO/actions/workflows/build.yml/dispatches" \
+            -f ref=main -f "inputs[resume_run_id]=$RUN_ID"

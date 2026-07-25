@@ -23,9 +23,12 @@ on:
 permissions:
   contents: write
 
+# cancel-in-progress deliberately false: a routine push must QUEUE behind a
+# multi-day build, not kill it. To supersede a doomed run, cancel it manually
+# first.
 concurrency:
   group: aerium-android-build
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build-1:

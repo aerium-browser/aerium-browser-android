@@ -149,7 +149,7 @@ runs:
       with:
         name: build-artifact-android
         path: ${{ github.workspace }}/chromium/artifacts.tar.zst
-        retention-days: 4
+        retention-days: 10
         compression-level: 0
         overwrite: true
 
