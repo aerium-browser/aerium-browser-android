@@ -316,7 +316,7 @@ sed_i '/^    "seznam": {$/i\
       "id": 119\
     },\
 ' $SE_DEFS/prepopulated_engines.json
-sed_i 's/"kMaxPrepopulatedEngineID": [0-9]\+,/"kMaxPrepopulatedEngineID": 119,/; s/"kCurrentDataVersion": [0-9]\+/"kCurrentDataVersion": 250/; s/"name": "startpage",/"name": "Startpage",/' \
+sed_i 's/"kMaxPrepopulatedEngineID": [0-9]\+,/"kMaxPrepopulatedEngineID": 119,/; s/"kCurrentDataVersion": [0-9]\+/"kCurrentDataVersion": 251/; s/"name": "startpage",/"name": "Startpage",/' \
     $SE_DEFS/prepopulated_engines.json
 sed_i '/^    "ZZ": {$/,/^    }$/{s/^        "&google",$/        "\&startpage",\n        "\&duckduckgo",\n        "\&duckduckgo_lite",\n        "\&duckduckgo_html",\n        "\&searx"/; /^        "&bing",$/d; /^        "&yahoo"$/d}' \
     $SE_DEFS/regional_settings.json
