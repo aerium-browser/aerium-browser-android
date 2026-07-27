@@ -4,6 +4,29 @@
 # Visual theming is left stock so Android's own dynamic-color/dark-theme
 # settings work as expected instead of being overridden.
 
+# `sed -i` succeeds and changes nothing when its pattern stops matching, so a
+# Chromium version bump that renames or reflows a targeted line silently drops
+# the corresponding Aerium change - the build stays green and the feature is
+# just missing from the APK. `sed_i` is a drop-in replacement that fails the
+# build instead. Use it for every substitution whose absence would be a
+# behaviour regression rather than a cosmetic one.
+sed_i() {
+    local file="${*: -1}"
+    local before
+    if [ ! -f "$file" ]; then
+        echo "[aerium] FATAL: sed target does not exist: $file" >&2
+        return 1
+    fi
+    before=$(cat "$file")
+    sed -i "$@"
+    if [ "$before" = "$(cat "$file")" ]; then
+        echo "[aerium] FATAL: sed changed nothing in $file" >&2
+        echo "[aerium]        expression: ${*:1:$#-1}" >&2
+        echo "[aerium]        upstream probably moved this code - see theme.sh" >&2
+        return 1
+    fi
+}
+
 # --- Product name in every UI string source (.grd/.grdp/.xtb). Vanadium's
 # branding patches already renamed their subset; this sweep catches the rest
 # (e.g. "About Chromium" strings living inside <if expr> branches). Changed
@@ -231,10 +254,26 @@ sed -i 's/^  registry->RegisterListPref(prefs::kAboutFlagsEntries);$/  \/\/ Sile
 # Mechanics (verified against Chromium 150.0.7871.124 source):
 # - prepopulated_engines.json is the master engine list (startpage already
 #   exists upstream, id 113, with a bundled icon; the DuckDuckGo variants and
-#   SearXNG are new entries). New IDs use 1001+ so they can never collide
-#   with upstream IDs on a version bump (kMaxPrepopulatedEngineID tracks the
-#   highest, UMA-only). kCurrentDataVersion is raised so profiles created by
-#   earlier builds pick up the new list on update.
+#   SearXNG are new entries). New IDs take the free slots just above
+#   upstream's highest (116), with kMaxPrepopulatedEngineID raised to match -
+#   exactly what the comment above that constant instructs.
+#   kCurrentDataVersion is raised so profiles created by earlier builds pick
+#   up the new list on update.
+#
+#   IDs must stay <= 1000. Using 1001+ to dodge upstream collisions (which an
+#   earlier revision did) breaks two Chromium invariants:
+#     * template_url_data.cc GenerateGUID() only emits the deterministic sync
+#       GUID for prepopulate_id in [1, 1000]; above that each construction
+#       gets a random UUID, which is precisely what the deterministic GUID
+#       exists to avoid ("to make sure sync doesn't incur in duplicates for
+#       prepopulated engines"), so synced profiles accumulate duplicate rows
+#       and duplicate keywords for the same engine.
+#     * search_engine_choice_service.cc treats
+#       prepopulate_id > kMaxPrepopulatedEngineID as "distribution custom
+#       engine"; raising the constant to 1003 to cover 1001+ IDs disabled
+#       that classification for genuinely custom engines too.
+#   On a Chromium bump, check whether upstream claimed 117-119; if so move
+#   ours to the next free IDs below 1000.
 # - regional_settings.json's "ZZ" element is the fallback list for countries
 #   without their own entry; GetRegionalSettings() in
 #   regional_capabilities_utils.cc is redirected to always use it
@@ -246,7 +285,7 @@ sed -i 's/^  registry->RegisterListPref(prefs::kAboutFlagsEntries);$/  \/\/ Sile
 #   (Vanadium's patch 0116 already retargeted the stock google.id lookup to
 #   duckduckgo.id, hence the dual pattern below).
 SE_DEFS=third_party/search_engines_data/resources/definitions
-sed -i '/^    "ecosia": {$/i\
+sed_i '/^    "ecosia": {$/i\
     "duckduckgo_html": {\
       "name": "DuckDuckGo HTML",\
       "keyword": "html.duckduckgo.com",\
@@ -254,7 +293,7 @@ sed -i '/^    "ecosia": {$/i\
       "search_url": "https://html.duckduckgo.com/html/?q={searchTerms}",\
       "suggest_url": "https://duckduckgo.com/ac/?q={searchTerms}\&type=list",\
       "type": "SEARCH_ENGINE_DUCKDUCKGO",\
-      "id": 1001\
+      "id": 117\
     },\
 \
     "duckduckgo_lite": {\
@@ -264,26 +303,26 @@ sed -i '/^    "ecosia": {$/i\
       "search_url": "https://lite.duckduckgo.com/lite/?q={searchTerms}",\
       "suggest_url": "https://duckduckgo.com/ac/?q={searchTerms}\&type=list",\
       "type": "SEARCH_ENGINE_DUCKDUCKGO",\
-      "id": 1002\
+      "id": 118\
     },\
 ' $SE_DEFS/prepopulated_engines.json
-sed -i '/^    "seznam": {$/i\
+sed_i '/^    "seznam": {$/i\
     "searx": {\
       "name": "SearXNG",\
       "keyword": "searx.be",\
       "favicon_url": "https://searx.be/favicon.ico",\
       "search_url": "https://searx.be/search?q={searchTerms}",\
       "type": "SEARCH_ENGINE_OTHER",\
-      "id": 1003\
+      "id": 119\
     },\
 ' $SE_DEFS/prepopulated_engines.json
-sed -i 's/"kMaxPrepopulatedEngineID": [0-9]\+,/"kMaxPrepopulatedEngineID": 1003,/; s/"kCurrentDataVersion": [0-9]\+/"kCurrentDataVersion": 250/; s/"name": "startpage",/"name": "Startpage",/' \
+sed_i 's/"kMaxPrepopulatedEngineID": [0-9]\+,/"kMaxPrepopulatedEngineID": 119,/; s/"kCurrentDataVersion": [0-9]\+/"kCurrentDataVersion": 250/; s/"name": "startpage",/"name": "Startpage",/' \
     $SE_DEFS/prepopulated_engines.json
-sed -i '/^    "ZZ": {$/,/^    }$/{s/^        "&google",$/        "\&startpage",\n        "\&duckduckgo",\n        "\&duckduckgo_lite",\n        "\&duckduckgo_html",\n        "\&searx"/; /^        "&bing",$/d; /^        "&yahoo"$/d}' \
+sed_i '/^    "ZZ": {$/,/^    }$/{s/^        "&google",$/        "\&startpage",\n        "\&duckduckgo",\n        "\&duckduckgo_lite",\n        "\&duckduckgo_html",\n        "\&searx"/; /^        "&bing",$/d; /^        "&yahoo"$/d}' \
     $SE_DEFS/regional_settings.json
-sed -i 's|auto iter = TemplateURLPrepopulateData::kRegionalSettings.find(country_id);|// Aerium: every country gets the same privacy-focused engine list - the\n  // "ZZ" default in regional_settings.json - instead of per-country\n  // Google-led lists.\n  auto iter = TemplateURLPrepopulateData::kRegionalSettings.find(CountryId());|' \
+sed_i 's|auto iter = TemplateURLPrepopulateData::kRegionalSettings.find(country_id);|// Aerium: every country gets the same privacy-focused engine list - the\n  // "ZZ" default in regional_settings.json - instead of per-country\n  // Google-led lists.\n  auto iter = TemplateURLPrepopulateData::kRegionalSettings.find(CountryId());|' \
     components/regional_capabilities/regional_capabilities_utils.cc
-sed -i 's/^\( *\)\(google\|duckduckgo\)\.id,$/\1startpage.id,/' \
+sed_i 's/^\( *\)\(google\|duckduckgo\)\.id,$/\1startpage.id,/' \
     components/search_engines/template_url_prepopulate_data.cc
 
 # --- Fingerprint protection parity with Windows: canvas image-data noise,
