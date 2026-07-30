@@ -232,6 +232,17 @@ if [ $MODE_CI = 1 ]; then
         exit 0
     elif [ $RET != 0 ]; then
         echo "[aerium] build failed with exit code $RET"
+        # siso (the build backend modern Chromium/Vanadium uses in place of
+        # plain ninja) does not echo a failing command's own output to
+        # stdout - it only prints "see ./out/Default/siso_output for full
+        # command line and output" and leaves it at that. Without this dump,
+        # every CI failure was a black box that could only be diagnosed by
+        # downloading the multi-GB resume artifact and looking inside it.
+        if [ -f out/Default/siso_output ]; then
+            echo "[aerium] --- tail of out/Default/siso_output (last 200 lines) ---"
+            tail -n 200 out/Default/siso_output || true
+            echo "[aerium] --- end of siso_output tail ---"
+        fi
         exit $RET
     fi
 else
