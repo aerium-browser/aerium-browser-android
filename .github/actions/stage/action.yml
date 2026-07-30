@@ -19,6 +19,14 @@ outputs:
 runs:
   using: 'composite'
   steps:
+    - name: Record stage start time
+      if: inputs.finished != 'true'
+      shell: bash
+      # build.sh budgets its compile window against this, so that the (large,
+      # growing) checkpoint restore below is counted against the job's 350-min
+      # timeout instead of being invisible to it.
+      run: echo "STAGE_START_TS=$(date +%s)" >> "$GITHUB_ENV"
+
     - name: Maximize build space
       if: inputs.finished != 'true'
       uses: easimon/maximize-build-space@v10

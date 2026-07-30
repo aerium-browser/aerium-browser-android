@@ -4,7 +4,7 @@ name: auto-resume
 # distinct cases here:
 #   1. transient runner deaths (e.g. run 29987438454's "runner lost
 #      communication with the server" at stage 11)
-#   2. the by-design "did not finish within 16 stages" failure from
+#   2. the by-design "did not finish within 24 stages" failure from
 #      check-completion, which previously required a manual re-dispatch to
 #      keep a long build going
 # A run that failed WITHOUT a checkpoint hit a real error at its first stage

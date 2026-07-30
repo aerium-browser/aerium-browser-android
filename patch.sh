@@ -14,7 +14,14 @@ sed -i 's|static Intent maybeModifyCustomTabIntents(Context context, Intent inte
 sed -i 's|private static void init(Context ctx, SpecType specType) {|private static void init(Context ctx, SpecType specType) { if (!isEligible()) { return; }|' aerium/android_config/parser/java/src/app/aerium/config/AeriumConfParser.java
 sed -i 's|if (!_omit_dex) {|if (_is_base_module \&\& !_omit_dex) {|' build/config/android/rules.gni
 sed -i '/safelyRemovePreference(prefFragment/d' aerium/chromium_src/chrome/browser/language/android/java/src/org/chromium/chrome/browser/language/settings/LanguageSettingsExt.java
-sed -i '/removeEntryForKey(fragmentName, "translate_switch")/d' chrome/android/java/src/org/chromium/chrome/browser/settings/search/SettingsSearchCoordinator.java
+# Aerium keeps the translate switch (the line above drops Vanadium's removal
+# of the preference itself), so its settings-search index entry must stay too.
+# Vanadium adds this call in SearchIndexProviderHooks.java, not in
+# SettingsSearchCoordinator.java - see vanadium patch
+# 0263-Reflect-changes-for-removed-settings-in-search.patch, which only adds
+# the two Hooks call sites to the Coordinator. Pointing at the Coordinator made
+# this a silent no-op, leaving the index stripping an entry that still exists.
+sed -i '/removeEntryForKey(fragmentName, "translate_switch")/d' aerium/chromium_src/chrome/android/java/src/org/chromium/chrome/browser/settings/search/SearchIndexProviderHooks.java
 
 sed -i '/feature_overrides.EnableFeature(::features::kSkipVulkanBlocklist);/d' chrome/browser/chrome_browser_field_trials.cc
 sed -i '/feature_overrides.EnableFeature(::features::kDefaultANGLEVulkan);/d' chrome/browser/chrome_browser_field_trials.cc
@@ -102,13 +109,21 @@ sed -i '/extension_l10n_util::ValidateExtensionLocales($/,/error) &&$/{s|extensi
 # tmp
 sed -i 's|if (!IncognitoUtils.shouldOpenIncognitoAsWindow() \|\| isIncognitoShowing()) {|if (true) {|' chrome/android/java/src/org/chromium/chrome/browser/tabbed_mode/TabbedAppMenuPropertiesDelegate.java
 sed -i 's|if (!separateIncognitoWindow \|\| isIncognito) {|if (true) {|' chrome/android/java/src/org/chromium/chrome/browser/tabbed_mode/TabbedAppMenuPropertiesDelegate.java
-sed -i 's/BASE_FEATURE(kAndroidSearchInSettings,"SearchInSettings", base::FEATURE_DISABLED_BY_DEFAULT);/BASE_FEATURE(kAndroidSearchInSettings,"SearchInSettings", base::FEATURE_ENABLED_BY_DEFAULT);/' chrome/browser/flags/android/chrome_feature_list.cc
+# kAndroidSearchInSettings ("SearchInSettings") was removed from Chromium in
+# 151 - settings search is now unconditional, so there is no flag left to
+# force on. Verified absent from chrome_feature_list.cc/.h and
+# ChromeFeatureList.java at 151.0.7922.71. Nothing to substitute; re-add a
+# flip here only if upstream reintroduces a gate.
 
 # crbug.com/406136787: load unpacked
 sed -i 's|assert treeId.equals(documentId);|&\n if ("com.android.externalstorage.documents".equals(mAuthority)) { String fastId = mRelativePath.isEmpty() ? treeId : (treeId.endsWith(":") ? treeId + mRelativePath : treeId + "/" + mRelativePath); Uri fast = DocumentsContract.buildDocumentUriUsingTree(tree, fastId); return contentUriExists(fast) ? fast : null; }|' base/android/java/src/org/chromium/base/VirtualDocumentPath.java
 
-# crbug.com/40831291: bottom address bar
-sed -i 's@(idealFitsBelow && spaceBelowAnchor >= spaceAboveAnchor) || !idealFitsAbove;@(idealFitsBelow == idealFitsAbove) ? (spaceBelowAnchor >= spaceAboveAnchor) : idealFitsBelow;@' ui/android/java/src/org/chromium/ui/widget/PopupSpecCalculator.java
+# crbug.com/40831291: bottom address bar - fixed upstream in Chromium 151.
+# PopupSpecCalculator now computes
+#   belowHasMoreSpace = spaceBelowAnchor >= spaceAboveAnchor;
+#   ... (idealFitsBelow != idealFitsAbove) ? idealFitsBelow : belowHasMoreSpace;
+# which is the same expression this substitution used to install
+# ((A != B) ? A : C is (A == B) ? C : A). Dropped as redundant.
 
 # crbug.com/445475304: incognito back
 sed -i 's|private void onTabChanged(@Nullable Tab tab) {|private void onTabChanged(@Nullable Tab tab) { if (tab != null \&\& tab.isIncognitoBranded()) { mSystemBackPressSupplier.set(true); return; }|' chrome/browser/back_press/android/java/src/org/chromium/chrome/browser/back_press/MinimizeAppAndCloseTabBackPressHandler.java

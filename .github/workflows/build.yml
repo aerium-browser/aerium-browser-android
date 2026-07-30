@@ -351,10 +351,170 @@ jobs:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
 
+  build-17:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    needs: build-16
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: true
+      - name: Stage 17
+        id: stage
+        uses: ./.github/actions/stage
+        with:
+          finished: ${{ needs.build-16.outputs.finished }}
+          from_artifact: 'auto'
+        env:
+          LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
+          STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
+
+  build-18:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    needs: build-17
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: true
+      - name: Stage 18
+        id: stage
+        uses: ./.github/actions/stage
+        with:
+          finished: ${{ needs.build-17.outputs.finished }}
+          from_artifact: 'auto'
+        env:
+          LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
+          STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
+
+  build-19:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    needs: build-18
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: true
+      - name: Stage 19
+        id: stage
+        uses: ./.github/actions/stage
+        with:
+          finished: ${{ needs.build-18.outputs.finished }}
+          from_artifact: 'auto'
+        env:
+          LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
+          STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
+
+  build-20:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    needs: build-19
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: true
+      - name: Stage 20
+        id: stage
+        uses: ./.github/actions/stage
+        with:
+          finished: ${{ needs.build-19.outputs.finished }}
+          from_artifact: 'auto'
+        env:
+          LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
+          STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
+
+  build-21:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    needs: build-20
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: true
+      - name: Stage 21
+        id: stage
+        uses: ./.github/actions/stage
+        with:
+          finished: ${{ needs.build-20.outputs.finished }}
+          from_artifact: 'auto'
+        env:
+          LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
+          STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
+
+  build-22:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    needs: build-21
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: true
+      - name: Stage 22
+        id: stage
+        uses: ./.github/actions/stage
+        with:
+          finished: ${{ needs.build-21.outputs.finished }}
+          from_artifact: 'auto'
+        env:
+          LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
+          STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
+
+  build-23:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    needs: build-22
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: true
+      - name: Stage 23
+        id: stage
+        uses: ./.github/actions/stage
+        with:
+          finished: ${{ needs.build-22.outputs.finished }}
+          from_artifact: 'auto'
+        env:
+          LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
+          STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
+
+  build-24:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    needs: build-23
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: true
+      - name: Stage 24
+        id: stage
+        uses: ./.github/actions/stage
+        with:
+          finished: ${{ needs.build-23.outputs.finished }}
+          from_artifact: 'auto'
+        env:
+          LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
+          STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
+
   publish-release:
     runs-on: ubuntu-latest
-    needs: build-16
-    if: ${{ needs.build-16.outputs.finished == 'true' }}
+    needs: build-24
+    if: ${{ needs.build-24.outputs.finished == 'true' }}
     permissions:
       contents: write
     steps:
@@ -391,13 +551,13 @@ jobs:
 
   check-completion:
     runs-on: ubuntu-latest
-    needs: build-16
+    needs: build-24
     if: ${{ always() }}
     steps:
       - name: Verify build finished
         run: |
-          if [ "${{ needs.build-16.outputs.finished }}" != "true" ]; then
-            echo "Build did not finish within 16 stages; dispatch the workflow again to continue from the saved tree."
+          if [ "${{ needs.build-24.outputs.finished }}" != "true" ]; then
+            echo "Build did not finish within 24 stages; dispatch the workflow again to continue from the saved tree."
             exit 1
           fi
           echo "Build finished - APK is in the aerium-android artifact and published as a release."

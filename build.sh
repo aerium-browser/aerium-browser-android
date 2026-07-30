@@ -13,10 +13,27 @@ source common.sh
 
 MODE_CI=0
 [ "$1" = "--ci" ] && MODE_CI=1
-# Total time budget for this script per CI stage (setup + compile). The job
-# timeout is 350 min; the remainder is left for artifact packing/upload.
-TOTAL_BUDGET_MIN=${TOTAL_BUDGET_MIN:-250}
-START_TS=$(date +%s)
+
+# Time budget for this stage, expressed as "job timeout minus what the
+# checkpoint round-trip needs", and measured from when the STAGE started - not
+# from when this script started.
+#
+# The distinction matters: restoring the saved tree happens in the workflow
+# before build.sh is even invoked, and the checkpoint is currently ~20 GB
+# compressed, so download+unpack can easily eat 30-45 min. Budgeting 250 min
+# from build.sh's own start therefore allowed restore + 250 + pack + upload to
+# exceed the 350-min job timeout, at which point GitHub kills the runner
+# mid-step: the job shows a step stuck "in_progress", the log upload never
+# happens (HTTP 404 when you go looking for it), and the stage's progress is
+# lost. That is the failure signature on runs 42/43/45.
+#
+# The stage action exports STAGE_START_TS before the restore step, so the
+# elapsed calculation below covers restore too and self-corrects as the
+# checkpoint grows.
+JOB_TIMEOUT_MIN=${JOB_TIMEOUT_MIN:-350}
+CHECKPOINT_RESERVE_MIN=${CHECKPOINT_RESERVE_MIN:-80}
+TOTAL_BUDGET_MIN=${TOTAL_BUDGET_MIN:-$((JOB_TIMEOUT_MIN - CHECKPOINT_RESERVE_MIN))}
+START_TS=${STAGE_START_TS:-$(date +%s)}
 
 export VERSION=$(grep -m1 -o '[0-9]\+\(\.[0-9]\+\)\{3\}' vanadium/args.gn)
 export CHROMIUM_SOURCE=https://chromium.googlesource.com/chromium/src.git
@@ -35,11 +52,26 @@ export TMPDIR="$SCRIPT_DIR/chromium/.tmp"
 # --- system dependencies: needed on every (fresh) CI runner -----------------
 sudo apt-get update
 sudo apt-get install -y sudo lsb-release file nano git curl python3 python3-pillow imagemagick librsvg2-bin zstd
+# Every stage runs on a fresh runner, so this install repeats each time and
+# each time it leaves the downloaded .debs and package lists on the ROOT
+# filesystem - which maximize-build-space has already shrunk to a ~10 GB
+# reserve, minus the 6 GB swap file carved out of it. Root filling up kills the
+# runner agent itself, which is why the dead stages have no log at all. Clean
+# up immediately instead of only at the end of first-stage setup.
+sudo apt-get clean
+sudo rm -rf /var/lib/apt/lists/*
 
-if [ ! -d depot_tools ]; then
-    git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git
+# depot_tools must live on the big build mount, not next to the checkout: it
+# plus its bootstrapped python3/cipd payload is well over a GB, and
+# $SCRIPT_DIR is on the root filesystem. It is deliberately outside
+# chromium/src so the checkpoint tar never picks it up; each stage re-clones
+# it, which is cheap.
+DEPOT_TOOLS_DIR="$SCRIPT_DIR/chromium/depot_tools"
+if [ ! -d "$DEPOT_TOOLS_DIR" ]; then
+    git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git \
+        "$DEPOT_TOOLS_DIR"
 fi
-export PATH="$SCRIPT_DIR/depot_tools:$PATH"
+export PATH="$DEPOT_TOOLS_DIR:$PATH"
 
 # depot_tools normally self-bootstraps (fetches its pinned python3/cipd
 # tooling) the first time gclient/gn runs. On resumed stages the entire
@@ -48,7 +80,7 @@ export PATH="$SCRIPT_DIR/depot_tools:$PATH"
 # autoninja fails with "python3_bin_reldir.txt not found". Run the
 # dedicated bootstrap-only script unconditionally so every stage has a
 # working depot_tools regardless of whether source setup runs.
-"$SCRIPT_DIR/depot_tools/ensure_bootstrap"
+"$DEPOT_TOOLS_DIR/ensure_bootstrap"
 
 # --- source setup: only on the first stage ----------------------------------
 if [ ! -f chromium/src/BUILD.gn ]; then
@@ -157,6 +189,10 @@ fi
 
 # compile prerequisites must exist on every fresh runner
 ./build/install-build-deps.sh --no-prompt || true
+# ...and its .debs must not be left sitting on the small root filesystem.
+sudo apt-get clean || true
+sudo rm -rf /var/lib/apt/lists/* || true
+df -h / "$SCRIPT_DIR/chromium" || true
 
 # --- build (time-boxed in CI mode) -------------------------------------------
 if [ $MODE_CI = 1 ]; then

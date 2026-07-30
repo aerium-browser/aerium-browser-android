@@ -35,9 +35,44 @@ issue - see the workflow file for why).
 4. Bump the base: `git -C vanadium fetch --tags && git -C vanadium checkout <newtag>`
    then `git add vanadium`.
 5. `bash -n build.sh patch.sh theme.sh common.sh` (syntax check).
-6. Commit, then dispatch **Build** with `fresh: true` (the saved tree is
+6. **`devutils/verify-seds.sh`** — do not skip this. It runs the real
+   `patch.sh`/`theme.sh` against a sparse tree of files fetched straight
+   from `chromium.googlesource.com` at the new tag and reports every
+   substitution that matched nothing. `sed -i` exits 0 when its pattern
+   stops matching, so without this check a bump silently drops Aerium
+   changes and the build still goes green with the behaviour missing.
+   Read the script's header for how to interpret `NOOP` vs `MISSING` —
+   a `NOOP` on a line that a Vanadium patch *adds* is expected, since the
+   baseline is pristine Chromium; cross-check with
+   `grep -r '<pattern>' vanadium/patches`.
+7. Commit, then dispatch **Build** with `fresh: true` (the saved tree is
    for the old version and must be discarded).
-7. When green, the `publish-release` job tags `v<version>` automatically.
+8. When green, the `publish-release` job tags `v<version>` automatically.
+
+## Why stages die with no log
+
+A stage whose job shows a step stuck at `in_progress`, conclusion
+`failure`, and whose log 404s was not a compile error — the runner itself
+went away, so nothing was ever uploaded. Two causes, both addressed:
+
+- **The job hit its 350-minute `timeout-minutes`.** The checkpoint is
+  ~20 GB compressed; restoring it happens *before* `build.sh` runs, and
+  packing plus uploading happens after. `build.sh` now measures its
+  compile window from `STAGE_START_TS` (exported by the stage action
+  before the restore step) rather than from its own start, and reserves
+  `CHECKPOINT_RESERVE_MIN` (80) for the pack/upload tail. That reserve
+  self-corrects as the checkpoint grows; raise it if stages start dying
+  during "Pack build tree".
+- **The root filesystem filled.** `maximize-build-space` leaves only a
+  ~10 GB root reserve, and the 6 GB swap file is carved out of it. Every
+  stage runs `apt-get install` and `install-build-deps.sh` on a fresh
+  runner, and `depot_tools` plus its bootstrapped payload is over a GB.
+  `depot_tools` now lives on the build mount (`chromium/depot_tools`,
+  outside `chromium/src` so the checkpoint never picks it up) and the apt
+  cache is cleaned after every install, not just during first-stage setup.
+
+If stages still die, check the `df -h` output that each stage prints
+before and after the build step before assuming a compile problem.
 8. Update `.github/.upstream-seen` to the commit SHA reported in the
    watcher's job summary - the workflow keeps failing every Monday on
    that same commit until this file is updated, it does not clear

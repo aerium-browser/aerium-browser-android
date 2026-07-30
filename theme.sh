@@ -11,20 +11,45 @@
 # build instead. Use it for every substitution whose absence would be a
 # behaviour regression rather than a cosmetic one.
 sed_i() {
-    local file="${*: -1}"
-    local before
-    if [ ! -f "$file" ]; then
-        echo "[aerium] FATAL: sed target does not exist: $file" >&2
+    # A sed invocation can name several trailing files (theme.sh has one that
+    # patches both worker fetch-context implementations at once), so treat
+    # every trailing existing-or-not path as a target and require that each of
+    # them actually changed.
+    local -a files=() expr=()
+    local arg seen_file=0
+    for arg in "$@"; do
+        if [ "$seen_file" = 1 ] || [ -e "$arg" ]; then
+            case "$arg" in
+                -*) expr+=("$arg"); continue ;;
+            esac
+            seen_file=1
+            files+=("$arg")
+        else
+            expr+=("$arg")
+        fi
+    done
+    if [ "${#files[@]}" -eq 0 ]; then
+        echo "[aerium] FATAL: no existing sed target in: $*" >&2
         return 1
     fi
-    before=$(cat "$file")
-    sed -i "$@"
-    if [ "$before" = "$(cat "$file")" ]; then
-        echo "[aerium] FATAL: sed changed nothing in $file" >&2
-        echo "[aerium]        expression: ${*:1:$#-1}" >&2
-        echo "[aerium]        upstream probably moved this code - see theme.sh" >&2
-        return 1
-    fi
+
+    local f before rc=0
+    local -a before_sums=()
+    for f in "${files[@]}"; do
+        before_sums+=("$(cksum < "$f")")
+    done
+    sed -i "$@" || return 1
+    local i=0
+    for f in "${files[@]}"; do
+        if [ "${before_sums[$i]}" = "$(cksum < "$f")" ]; then
+            echo "[aerium] FATAL: sed changed nothing in $f" >&2
+            echo "[aerium]        expression: ${expr[*]}" >&2
+            echo "[aerium]        upstream probably moved this code - see theme.sh" >&2
+            rc=1
+        fi
+        i=$((i + 1))
+    done
+    return $rc
 }
 
 # --- Product name in every UI string source (.grd/.grdp/.xtb). Vanadium's
@@ -55,7 +80,7 @@ sed -i 's/registry->RegisterBooleanPref(kAutofillUsingPlatformAutofill, false);/
 # world's lightest solid, so keeping the browser light on battery is a brand
 # commitment, not just an optimization. Each change below flips a single
 # feature/pref default; all remain user-changeable where a settings UI exists.
-# Verified against Chromium 150.0.7871.124 source at each file path below.
+# Verified against Chromium 151.0.7922.71 source at each file path below.
 
 # Disable network prediction/preloading (prefetching links, DNS, etc. on
 # page load) by default - trades a little latency for meaningfully less
@@ -165,7 +190,7 @@ sed -i '/^  AddWidevine(cdms);$/c\
 # for free via their shared ungoogled-chromium core, but Vanadium carries no
 # ungoogled-chromium patches. Ported here in full (flag definition + the
 # behavior it gates) rather than skipped, for parity across all three
-# platforms. Verified against Chromium 150.0.7871.124 source.
+# platforms. Verified against Chromium 151.0.7922.71 source.
 #
 # Choice array + flag entry go straight into about_flags.cc's
 # kFeatureEntries, same as the enable-widevine flag above - no separate
@@ -251,7 +276,7 @@ sed -i 's/^  registry->RegisterListPref(prefs::kAboutFlagsEntries);$/  \/\/ Sile
 # broken/absent default until they configure one manually. Any other engine
 # can still be added by hand in settings.
 #
-# Mechanics (verified against Chromium 150.0.7871.124 source):
+# Mechanics (verified against Chromium 151.0.7922.71 source):
 # - prepopulated_engines.json is the master engine list (startpage already
 #   exists upstream, id 113, with a bundled icon; the DuckDuckGo variants and
 #   SearXNG are new entries). New IDs take the free slots just above
@@ -333,7 +358,7 @@ sed_i 's/^\( *\)\(google\|duckduckgo\)\.id,$/\1startpage.id,/' \
 # target, so instead of porting the command-line-switch delivery machinery,
 # these are wired as always-on via runtime_enabled_features.json5's
 # status:"stable" (compile-time default-on, verified against Chromium
-# 150.0.7871.124 source: no flag needed, no extra BUILD.gn deps needed).
+# 151.0.7922.71 source: no flag needed, no extra BUILD.gn deps needed).
 sed -i '/^  data: \[$/a\
     {\
       name: "FingerprintingClientRectsNoise",\
