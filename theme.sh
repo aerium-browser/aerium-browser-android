@@ -157,6 +157,19 @@ sed -i '/^  auto url_request_extra_data = base::MakeRefCounted<WebURLRequestExtr
   request.SetHttpHeaderField(WebString::FromUtf8("Sec-GPC"), "1");
 ' third_party/blink/renderer/platform/loader/fetch/url_loader/dedicated_or_shared_worker_global_scope_context_impl.cc \
   third_party/blink/renderer/modules/service_worker/web_service_worker_fetch_context_impl.cc
+# Sec-GPC injected above at render_frame_impl.cc's FinalizeRequestInternal
+# feeds into every renderer-initiated navigation's BeginNavigation IPC to the
+# browser process. content/browser/renderer_host/ipc_utils.cc's
+# VerifyNavigationHeaders() strictly allowlists which headers a navigation
+# may carry - DNT is on that list (why the DNT injection at the same call
+# site is safe), but Sec-GPC never was, since it doesn't exist upstream.
+# Without this, the browser kills the renderer on every single navigation
+# (content/browser/bad_message.h reason 342,
+# RFH_INVALID_NAVIGATION_HEADERS) - the Windows/Linux repos hit this exact
+# crash (RESULT_CODE_KILLED_BAD_MESSAGE on any URL entry) before it was
+# found and fixed there; ported here before it could bite Android too.
+sed_i 's/header.name() != net::HttpRequestHeaders::kDNT) {/header.name() != net::HttpRequestHeaders::kDNT \&\&\n        header.name() != "Sec-GPC") {/' \
+    content/browser/renderer_host/ipc_utils.cc
 
 # --- Widevine, toggleable and off by default (Brave-style). Aerium doesn't
 # bundle Google's proprietary CDM binary, but the interface is compiled in
