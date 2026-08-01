@@ -39,7 +39,18 @@ runs:
         # stages), so reserve/swap are kept lean: -j2 lowered peak memory
         # enough that a large swap buffer is no longer the priority, disk
         # headroom for the source tree is.
-        root-reserve-mb: '10240'
+        #
+        # Raised 10240 -> 16384 after stages started dying with NO uploaded
+        # logs (HTTP 404), which is the runner agent itself being killed
+        # rather than the build failing - an OOM shows up as exit 137 *in*
+        # the log. A df at the last such failure had root at 3.0G free while
+        # the build volume still had 47G of 96G free, and install-build-deps
+        # installs GBs of packages to root on every fresh stage. With 6144
+        # of the reserve consumed by the swap file, the old 10240 left only
+        # ~4G of usable root. Swap is deliberately NOT reduced to pay for
+        # this: use_thin_lto is on now, and ThinLTO linking is exactly when
+        # the swap buffer matters.
+        root-reserve-mb: '16384'
         temp-reserve-mb: '2048'
         swap-size-mb: '6144'
         remove-dotnet: 'true'
