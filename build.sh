@@ -105,7 +105,10 @@ solutions = [
     "managed": False,
     "custom_vars": {
       "checkout_android_prebuilts_build_tools": True,
-      "checkout_pgo_profiles": False,
+      # chrome_pgo_phase=2 (args.gn) consumes real profile data - it needs
+      # this checked out, or gn gen fails outright looking for a .profdata
+      # file that was never downloaded.
+      "checkout_pgo_profiles": True,
       "checkout_telemetry_dependencies": False,
       "codesearch": "Debug",
     },
