@@ -16,6 +16,14 @@ sed -i 's|^\(\s*\)You and Google\s*$|\1Your browser|' chrome/browser/ui/android/
 # storage UI, so there's nothing left to point users at from here.
 perl -0777 -pi -e 's/    <org\.chromium\.components\.browser_ui\.settings\.ChromeBasePreference\n        android:key="autofill_and_passwords".*?android:key="autofill_options"\n        android:order="17" \/>\n\n//s' chrome/android/java/res/xml/main_preferences.xml
 
+# Default to Android's own Autofill framework (third-party services like
+# Bitwarden/KeePassDX) instead of Chrome's built-in autofill, since we no
+# longer expose a built-in passwords/autofill UI to fall back on. Chrome
+# still falls back to its own engine automatically when no non-Google
+# third-party autofill service is configured system-wide - see
+# AutofillClientProviderUtils.getAndroidAutofillFrameworkAvailability().
+sed -i 's|registry->RegisterBooleanPref(kAutofillUsingPlatformAutofill, false);|registry->RegisterBooleanPref(kAutofillUsingPlatformAutofill, true);|' components/autofill/core/common/autofill_prefs.cc
+
 sed -i 's|if (!Intent\.ACTION_VIEW\.equals(intent\.getAction())) {|if (!Intent.ACTION_VIEW.equals(intent.getAction())\n                \|\| !android.webkit.URLUtil.isNetworkUrl(IntentHandler.getUrlFromIntent(intent))) {|' aerium/chromium_src/chrome/android/java/src/org/chromium/chrome/browser/LaunchIntentDispatcherHooks.java # scheme guard
 sed -i 's|if (urlFromIntent == null) {|if (!android.webkit.URLUtil.isNetworkUrl(urlFromIntent)) {|' aerium/chromium_src/chrome/android/java/src/org/chromium/chrome/browser/LaunchIntentDispatcherHooks.java # scheme guard
 sed -i 's|static Intent maybeModifyCustomTabIntents(Context context, Intent intent) {|static Intent maybeModifyCustomTabIntents(Context context, Intent intent) { if (!android.webkit.URLUtil.isNetworkUrl(IntentHandler.getUrlFromIntent(intent))) { return intent; }|' aerium/chromium_src/chrome/android/java/src/org/chromium/chrome/browser/LaunchIntentDispatcherHooks.java # scheme guard
