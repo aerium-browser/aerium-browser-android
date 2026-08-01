@@ -1,10 +1,12 @@
 name: Build
 
-# Deactivated (not deleted) in favor of fast-build.yml's self-hosted Azure
-# runner architecture - the push trigger is removed so this no longer runs
-# automatically, but workflow_dispatch is kept as a manual fallback in case
-# the self-hosted path is ever unavailable.
 on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'fastlane/**'
+      - 'LICENSE'
   workflow_dispatch:
     inputs:
       fresh:
