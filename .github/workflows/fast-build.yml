@@ -55,6 +55,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
+          # This VM's disk persists across runs - default clean=true would
+          # git-clean the untracked build tree away on every checkout.
+          clean: false
 
       - name: Build (unbounded - resumes incrementally via the persistent tree)
         run: |
