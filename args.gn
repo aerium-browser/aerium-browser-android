@@ -8,17 +8,10 @@ is_official_build = true
 symbol_level = 0
 blink_symbol_level = 0
 v8_symbol_level = 0
-chrome_pgo_phase = 0
-# ThinLTO is on by default for official Android builds (is_official_build +
-# is_android + chrome_pgo_phase != 1, see build/config/compiler/compiler.gni)
-# and it is a major disk/memory cost: it embeds LLVM bitcode summaries in
-# every .o file (bloating intermediate build output well past normal object
-# sizes) and spawns parallel LTO backend codegen jobs at link time. Our CI
-# runners have repeatedly hit disk exhaustion (exit 137) during long compile
-# windows; disabling ThinLTO trades a slightly larger/slower final binary for
-# a build that actually fits in 145G. Revisit if we ever move to
-# self-hosted/bigger runners.
-use_thin_lto = false
+chrome_pgo_phase = 2
+# ThinLTO was previously disabled here due to disk exhaustion (exit 137) on
+# CI runners - forced back on for performance; watch for exit 137 recurring.
+use_thin_lto = true
 disable_fieldtrial_testing_config = true
 ffmpeg_branding = "Chrome"
 proprietary_codecs = true
