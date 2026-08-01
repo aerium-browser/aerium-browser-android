@@ -7,6 +7,15 @@ for icon in $(find chrome/android/java/res_aerium_base -type f -name '*.png'); d
 sed -i 's|<application |<application android:extractNativeLibs="false" |' chrome/android/java/AndroidManifest.xml
 # sed -i 's|Google LLC|jqssun, Google LLC|' chrome/browser/ui/android/strings/android_chrome_strings.grd
 
+# Rebrand the "You and Google" settings section header (IDS_PREFS_SECTION_ACCOUNT_AND_GOOGLE_SERVICES).
+sed -i 's|^\(\s*\)You and Google\s*$|\1Your browser|' chrome/browser/ui/android/strings/android_chrome_strings.grd
+
+# Drop the whole "Autofill and passwords" settings entry point plus its
+# Passwords/Payment methods/Addresses/Autofill options sub-items (orders
+# 11-17 in main_preferences.xml) - Aerium doesn't ship autofill/password
+# storage UI, so there's nothing left to point users at from here.
+perl -0777 -pi -e 's/    <org\.chromium\.components\.browser_ui\.settings\.ChromeBasePreference\n        android:key="autofill_and_passwords".*?android:key="autofill_options"\n        android:order="17" \/>\n\n//s' chrome/android/java/res/xml/main_preferences.xml
+
 sed -i 's|if (!Intent\.ACTION_VIEW\.equals(intent\.getAction())) {|if (!Intent.ACTION_VIEW.equals(intent.getAction())\n                \|\| !android.webkit.URLUtil.isNetworkUrl(IntentHandler.getUrlFromIntent(intent))) {|' aerium/chromium_src/chrome/android/java/src/org/chromium/chrome/browser/LaunchIntentDispatcherHooks.java # scheme guard
 sed -i 's|if (urlFromIntent == null) {|if (!android.webkit.URLUtil.isNetworkUrl(urlFromIntent)) {|' aerium/chromium_src/chrome/android/java/src/org/chromium/chrome/browser/LaunchIntentDispatcherHooks.java # scheme guard
 sed -i 's|static Intent maybeModifyCustomTabIntents(Context context, Intent intent) {|static Intent maybeModifyCustomTabIntents(Context context, Intent intent) { if (!android.webkit.URLUtil.isNetworkUrl(IntentHandler.getUrlFromIntent(intent))) { return intent; }|' aerium/chromium_src/chrome/android/java/src/org/chromium/chrome/browser/LaunchIntentDispatcherHooks.java # scheme guard
