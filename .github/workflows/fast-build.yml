@@ -15,18 +15,11 @@ name: Fast build (self-hosted Azure)
 # AZURE_RESOURCE_GROUP, AZURE_VM_NAME, and secrets LOCAL_TEST_JKS,
 # STORE_TEST_JKS (same signing secrets the old build.yml used).
 
+# Manual dispatch only - builds are triggered from GitHub (Actions tab),
+# never automatically on push/commit. This keeps the VM from spinning up on
+# every routine push; you decide when a build actually happens.
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - 'vanadium/**'
-      - 'args.gn'
-      - 'build.sh'
-      - 'common.sh'
-      - 'patch.sh'
-      - 'theme.sh'
-      - '.github/workflows/fast-build.yml'
 
 permissions:
   id-token: write
