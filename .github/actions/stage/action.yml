@@ -141,13 +141,24 @@ runs:
           for f in chromium/.gclient_entries chromium/.gclient_previous_sync_commits; do
             [ -f "$f" ] && EXTRA="$EXTRA $f"
           done
-          # tar exit code 1 only means files changed while reading (siso's
-          # volatile state journal etc.) - the archive is still usable.
+          # tar exit code 1 only means files changed while reading - the
+          # archive is still usable, which --warning=no-file-changed and the
+          # `RC -gt 1` check below already handle.
+          #
+          # .siso_fs_state.journal must NOT be excluded. It is not volatile
+          # scratch: it is siso's incremental record of which steps have
+          # completed. build.sh ends every stage with `timeout -s INT`, so
+          # siso is always interrupted and never folds the journal into
+          # .siso_fs_state - the journal IS the state. Excluding it made
+          # every stage start with no incremental knowledge and recompile
+          # the same ~28,300 objects, so a 15-stage run finished at the
+          # exact 38.1% it reached in stage 1 (remaining went 45,981 ->
+          # 46,030). Object files were in the checkpoint all along and were
+          # simply rewritten byte-identically.
           set +e
           tar -c -I 'zstd -T0 -3' -f chromium/artifacts.tar.zst \
             --warning=no-file-changed \
             --exclude='chromium/artifacts.tar.zst' \
-            --exclude='chromium/src/out/Default/.siso_fs_state.journal' \
             chromium/src chromium/.gclient $EXTRA
           RC=$?
           set -e
