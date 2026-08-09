@@ -31,7 +31,12 @@ MODE_CI=0
 # elapsed calculation below covers restore too and self-corrects as the
 # checkpoint grows.
 JOB_TIMEOUT_MIN=${JOB_TIMEOUT_MIN:-350}
-CHECKPOINT_RESERVE_MIN=${CHECKPOINT_RESERVE_MIN:-80}
+# Measured over a 15-stage run: pack averages 5.7 min and upload 2.2 min,
+# so ~8 min of the reserve is actually used. At 80 every stage stopped
+# compiling at ~279 of its 350 minutes and threw away ~71 min (20%) of the
+# budget. 25 keeps a wide margin over the observed 8 while returning most
+# of that time to the compile window.
+CHECKPOINT_RESERVE_MIN=${CHECKPOINT_RESERVE_MIN:-25}
 TOTAL_BUDGET_MIN=${TOTAL_BUDGET_MIN:-$((JOB_TIMEOUT_MIN - CHECKPOINT_RESERVE_MIN))}
 START_TS=${STAGE_START_TS:-$(date +%s)}
 

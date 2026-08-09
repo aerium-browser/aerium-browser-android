@@ -11,26 +11,68 @@ name: auto-resume
 # (fetch/patch/gn failure) - resuming would fail identically, so it is left
 # alone. The cap is higher than the Windows repo's because case 2 means one
 # commit can legitimately need several auto-continues.
+#
+# The hourly schedule exists because workflow_run is not enough on its own:
+# GitHub deliberately does not emit workflow_run events for runs dispatched
+# with GITHUB_TOKEN, and every auto-resume dispatch is exactly that. So the
+# workflow_run trigger only ever fires for the first failure after a human
+# starts a build, and the chain used to die silently one run later - run
+# 30824853126 failed on Aug 6 and nothing restarted it. The schedule polls
+# instead of relying on an event that will never arrive.
 on:
   workflow_run:
     workflows: [Build]
     types: [completed]
+  schedule:
+    - cron: '0 * * * *'
 
 permissions:
   actions: write
 
 jobs:
   resume:
-    if: github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.head_branch == 'main'
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event.workflow_run.conclusion == 'failure' &&
+       github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
     steps:
       - name: Resume from the failed run's checkpoint
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          RUN_ID: ${{ github.event.workflow_run.id }}
-          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          EVENT: ${{ github.event_name }}
+          EVENT_RUN_ID: ${{ github.event.workflow_run.id }}
+          EVENT_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
+          set -euo pipefail
+          RUNS="repos/$REPO/actions/workflows/build.yml/runs"
+
+          if [ "$EVENT" = "schedule" ]; then
+            # Never stack a second build on top of a live one. Any run that
+            # is not yet completed means the chain is still healthy.
+            active=$(gh api "$RUNS?branch=main&per_page=30" \
+              --jq '[.workflow_runs[] | select(.status != "completed")] | length')
+            if [ "$active" -gt 0 ]; then
+              echo "A build is still active - nothing to resume."
+              exit 0
+            fi
+            latest=$(gh api "$RUNS?branch=main&status=completed&per_page=1" \
+              --jq '.workflow_runs[0] | "\(.id) \(.conclusion) \(.head_sha)"')
+            RUN_ID=${latest%% *}
+            rest=${latest#* }
+            CONCLUSION=${rest%% *}
+            HEAD_SHA=${rest#* }
+            if [ "$CONCLUSION" != "failure" ]; then
+              echo "Latest run $RUN_ID concluded '$CONCLUSION' - nothing to resume."
+              exit 0
+            fi
+            echo "Latest run $RUN_ID failed and no build is active."
+          else
+            RUN_ID="$EVENT_RUN_ID"
+            HEAD_SHA="$EVENT_HEAD_SHA"
+          fi
+
           if ! gh api "repos/$REPO/actions/runs/$RUN_ID/artifacts" --jq '.artifacts[].name' | grep -qx 'build-artifact-android'; then
             echo "Run $RUN_ID saved no checkpoint - real error, not a transient crash. Not resuming."
             exit 0
@@ -38,7 +80,7 @@ jobs:
           # Cap the auto-retry chain per commit. Dispatches made with the
           # workflow token show actor github-actions[bot], so manual resumes
           # by a human don't count against the cap.
-          attempts=$(gh api "repos/$REPO/actions/workflows/build.yml/runs?head_sha=$HEAD_SHA&per_page=100" \
+          attempts=$(gh api "$RUNS?head_sha=$HEAD_SHA&per_page=100" \
             --jq '[.workflow_runs[] | select(.actor.login == "github-actions[bot]")] | length')
           if [ "$attempts" -ge 5 ]; then
             echo "Already auto-resumed $attempts times for $HEAD_SHA - giving up, this needs a human."
