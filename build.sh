@@ -34,9 +34,17 @@ JOB_TIMEOUT_MIN=${JOB_TIMEOUT_MIN:-350}
 # Measured over a 15-stage run: pack averages 5.7 min and upload 2.2 min,
 # so ~8 min of the reserve is actually used. At 80 every stage stopped
 # compiling at ~279 of its 350 minutes and threw away ~71 min (20%) of the
-# budget. 25 keeps a wide margin over the observed 8 while returning most
+# budget. 25 kept a wide margin over the observed 8 while returning most
 # of that time to the compile window.
-CHECKPOINT_RESERVE_MIN=${CHECKPOINT_RESERVE_MIN:-25}
+#
+# Nudged 25 -> 30 because the reserve now also has to cover the graceful
+# shutdown window below: the build backend is given time to finish writing
+# its incremental state before anything force-kills it, and that write is
+# the whole point of the stage. Overrunning the 350-min job timeout is
+# catastrophic (the runner is killed mid-step, so pack and upload never
+# happen and the ENTIRE stage is lost), whereas 5 extra minutes of reserve
+# costs 1.4% of the compile window.
+CHECKPOINT_RESERVE_MIN=${CHECKPOINT_RESERVE_MIN:-30}
 TOTAL_BUDGET_MIN=${TOTAL_BUDGET_MIN:-$((JOB_TIMEOUT_MIN - CHECKPOINT_RESERVE_MIN))}
 START_TS=${STAGE_START_TS:-$(date +%s)}
 
@@ -44,6 +52,19 @@ export VERSION=$(grep -m1 -o '[0-9]\+\(\.[0-9]\+\)\{3\}' vanadium/args.gn)
 export CHROMIUM_SOURCE=https://chromium.googlesource.com/chromium/src.git
 export DEBIAN_FRONTEND=noninteractive
 echo "[aerium] chromium version: $VERSION  ci: $MODE_CI"
+
+# --- stage diagnostics --------------------------------------------------------
+# The CI job log can only be read from its tail (~400 KB, i.e. the last couple
+# of minutes of a five-hour job), so anything printed near the START of a stage
+# is unreadable in practice. Everything worth knowing is therefore appended to
+# this file as it happens and dumped by a step at the very END of the job.
+# The stage action seeds the same path before the build starts.
+STAGE_DIAG="${STAGE_DIAG:-$SCRIPT_DIR/stage-diag.txt}"
+# Full build output, kept so the end-of-job dump can show its FIRST lines -
+# that is where the backend says whether it loaded the restored incremental
+# state. Deliberately named without "siso" in it: the straggler kill below
+# matches processes on that string and must not shoot this file's writer.
+BUILD_LOG="${BUILD_LOG:-$SCRIPT_DIR/chromium/build_stdout.log}"
 
 # Keep the big tool caches on the large build mount (chromium/) instead of the
 # small root filesystem: vpython venvs alone are multiple GB and overflow the
@@ -225,16 +246,76 @@ if [ $MODE_CI = 1 ]; then
     # signature of the -k grace period's SIGKILL, not a graceful stop.
     # Without --foreground, timeout puts autoninja/ninja in their own
     # process group and signals the whole group, so SIGINT reaches the
-    # in-flight compiler jobs directly. -k is still generous (10m) as a
-    # backstop for any single translation unit that's slow to unwind.
+    # in-flight compiler jobs directly. -k is a backstop for any single
+    # translation unit that's slow to unwind; it was 10m, which together
+    # with the graceful wait below could push the stage past its 350-min
+    # job timeout, and 5m is already far more than an interrupted compile
+    # needs.
+    { set +e
+      echo "=== [$(date -u '+%H:%M:%SZ')] PRE-BUILD incremental state ==="
+      ls -la out/Default/.siso_fs_state out/Default/.siso_fs_state.journal 2>&1
+    } 2>&1 | tee -a "$STAGE_DIAG"
+
+    # If the log is not creatable, send it to /dev/null rather than leaving
+    # tee to die on its first write: tee holds the read end of autoninja's
+    # stdout pipe, so a dead tee means SIGPIPE straight into the compiler.
+    : > "$BUILD_LOG" 2>/dev/null || BUILD_LOG=/dev/null
     set +e
-    timeout -s INT -k 10m ${REMAINING_MIN}m autoninja -j "${NINJA_JOBS:-2}" -C out/Default chrome_public_apk
+    # Output goes through a process substitution rather than a plain `|
+    # tee` on purpose: a pipe would make the shell block until every
+    # process holding the write end has exited, which is unbounded if the
+    # backend hangs. With >(...) the exit status below is still timeout's
+    # own and the wait stays bounded by the loop that follows.
+    timeout -s INT -k 5m ${REMAINING_MIN}m \
+        autoninja -j "${NINJA_JOBS:-2}" -C out/Default chrome_public_apk \
+        > >(tee -a "$BUILD_LOG") 2>&1
     RET=$?
     set -e
-    # Kill any straggler build processes so nothing keeps writing to the
-    # tree while the stage action packs it into the resume artifact.
+
+    # Let the build backend finish its own shutdown before force-killing
+    # anything.
+    #
+    # `timeout` returns as soon as its DIRECT child exits - verified: with a
+    # child that dies on SIGINT while a grandchild lives on, timeout returns
+    # 124 immediately and the grandchild keeps running. Here the direct child
+    # is the autoninja wrapper and the grandchild is siso, so the old
+    # `pkill -9 -f siso` on the very next line could be landing while siso is
+    # still unwinding.
+    #
+    # That matters because the tail end of that unwind is where siso writes
+    # out/Default/.siso_fs_state - the record of which command produced which
+    # output, and therefore the ONLY thing that lets the next stage skip work
+    # it has already done. The object files themselves carry no such marker,
+    # which is why every stage has been rewriting the same ~28,300 objects
+    # byte-identically. Whether the SIGKILL really was landing mid-write is
+    # what the end-of-job diagnostics settle: a checkpoint carrying a large
+    # .siso_fs_state and no journal means siso now shuts down cleanly.
+    #
+    # Bounded at 4 minutes: writing the state takes seconds, and the stage
+    # still has to pack and upload ~20 GB inside the job timeout.
+    #
+    # Matched on the process NAME, not on `pgrep -f siso`: -f tests the whole
+    # command line, which also matches any shell whose arguments merely
+    # mention siso, and a false positive here burns the full four minutes of
+    # a stage's budget waiting for a process that was never the build.
+    siso_alive() {
+        pgrep -x siso >/dev/null 2>&1 || pgrep -f '(^|/)siso ninja' >/dev/null 2>&1
+    }
+    for _ in $(seq 1 120); do
+        siso_alive || break
+        sleep 2
+    done
+    # Anything still alive after that is a straggler that would keep writing
+    # to the tree while the stage action packs it into the resume artifact.
     pkill -9 -f 'siso' 2>/dev/null || true
     sleep 3
+
+    { set +e
+      echo "=== [$(date -u '+%H:%M:%SZ')] POST-BUILD incremental state (autoninja rc=$RET) ==="
+      ls -la out/Default/.siso_fs_state out/Default/.siso_fs_state.journal 2>&1
+      echo "--- every siso/ninja entry in out/Default ---"
+      ls -la out/Default 2>/dev/null | grep -i 'siso\|ninja'
+    } 2>&1 | tee -a "$STAGE_DIAG"
     if [ $RET = 124 ]; then
         echo "[aerium] time budget reached; build will resume on the next stage"
         exit 0

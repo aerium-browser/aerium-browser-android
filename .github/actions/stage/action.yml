@@ -92,10 +92,64 @@ runs:
         fi
         df -h /
 
+    - name: Snapshot restored build state
+      if: inputs.finished != 'true'
+      shell: bash
+      # Diagnostics for the "every stage rebuilds everything" problem. They
+      # are WRITTEN here, at the start of the job, and PRINTED by the step at
+      # the very end of it, because the job-log API is tail-only (~400 KB,
+      # which on a five-hour stage is the last few minutes) - anything logged
+      # from here would never be readable.
+      #
+      # Nothing in this step may ever fail the stage.
+      run: |
+        set +e
+        set +o pipefail
+        cd "$GITHUB_WORKSPACE"
+        OUT=chromium/src/out/Default
+        D="$GITHUB_WORKSPACE/stage-diag.txt"
+        : > "$D"
+        {
+          echo "######## STAGE DIAGNOSTICS (run $GITHUB_RUN_ID, attempt $GITHUB_RUN_ATTEMPT) ########"
+          echo "captured $(date -u '+%Y-%m-%dT%H:%M:%SZ') by $(tar --version | head -1)"
+          echo
+          echo "=== [1] POST-UNPACK: siso incremental state ==="
+          for f in "$OUT/.siso_fs_state" "$OUT/.siso_fs_state.journal"; do
+            if [ -e "$f" ]; then ls -la "$f"; else echo "MISSING: $f"; fi
+          done
+          echo
+          echo "=== [2] POST-UNPACK: mtimes of restored object files ==="
+          find "$OUT/obj" -name '*.o' 2>/dev/null | head -5 > "$GITHUB_WORKSPACE/diag-objs.txt"
+          if [ -s "$GITHUB_WORKSPACE/diag-objs.txt" ]; then
+            while read -r o; do stat --printf='%n  mtime=%y  size=%s\n' "$o"; done < "$GITHUB_WORKSPACE/diag-objs.txt"
+            FRACS=$(while read -r o; do stat --printf='%y\n' "$o"; done < "$GITHUB_WORKSPACE/diag-objs.txt" \
+                    | sed -E 's/.*\.([0-9]+).*/\1/' | sort -u | tr -d '\n')
+            if [ "$FRACS" = "000000000" ]; then
+              echo "MTIME-VERDICT: TRUNCATED - every restored object sits on a whole second."
+              echo "  tar dropped the sub-second mtimes siso's state file is keyed on, so"
+              echo "  the restored state cannot match anything and the stage rebuilds all of it."
+            else
+              echo "MTIME-VERDICT: PRESERVED - restored objects still carry sub-second mtimes."
+              echo "  If this stage STILL skips nothing, tar precision was not the cause."
+            fi
+          else
+            echo "(no object files in the restored tree - fresh start, verdict N/A)"
+          fi
+          echo
+          echo "=== [3] POST-UNPACK: siso/ninja bookkeeping in out/Default ==="
+          ls -la "$OUT" 2>/dev/null | grep -i 'siso\|ninja' || echo "(none, or no out dir)"
+          echo "restored object files: $(find "$OUT/obj" -name '*.o' 2>/dev/null | wc -l)"
+          echo
+        } >> "$D" 2>&1
+        echo "wrote $D; it is printed by the last step of this job"
+        exit 0
+
     - name: Build
       id: build
       if: inputs.finished != 'true'
       shell: bash
+      env:
+        STAGE_DIAG: ${{ github.workspace }}/stage-diag.txt
       run: |
         cd "$GITHUB_WORKSPACE"
         chmod +x *.sh res/*.sh
@@ -155,8 +209,41 @@ runs:
           # exact 38.1% it reached in stage 1 (remaining went 45,981 ->
           # 46,030). Object files were in the checkpoint all along and were
           # simply rewritten byte-identically.
+          #
+          # --format=posix is load-bearing, not cosmetic. GNU tar's default
+          # "gnu" format stores mtimes as whole seconds, while siso's
+          # .siso_fs_state keys every recorded output on its NANOSECOND mtime.
+          # A default-format pack/unpack round trip therefore hands the next
+          # stage a tree in which every single file's mtime has been rounded
+          # down to .000000000, so not one entry in the restored state file
+          # matches the file it describes, the whole state is discarded as
+          # stale, and the stage recompiles ~30k objects it already has. Only
+          # the pax format carries sub-second times (verified with GNU tar
+          # 1.35, the version on ubuntu-latest: gnu round-trips
+          # 10:11:12.123456789 as 10:11:12.000000000, posix as
+          # 10:11:12.123456789). The Unpack step needs no matching flag - tar
+          # detects the format when reading.
+          #
+          # --pax-option pays for it: pax otherwise emits an extended header
+          # for every file just to carry atime/ctime, which nothing here
+          # restores or cares about. Dropping those two keeps the archive the
+          # same size as before for whole-second files and only spends the
+          # extra header where a sub-second mtime actually needs preserving.
+          #
+          # Probed against an empty archive first: a stage that reached this
+          # point has ~5 hours of compilation in it, and a tar that refused
+          # the flags would abort the pack and throw all of it away. Falling
+          # back to the old format merely leaves the incremental state
+          # unusable again - the failure we already have - instead of losing
+          # the objects too.
+          TAR_FMT=(--format=posix --pax-option='delete=atime,delete=ctime')
+          if ! tar -c "${TAR_FMT[@]}" -f /dev/null --files-from=/dev/null 2>/dev/null; then
+            echo "WARNING: this tar rejects the pax flags; packing in the default format"
+            TAR_FMT=()
+          fi
           set +e
           tar -c -I 'zstd -T0 -3' -f chromium/artifacts.tar.zst \
+            "${TAR_FMT[@]}" \
             --warning=no-file-changed \
             --exclude='chromium/artifacts.tar.zst' \
             chromium/src chromium/.gclient $EXTRA
@@ -192,6 +279,64 @@ runs:
         retention-days: 30
         compression-level: 0
         overwrite: true
+
+    - name: Print stage diagnostics
+      # Deliberately the LAST thing this job does, and deliberately
+      # unconditional. The job-log API only returns the tail of the log, so a
+      # diagnostic printed anywhere earlier in a five-hour stage is thrown
+      # away before anyone can read it. Everything below was collected
+      # earlier and is merely replayed here.
+      if: ${{ always() && inputs.finished != 'true' }}
+      shell: bash
+      run: |
+        set +e
+        set +o pipefail
+        cd "$GITHUB_WORKSPACE"
+        OUT=chromium/src/out/Default
+        cat "$GITHUB_WORKSPACE/stage-diag.txt" 2>/dev/null || echo "(no diagnostics were captured)"
+
+        echo "=== [4] AFTER PACK: siso incremental state as shipped in the checkpoint ==="
+        for f in "$OUT/.siso_fs_state" "$OUT/.siso_fs_state.journal"; do
+          if [ -e "$f" ]; then ls -la "$f"; else echo "MISSING: $f"; fi
+        done
+        echo "  A large .siso_fs_state with NO journal means siso shut down cleanly and"
+        echo "  folded its journal in. A journal still sitting here means it did not."
+
+        echo
+        echo "=== [5] the objects sampled after unpack, as they are now ==="
+        echo "  (same mtime as section [2] = siso reused it; newer = it was recompiled)"
+        while read -r o; do
+          if [ -e "$o" ]; then stat --printf='%n  mtime=%y\n' "$o"; else echo "GONE: $o"; fi
+        done < "$GITHUB_WORKSPACE/diag-objs.txt" 2>/dev/null
+
+        echo
+        echo "=== [6] does THIS runner's tar preserve sub-second mtimes with the pack flags? ==="
+        T="${RUNNER_TEMP:-/tmp}/paxcheck"
+        rm -rf "$T"; mkdir -p "$T/in" "$T/out"
+        printf x > "$T/in/probe"
+        touch -d '2026-01-02 03:04:05.123456789' "$T/in/probe"
+        ( cd "$T" \
+          && tar -c --format=posix --pax-option='delete=atime,delete=ctime' \
+                 --warning=no-file-changed -f probe.tar in \
+          && tar -x -f probe.tar -C out )
+        echo "  packed  : $(stat --printf='%y' "$T/in/probe" 2>/dev/null)"
+        echo "  restored: $(stat --printf='%y' "$T/out/in/probe" 2>/dev/null)"
+
+        echo
+        echo "=== [7] siso bookkeeping and log files left in out/Default ==="
+        ls -la "$OUT" 2>/dev/null | grep -i 'siso\|\.INFO' || echo "(none)"
+
+        echo
+        echo "=== [8] state/journal mentions in the build output ==="
+        grep -n -i -m 25 'fs_state\|journal\|load.*state\|state.*load\|restat' \
+          chromium/build_stdout.log 2>/dev/null || echo "(none)"
+
+        echo
+        echo "=== [9] FIRST 200 lines of the build output (does siso report loading state?) ==="
+        head -n 200 chromium/build_stdout.log 2>/dev/null || echo "(no build output was captured)"
+        echo
+        echo "=== end of stage diagnostics ==="
+        exit 0
 
     - name: Fail stage if the build failed
       if: inputs.finished != 'true' && steps.build.outputs.code != '0'

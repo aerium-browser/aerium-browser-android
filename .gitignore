@@ -7,3 +7,7 @@ keys/
 
 *.aab
 *.apk
+
+# per-stage build diagnostics, collected during a run and dumped at the end
+stage-diag.txt
+diag-objs.txt
