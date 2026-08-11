@@ -251,10 +251,13 @@ if [ $MODE_CI = 1 ]; then
     # with the graceful wait below could push the stage past its 350-min
     # job timeout, and 5m is already far more than an interrupted compile
     # needs.
+    # The `|| true` is not decoration: this runs under `set -e`, and a
+    # pipeline's status is tee's, so an unwritable diagnostics file would
+    # otherwise abort the stage before it compiled anything.
     { set +e
       echo "=== [$(date -u '+%H:%M:%SZ')] PRE-BUILD incremental state ==="
       ls -la out/Default/.siso_fs_state out/Default/.siso_fs_state.journal 2>&1
-    } 2>&1 | tee -a "$STAGE_DIAG"
+    } 2>&1 | tee -a "$STAGE_DIAG" || true
 
     # If the log is not creatable, send it to /dev/null rather than leaving
     # tee to die on its first write: tee holds the read end of autoninja's
@@ -315,7 +318,7 @@ if [ $MODE_CI = 1 ]; then
       ls -la out/Default/.siso_fs_state out/Default/.siso_fs_state.journal 2>&1
       echo "--- every siso/ninja entry in out/Default ---"
       ls -la out/Default 2>/dev/null | grep -i 'siso\|ninja'
-    } 2>&1 | tee -a "$STAGE_DIAG"
+    } 2>&1 | tee -a "$STAGE_DIAG" || true
     if [ $RET = 124 ]; then
         echo "[aerium] time budget reached; build will resume on the next stage"
         exit 0
