@@ -541,6 +541,13 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
+          # Prefer a PAT when one is configured: GITHUB_TOKEN's permissions
+          # are capped by the enterprise/org/repo default and the workflow's
+          # own `permissions: contents: write` cannot raise them past it,
+          # which is currently blocking release creation in the Windows repo
+          # with a 403. Falls back to GITHUB_TOKEN when the secret is absent,
+          # so this stays inert until RELEASE_TOKEN exists.
+          token: ${{ secrets.RELEASE_TOKEN || github.token }}
           tag_name: v${{ steps.ver.outputs.version }}
           name: Aerium ${{ steps.ver.outputs.version }} (arm64)
           generate_release_notes: true
