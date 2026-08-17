@@ -72,7 +72,11 @@ sed -i 's/prefs::kSafeBrowsingEnabled, true,/prefs::kSafeBrowsingEnabled, false,
 # --- Use the Android Autofill framework by default so third-party password
 # managers (Bitwarden etc.) fill web forms natively instead of relying on
 # flaky accessibility-based compatibility mode. User-changeable in
-# Settings -> Autofill services.
+# Settings -> Autofill services. This matters here because Aerium ships no
+# built-in passwords/autofill UI to fall back on; Chrome still falls back to
+# its own engine automatically when no non-Google third-party autofill
+# service is configured system-wide - see
+# AutofillClientProviderUtils.getAndroidAutofillFrameworkAvailability().
 sed -i 's/registry->RegisterBooleanPref(kAutofillUsingPlatformAutofill, false);/registry->RegisterBooleanPref(kAutofillUsingPlatformAutofill, true);/' \
     components/autofill/core/common/autofill_prefs.cc
 

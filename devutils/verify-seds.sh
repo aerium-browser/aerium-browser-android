@@ -28,11 +28,19 @@
 # A NOOP is not automatically a bug, and a clean run is not proof the build
 # works - it only proves each pattern still matches something.
 #
-# Known-expected results as of Chromium 151.0.7922.71:
+# Known-expected results as of Chromium 151.0.7922.137:
 #   NOOP  build/config/android/rules.gni  - `if (!_omit_dex) {` is inserted by
 #         vanadium patch 0187, so it is absent from pristine Chromium. Correct.
 #   MISSING  every aerium/... path - created by vanadium patches. Correct.
 # Anything beyond those needs investigating.
+#
+# The .137 bump also surfaced a second NOOP on
+# components/autofill/core/common/autofill_prefs.cc. That one was not a moved
+# anchor: the same substitution had been added to both patch.sh and theme.sh in
+# separate commits, and since build.sh sources patch.sh first, theme.sh's copy
+# always found the work already done. The duplicate in patch.sh is gone and
+# theme.sh owns it now, so this should not reappear - if it does, it means the
+# pattern really has moved.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
