@@ -28,13 +28,14 @@
 # A NOOP is not automatically a bug, and a clean run is not proof the build
 # works - it only proves each pattern still matches something.
 #
-# Known-expected results as of Chromium 151.0.7922.137:
+# Known-expected results as of Chromium 152.0.7977.54:
 #   NOOP  build/config/android/rules.gni  - `if (!_omit_dex) {` is inserted by
 #         vanadium patch 0187, so it is absent from pristine Chromium. Correct.
 #   MISSING  every aerium/... path - created by vanadium patches. Correct.
 # Anything beyond those needs investigating.
 #
-# The .137 bump also surfaced a second NOOP on
+# History, kept because both were mistaken for broken patterns at first:
+# the .137 bump surfaced a second NOOP on
 # components/autofill/core/common/autofill_prefs.cc. That one was not a moved
 # anchor: the same substitution had been added to both patch.sh and theme.sh in
 # separate commits, and since build.sh sources patch.sh first, theme.sh's copy

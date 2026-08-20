@@ -263,7 +263,9 @@ bool ShouldDownloadAsRegularFile() {\
         "download-as-regular-file";\
 }\
 ' extensions/browser/extension_util.cc
-sed -i '/^                                  download_item.GetMimeType())) {$/{n
+# 152 dropped the UserScript::IsURLUserScript() arm of this condition, so the
+# old multi-line anchor is gone; the check is now a single line.
+sed -i '/^  if (download_item.GetMimeType() == Extension::kMimeType) {$/{n
 s/^    return true;$/    return !ShouldDownloadAsRegularFile();/
 }' extensions/browser/extension_util.cc
 sed -i '/^\/\/ Returns true if this is an extension download\. This also considers user$/i\
