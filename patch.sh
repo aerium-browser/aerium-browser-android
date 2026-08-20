@@ -15,6 +15,20 @@ sed -i 's|^\(\s*\)You and Google\s*$|\1Your browser|' chrome/browser/ui/android/
 # 11-17 in main_preferences.xml) - Aerium doesn't ship autofill/password
 # storage UI, so there's nothing left to point users at from here.
 perl -0777 -pi -e 's/    <org\.chromium\.components\.browser_ui\.settings\.ChromeBasePreference\n        android:key="autofill_and_passwords".*?android:key="autofill_options"\n        android:order="17" \/>\n\n//s' chrome/android/java/res/xml/main_preferences.xml
+# That perl is a silent no-op if upstream reflows the block, and nothing
+# checks it: devutils/verify-seds.sh intercepts sed, not perl, so this is the
+# one substitution in either script with no version-bump safety net. A miss no
+# longer crashes anything - theme.sh removes these preferences at runtime too -
+# but it would quietly put them back into settings search, so fail here
+# instead. Written as an if rather than `grep && {...}` so that set -e cannot
+# fire on the grep that correctly finds nothing, and so that verify-seds,
+# which sources this over an empty tree, sees the grep fail and moves on.
+if grep -q 'android:key="autofill_and_passwords"' \
+        chrome/android/java/res/xml/main_preferences.xml; then
+    echo "[aerium] FATAL: the autofill entries are still in" \
+         "main_preferences.xml - the perl removal above stopped matching" >&2
+    return 1
+fi
 
 # The platform-autofill default lives in theme.sh, which UPDATING.md names as
 # its owner. It used to be duplicated here too; since build.sh sources patch.sh

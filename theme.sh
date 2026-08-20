@@ -102,6 +102,60 @@ sed -i 's/prefs::kSafeBrowsingEnabled, true,/prefs::kSafeBrowsingEnabled, false,
 sed -i 's/registry->RegisterBooleanPref(kAutofillUsingPlatformAutofill, false);/registry->RegisterBooleanPref(kAutofillUsingPlatformAutofill, true);/' \
     components/autofill/core/common/autofill_prefs.cc
 
+# --- Stop Settings crashing on open. patch.sh deletes the six autofill and
+# password entries (orders 11-17) from main_preferences.xml, but MainSettings
+# .java still expects the XML to define them. Both branches of
+# updateAutofillPreferences() call addPreferenceIfAbsent(), which returns
+# mAllPreferences.get(key) - and mAllPreferences is populated by
+# cachePreferences() walking the inflated XML, so once the entries are gone
+# that lookup is null. The assumeNonNull() guarding it does not actually
+# check anything (build/android/.../NullUtil.java: "Since it does not
+# actually check", it just returns its argument), so the null reaches
+# setOnPreferenceClickListener() and the fragment dies with an NPE the
+# instant Settings is opened. That is the crash in the published
+# 151.0.7922.71 APK.
+#
+# Rewritten to only remove, which is idempotent and null-safe: correct
+# whether or not the XML still defines the entries, so the perl in patch.sh
+# quietly failing to match cannot resurrect the crash - it would only put the
+# entries back in settings search.
+#
+# The two helpers are deleted rather than left behind, because Chromium
+# builds Java with treat_warnings_as_errors and errorprone.py maps every
+# check to a warning (-XepAllErrorsAsWarnings) without disabling
+# UnusedMethod, so an uncalled private method would fail the build.
+# maybeStartPasswordsExportFlow() is kept and still called: it reads fragment
+# arguments and touches none of the removed preferences. Unused imports are
+# fine - RemoveUnusedImports is in errorprone.py's disable list.
+MAIN_SETTINGS=chrome/android/java/src/org/chromium/chrome/browser/settings/MainSettings.java
+sed_i '/^    private void updateAutofillPreferences() {$/,/^    }$/c\
+    private void updateAutofillPreferences() {\
+        \/\/ Aerium ships no autofill or password storage UI, and patch.sh\
+        \/\/ removes these entries from main_preferences.xml so settings\
+        \/\/ search does not index them either. Removal is null-safe; the\
+        \/\/ upstream add\/find calls were not, once the XML entries were gone.\
+        removePreferenceIfPresent(PREF_AUTOFILL_AND_PASSWORDS);\
+        removePreferenceIfPresent(PREF_AUTOFILL_SECTION);\
+        removePreferenceIfPresent(PREF_PASSWORDS);\
+        removePreferenceIfPresent(PREF_AUTOFILL_PAYMENTS);\
+        removePreferenceIfPresent(PREF_AUTOFILL_ADDRESSES);\
+        removePreferenceIfPresent(PREF_AUTOFILL_OPTIONS);\
+\
+        maybeStartPasswordsExportFlow();\
+    }' $MAIN_SETTINGS
+sed_i '/^    private void updateAutofillAndPasswords() {$/,/^    }$/d' $MAIN_SETTINGS
+sed_i '/^    \/\/ TODO(crbug.com\/482988366): Remove this method once the Autofill and passwords feature is$/,/^    }$/d' \
+    $MAIN_SETTINGS
+# The second crash site, and the one the rewrite above does not reach.
+# setManagedPreferenceDelegateForPreference() is the other reader of
+# mAllPreferences, with the same do-nothing assumeNonNull() in front of the
+# dereference, and onCreatePreferences calls it for PREF_PASSWORDS
+# unconditionally - so Settings would still have died on open with only
+# updateAutofillPreferences() fixed. Its other two call sites pass keys whose
+# entries survive, so the helper itself stays.
+sed_i '/^        \/\/ TODO(crbug.com\/40242060): Remove the passwords managed subtitle for local and UPM$/,/^        setManagedPreferenceDelegateForPreference(PREF_PASSWORDS);$/d' \
+    $MAIN_SETTINGS
+
 # --- Battery efficiency pass. Aerium takes its name from aerogel, the
 # world's lightest solid, so keeping the browser light on battery is a brand
 # commitment, not just an optimization. Each change below flips a single
