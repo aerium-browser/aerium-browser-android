@@ -400,10 +400,19 @@ sed_i '/^    "seznam": {$/i\
 # to hardcode - so no already-shipped profile sees its version go backwards.
 SE_DATA_VERSION_OFFSET=41
 SE_DATA_VERSION=
-# Guarded on the file existing rather than failing outright when it is absent,
-# because devutils/verify-seds.sh sources this over an empty tree to collect
-# sed targets. Returning early there would cut the collection short and drop
-# every substitution below this line from the check.
+# The engines inserted above claim ids 117-119, sitting immediately above
+# upstream's highest (116 at both 151 and 152). Unlike the data version these
+# ids cannot be derived, and must not be: Chromium stores a prepopulated
+# engine's id in the profile's keyword database, so renumbering them between
+# releases would orphan the rows existing installs already hold instead of
+# updating them. That makes the range something upstream can walk into but we
+# cannot walk away from, so it is checked rather than computed.
+AERIUM_FIRST_ENGINE_ID=117
+AERIUM_MAX_ENGINE_ID=119
+# All of this is guarded on the file existing rather than failing outright
+# when it is absent, because devutils/verify-seds.sh sources this over an
+# empty tree to collect sed targets. Returning early there would cut the
+# collection short and drop every substitution below this line from the check.
 if [ -e $SE_DEFS/prepopulated_engines.json ]; then
     SE_DATA_VERSION=$(grep -o '"kCurrentDataVersion": [0-9]\+' \
         $SE_DEFS/prepopulated_engines.json | grep -o '[0-9]\+' || true)
@@ -412,8 +421,41 @@ if [ -e $SE_DEFS/prepopulated_engines.json ]; then
              "$SE_DEFS/prepopulated_engines.json - upstream renamed it?" >&2
         return 1
     fi
+
+    SE_MAX_ENGINE_ID=$(grep -o '"kMaxPrepopulatedEngineID": [0-9]\+' \
+        $SE_DEFS/prepopulated_engines.json | grep -o '[0-9]\+' || true)
+    if [ -z "$SE_MAX_ENGINE_ID" ]; then
+        echo "[aerium] FATAL: no kMaxPrepopulatedEngineID in" \
+             "$SE_DEFS/prepopulated_engines.json - upstream renamed it?" >&2
+        return 1
+    fi
+    # Upstream reaching 117 means one of its engines now wears an id Aerium
+    # also hands out, and nothing downstream would notice: two entries with
+    # one id is a data conflict, not a build error.
+    if [ "$SE_MAX_ENGINE_ID" -ge "$AERIUM_FIRST_ENGINE_ID" ]; then
+        echo "[aerium] FATAL: upstream kMaxPrepopulatedEngineID is now" \
+             "$SE_MAX_ENGINE_ID, which collides with the ids Aerium adds" \
+             "($AERIUM_FIRST_ENGINE_ID-$AERIUM_MAX_ENGINE_ID)." >&2
+        echo "[aerium]        Renumber the engines inserted in theme.sh above" \
+             "upstream's range and move both constants with them. Existing" \
+             "profiles keep the old ids, so treat that as a migration." >&2
+        return 1
+    fi
+    # And the constants only mean anything if they still describe the blobs
+    # inserted above, which carry their ids literally.
+    _id=$AERIUM_FIRST_ENGINE_ID
+    while [ "$_id" -le "$AERIUM_MAX_ENGINE_ID" ]; do
+        if ! grep -qE "\"id\": $_id,?$" $SE_DEFS/prepopulated_engines.json
+        then
+            echo "[aerium] FATAL: no engine with id $_id in" \
+                 "$SE_DEFS/prepopulated_engines.json - theme.sh's added" \
+                 "engines and AERIUM_FIRST/MAX_ENGINE_ID have drifted apart" >&2
+            return 1
+        fi
+        _id=$((_id + 1))
+    done
 fi
-sed_i 's/"kMaxPrepopulatedEngineID": [0-9]\+,/"kMaxPrepopulatedEngineID": 119,/; s/"kCurrentDataVersion": [0-9]\+/"kCurrentDataVersion": '"$((SE_DATA_VERSION + SE_DATA_VERSION_OFFSET))"'/; s/"name": "startpage",/"name": "Startpage",/' \
+sed_i 's/"kMaxPrepopulatedEngineID": [0-9]\+,/"kMaxPrepopulatedEngineID": '"$AERIUM_MAX_ENGINE_ID"',/; s/"kCurrentDataVersion": [0-9]\+/"kCurrentDataVersion": '"$((SE_DATA_VERSION + SE_DATA_VERSION_OFFSET))"'/; s/"name": "startpage",/"name": "Startpage",/' \
     $SE_DEFS/prepopulated_engines.json
 sed_i '/^    "ZZ": {$/,/^    }$/{s/^        "&google",$/        "\&startpage",\n        "\&duckduckgo",\n        "\&duckduckgo_lite",\n        "\&duckduckgo_html",\n        "\&searx"/; /^        "&bing",$/d; /^        "&yahoo"$/d}' \
     $SE_DEFS/regional_settings.json
