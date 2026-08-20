@@ -379,7 +379,41 @@ sed_i '/^    "seznam": {$/i\
       "id": 119\
     },\
 ' $SE_DEFS/prepopulated_engines.json
-sed_i 's/"kMaxPrepopulatedEngineID": [0-9]\+,/"kMaxPrepopulatedEngineID": 119,/; s/"kCurrentDataVersion": [0-9]\+/"kCurrentDataVersion": 251/; s/"name": "startpage",/"name": "Startpage",/' \
+# kCurrentDataVersion decides whether Chromium re-merges the prepopulated
+# engine list into an existing profile's keyword database: the merge runs
+# only when this value is above the one recorded in that database, and
+# components/search_engines/util.cc DCHECKs that it never moves backwards
+# ("If a data change happened, it should not cause a version downgrade").
+# The three engines added above therefore reach an already-installed profile
+# only if this number rises.
+#
+# It used to be hardcoded, which was a slow-acting trap of exactly the kind
+# sed_i exists to catch, except no sed_i could catch it: upstream's own value
+# climbs about one per milestone (209 at 151, 210 at 152), so a fixed number
+# is overtaken eventually, and on that day the write silently becomes a
+# downgrade. The substitution still changes the file, so it still reports as
+# applied - the refresh just stops happening.
+#
+# Deriving it from upstream with a constant offset removes the cliff: it can
+# never be overtaken, and it only decreases if upstream's does. The offset is
+# 41 because upstream is 210 here, which reproduces 251 - the value this used
+# to hardcode - so no already-shipped profile sees its version go backwards.
+SE_DATA_VERSION_OFFSET=41
+SE_DATA_VERSION=
+# Guarded on the file existing rather than failing outright when it is absent,
+# because devutils/verify-seds.sh sources this over an empty tree to collect
+# sed targets. Returning early there would cut the collection short and drop
+# every substitution below this line from the check.
+if [ -e $SE_DEFS/prepopulated_engines.json ]; then
+    SE_DATA_VERSION=$(grep -o '"kCurrentDataVersion": [0-9]\+' \
+        $SE_DEFS/prepopulated_engines.json | grep -o '[0-9]\+' || true)
+    if [ -z "$SE_DATA_VERSION" ]; then
+        echo "[aerium] FATAL: no kCurrentDataVersion in" \
+             "$SE_DEFS/prepopulated_engines.json - upstream renamed it?" >&2
+        return 1
+    fi
+fi
+sed_i 's/"kMaxPrepopulatedEngineID": [0-9]\+,/"kMaxPrepopulatedEngineID": 119,/; s/"kCurrentDataVersion": [0-9]\+/"kCurrentDataVersion": '"$((SE_DATA_VERSION + SE_DATA_VERSION_OFFSET))"'/; s/"name": "startpage",/"name": "Startpage",/' \
     $SE_DEFS/prepopulated_engines.json
 sed_i '/^    "ZZ": {$/,/^    }$/{s/^        "&google",$/        "\&startpage",\n        "\&duckduckgo",\n        "\&duckduckgo_lite",\n        "\&duckduckgo_html",\n        "\&searx"/; /^        "&bing",$/d; /^        "&yahoo"$/d}' \
     $SE_DEFS/regional_settings.json
