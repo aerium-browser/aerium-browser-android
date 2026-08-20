@@ -12,36 +12,58 @@
 # behaviour regression rather than a cosmetic one.
 sed_i() {
     # A sed invocation can name several trailing files (theme.sh has one that
-    # patches both worker fetch-context implementations at once), so treat
-    # every trailing existing-or-not path as a target and require that each of
-    # them actually changed.
+    # patches both worker fetch-context implementations at once), so the
+    # targets are derived positionally: skip flags, the first non-flag
+    # argument is the script, everything after it is a file.
+    #
+    # Splitting them by testing `-e "$arg"` instead - which this used to do -
+    # is wrong twice over. A target whose path upstream renamed gets
+    # reclassified as part of the script, so the failure reads "no existing
+    # sed target" instead of naming the file that moved. Worse, it made every
+    # sed_i invisible to devutils/verify-seds.sh: that script collects targets
+    # in a first pass over an *empty* tree, so nothing existed, files[] came
+    # back empty, and sed_i returned before calling sed at all. The targets
+    # were never collected, never fetched, and never evaluated - leaving the
+    # substitutions reserved for behaviour regressions as the only ones with
+    # no version-bump safety net.
     local -a files=() expr=()
-    local arg seen_file=0
+    local arg script_seen=0
     for arg in "$@"; do
-        if [ "$seen_file" = 1 ] || [ -e "$arg" ]; then
-            case "$arg" in
-                -*) expr+=("$arg"); continue ;;
-            esac
-            seen_file=1
-            files+=("$arg")
-        else
+        case "$arg" in
+            -*) expr+=("$arg"); continue ;;
+        esac
+        if [ "$script_seen" = 0 ]; then
+            script_seen=1
             expr+=("$arg")
+            continue
         fi
+        files+=("$arg")
     done
     if [ "${#files[@]}" -eq 0 ]; then
-        echo "[aerium] FATAL: no existing sed target in: $*" >&2
+        echo "[aerium] FATAL: no sed target in: $*" >&2
         return 1
     fi
 
-    local f before rc=0
+    # A missing target is reported but does not short-circuit the sed call:
+    # verify-seds learns which paths a substitution wants by intercepting that
+    # call, and it needs to hear about the missing ones most of all.
+    local f rc=0
     local -a before_sums=()
     for f in "${files[@]}"; do
-        before_sums+=("$(cksum < "$f")")
+        if [ -e "$f" ]; then
+            before_sums+=("$(cksum < "$f")")
+        else
+            echo "[aerium] FATAL: sed target does not exist: $f" >&2
+            echo "[aerium]        upstream probably moved this file - see theme.sh" >&2
+            before_sums+=("")
+            rc=1
+        fi
     done
-    sed -i "$@" || return 1
+    sed -i "$@" || rc=1
     local i=0
     for f in "${files[@]}"; do
-        if [ "${before_sums[$i]}" = "$(cksum < "$f")" ]; then
+        if [ -e "$f" ] && [ -n "${before_sums[$i]}" ] \
+           && [ "${before_sums[$i]}" = "$(cksum < "$f")" ]; then
             echo "[aerium] FATAL: sed changed nothing in $f" >&2
             echo "[aerium]        expression: ${expr[*]}" >&2
             echo "[aerium]        upstream probably moved this code - see theme.sh" >&2
@@ -161,19 +183,16 @@ sed -i '/^  auto url_request_extra_data = base::MakeRefCounted<WebURLRequestExtr
   request.SetHttpHeaderField(WebString::FromUtf8("Sec-GPC"), "1");
 ' third_party/blink/renderer/platform/loader/fetch/url_loader/dedicated_or_shared_worker_global_scope_context_impl.cc \
   third_party/blink/renderer/modules/service_worker/web_service_worker_fetch_context_impl.cc
-# Sec-GPC injected above at render_frame_impl.cc's FinalizeRequestInternal
-# feeds into every renderer-initiated navigation's BeginNavigation IPC to the
-# browser process. content/browser/renderer_host/ipc_utils.cc's
-# VerifyNavigationHeaders() strictly allowlists which headers a navigation
-# may carry - DNT is on that list (why the DNT injection at the same call
-# site is safe), but Sec-GPC never was, since it doesn't exist upstream.
-# Without this, the browser kills the renderer on every single navigation
-# (content/browser/bad_message.h reason 342,
-# RFH_INVALID_NAVIGATION_HEADERS) - the Windows/Linux repos hit this exact
-# crash (RESULT_CODE_KILLED_BAD_MESSAGE on any URL entry) before it was
-# found and fixed there; ported here before it could bite Android too.
-sed_i 's/header.name() != net::HttpRequestHeaders::kDNT) {/header.name() != net::HttpRequestHeaders::kDNT \&\&\n        header.name() != "Sec-GPC") {/' \
-    content/browser/renderer_host/ipc_utils.cc
+# No allowlist patch is needed for the Sec-GPC injected above. The header
+# reaches the browser process on every renderer-initiated navigation's
+# BeginNavigation IPC, where ipc_utils.cc's VerifyNavigationHeaders() kills
+# the renderer for anything not on its allowlist (bad_message.h reason 342,
+# RFH_INVALID_NAVIGATION_HEADERS - the Windows/Linux repos hit exactly that
+# crash on any URL entry). Chromium 152 added net::HttpRequestHeaders::
+# kSecGPC ("Sec-GPC") and put it on that allowlist itself, so the widening
+# this used to do by hand is now upstream. Re-check on the next milestone
+# bump: if kSecGPC ever leaves the list, the browser starts killing the
+# renderer on every navigation again.
 
 # --- Widevine, toggleable and off by default (Brave-style). Aerium doesn't
 # bundle Google's proprietary CDM binary, but the interface is compiled in

@@ -34,6 +34,10 @@
 #   MISSING  every aerium/... path - created by vanadium patches. Correct.
 # Anything beyond those needs investigating.
 #
+# Targets inside a DEPS submodule (third_party/search_engines_data/resources)
+# are fetched from that submodule's own repo at the commit src pins, so they
+# get checked like any other file instead of being reported MISSING forever.
+#
 # History, kept because both were mistaken for broken patterns at first:
 # the .137 bump surfaced a second NOOP on
 # components/autofill/core/common/autofill_prefs.cc. That one was not a moved
@@ -106,7 +110,22 @@ sed() {
     done
     return 0
 }
-sed_i() { sed "$@"; }
+# Fallback only: theme.sh defines its own sed_i and that definition wins from
+# the moment it is sourced. This one covers any script that calls sed_i
+# without defining it, and routes it in WITH the -i flag so the override above
+# takes its measuring branch rather than its passthrough branch.
+#
+# What actually used to exempt every sed_i from this check lived in theme.sh:
+# its sed_i split script-from-files by testing `-e "$arg"`, and pass 1 below
+# runs against a still-empty tree, so nothing looked like a file, files[] came
+# back empty and it returned before calling sed. The targets were never
+# collected here, so they were never fetched and never evaluated in pass 2 -
+# and sed_i is reserved for substitutions whose absence is a behaviour
+# regression, so those were the only ones with no safety net. Chromium 152
+# added kSecGPC to ipc_utils.cc itself and this script still reported a clean
+# run while the build died on that exact sed. theme.sh derives its targets
+# positionally now.
+sed_i() { sed -i "$@"; }
 cd "$TREE"
 set +e
 source "$SCRIPT_DIR/patch.sh" >/dev/null 2>&1
@@ -123,6 +142,34 @@ _harness 1
 cut -f2 "$REPORT" | sort -u | grep -v '^$' > "$WORK/targets.txt"
 echo "[verify-seds] $(wc -l < "$WORK/targets.txt") distinct sed targets"
 
+# --- map DEPS submodules -----------------------------------------------------
+# Some sed targets live in repositories DEPS pulls in rather than in
+# chromium/src itself. third_party/search_engines_data/resources is one: it is
+# a submodule, so definitions/*.json 404s against src at every version and the
+# four search-engine substitutions pointed at it would look permanently
+# MISSING. Map each submodule prefix to its own repo and the commit src pins,
+# longest prefix first so a nested submodule wins over its parent.
+SUBMAP="$WORK/submodules.tsv"
+curl -sSf "$BASE/DEPS?format=TEXT" 2>/dev/null | base64 -d > "$WORK/DEPS" \
+    || : > "$WORK/DEPS"
+python3 - "$WORK/DEPS" > "$SUBMAP" <<'DEPSPY'
+import re, sys
+
+text = open(sys.argv[1]).read()
+gitvars = dict(re.findall(r"'(\w+)':\s*'(https://[^']+)'", text))
+entry = re.compile(
+    r"'src/([^']+)':\s*(?:\{\s*'url':\s*)?"
+    r"Var\('(\w+)'\)\s*\+\s*'([^']+)'\s*\+\s*'@'\s*\+\s*'([0-9a-f]{40})'")
+rows = []
+for path, var, repo, sha in entry.findall(text):
+    base = gitvars.get(var)
+    if base:
+        rows.append((path, base + repo.removesuffix('.git'), sha))
+for path, repo, sha in sorted(rows, key=lambda r: -len(r[0])):
+    print('%s\t%s\t%s' % (path, repo, sha))
+DEPSPY
+echo "[verify-seds] $(wc -l < "$SUBMAP") DEPS submodules mapped"
+
 # --- fetch them --------------------------------------------------------------
 fetched=0
 while read -r p; do
@@ -130,8 +177,14 @@ while read -r p; do
     dest="$TREE/$p"
     [ -f "$dest" ] && continue
     mkdir -p "$(dirname "$dest")"
+    url="$BASE/$p?format=TEXT"
+    while IFS=$'\t' read -r sub repo sha; do
+        case "$p" in "$sub"/*)
+            url="$repo/+/$sha/${p#"$sub"/}?format=TEXT"; break ;;
+        esac
+    done < "$SUBMAP"
     for attempt in 1 2 3 4; do
-        if curl -sSf "$BASE/$p?format=TEXT" 2>/dev/null | base64 -d > "$dest" \
+        if curl -sSf "$url" 2>/dev/null | base64 -d > "$dest" \
            && [ -s "$dest" ]; then
             fetched=$((fetched + 1)); break
         fi
