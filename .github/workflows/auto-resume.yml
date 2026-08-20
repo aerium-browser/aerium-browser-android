@@ -7,10 +7,27 @@ name: auto-resume
 #   2. the by-design "did not finish within 24 stages" failure from
 #      check-completion, which previously required a manual re-dispatch to
 #      keep a long build going
-# A run that failed WITHOUT a checkpoint hit a real error at its first stage
-# (fetch/patch/gn failure) - resuming would fail identically, so it is left
-# alone. The cap is higher than the Windows repo's because case 2 means one
-# commit can legitimately need several auto-continues.
+# The cap is higher than the Windows repo's because case 2 means one commit
+# can legitimately need several auto-continues.
+#
+# Resuming is scoped to the commit main currently points at, and to runs that
+# still hold a live checkpoint. Both halves matter:
+#
+#   - A run with no artifacts is not proof the commit is broken, only that
+#     that run died before packing one. This used to be read the other way -
+#     "latest run saved no checkpoint -> real error, do not resume" - which
+#     wedged the chain completely: run 31552439778 died as a runner-agent
+#     death with zero artifacts, stayed the newest run precisely because
+#     nothing would resume it, and the guard then fired hourly and refused
+#     122 times in a row. So the search walks back to the newest run that
+#     did leave a tree instead of stopping at the first that did not.
+#
+#   - A build tree is only valid for the commit that produced it. Keying on
+#     main's current HEAD rather than "the newest failed run" keeps a resume
+#     from carrying a checkpoint built from different sources, which matters
+#     most exactly when it would be hardest to spot: Android has just moved a
+#     whole Chromium milestone, and a stale tree would compile the wrong
+#     thing rather than fail loudly.
 #
 # The hourly schedule exists because workflow_run is not enough on its own:
 # GitHub deliberately does not emit workflow_run events for runs dispatched
@@ -37,55 +54,90 @@ jobs:
        github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
     steps:
-      - name: Resume from the failed run's checkpoint
+      - name: Resume from the newest surviving checkpoint
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           EVENT: ${{ github.event_name }}
-          EVENT_RUN_ID: ${{ github.event.workflow_run.id }}
           EVENT_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
           RUNS="repos/$REPO/actions/workflows/build.yml/runs"
 
-          if [ "$EVENT" = "schedule" ]; then
-            # Never stack a second build on top of a live one. Any run that
-            # is not yet completed means the chain is still healthy.
-            active=$(gh api "$RUNS?branch=main&per_page=30" \
-              --jq '[.workflow_runs[] | select(.status != "completed")] | length')
-            if [ "$active" -gt 0 ]; then
-              echo "A build is still active - nothing to resume."
-              exit 0
-            fi
-            latest=$(gh api "$RUNS?branch=main&status=completed&per_page=1" \
-              --jq '.workflow_runs[0] | "\(.id) \(.conclusion) \(.head_sha)"')
-            RUN_ID=${latest%% *}
-            rest=${latest#* }
-            CONCLUSION=${rest%% *}
-            HEAD_SHA=${rest#* }
-            if [ "$CONCLUSION" != "failure" ]; then
-              echo "Latest run $RUN_ID concluded '$CONCLUSION' - nothing to resume."
-              exit 0
-            fi
-            echo "Latest run $RUN_ID failed and no build is active."
-          else
-            RUN_ID="$EVENT_RUN_ID"
-            HEAD_SHA="$EVENT_HEAD_SHA"
-          fi
-
-          if ! gh api "repos/$REPO/actions/runs/$RUN_ID/artifacts" --jq '.artifacts[].name' | grep -qx 'build-artifact-android'; then
-            echo "Run $RUN_ID saved no checkpoint - real error, not a transient crash. Not resuming."
+          # Never stack a second build on a live one. Any run that is not yet
+          # completed means the chain is still healthy.
+          active=$(gh api "$RUNS?branch=main&per_page=30" \
+            --jq '[.workflow_runs[] | select(.status != "completed")] | length')
+          if [ "$active" -gt 0 ]; then
+            echo "A build is still active - nothing to resume."
             exit 0
           fi
+
+          # Which commit are we trying to finish? For workflow_run it is the run
+          # that just failed; on a schedule tick it is whatever main points at
+          # now. Deriving it from main rather than from "the newest run" is what
+          # stops a resume carrying a checkpoint built from different sources:
+          # a build tree is only valid for the commit that produced it, and
+          # Android has just moved a whole Chromium milestone, so a stale tree
+          # would compile the wrong thing rather than fail cleanly.
+          if [ "$EVENT" = "schedule" ]; then
+            HEAD_SHA=$(gh api "repos/$REPO/commits/main" --jq '.sha')
+          else
+            HEAD_SHA="$EVENT_HEAD_SHA"
+          fi
+          echo "Looking for a resumable checkpoint for $HEAD_SHA"
+
+          runs_json=$(gh api "$RUNS?head_sha=$HEAD_SHA&per_page=50")
+
+          if [ "$(jq '[.workflow_runs[] | select(.conclusion == "success")] | length' <<<"$runs_json")" -gt 0 ]; then
+            echo "$HEAD_SHA has already built successfully - nothing to resume."
+            exit 0
+          fi
+
+          # Walk the failed runs for this commit newest-first and take the first
+          # one that still has a checkpoint.
+          #
+          # This is the deadlock fix. The old rule was "latest run saved no
+          # checkpoint -> real error, do not resume", applied to the single most
+          # recent run. Run 31552439778 died as a runner-agent death and
+          # produced zero artifacts, so it looked like a real error forever -
+          # and because it stayed the most recent run precisely because nothing
+          # would resume it, the chain wedged. That guard fired hourly and took
+          # the same branch 122 times.
+          #
+          # A run with no artifacts is not evidence of a broken commit; it is
+          # evidence that that particular run died before it could pack one.
+          # The question worth asking is whether ANY run for this commit left a
+          # tree behind, so ask that instead. Artifacts expire (10 days), so
+          # expired ones are skipped rather than dispatched into a download
+          # failure.
+          RUN_ID=""
+          for candidate in $(jq -r '[.workflow_runs[] | select(.conclusion == "failure")]
+                                    | sort_by(.run_number) | reverse | .[].id' <<<"$runs_json"); do
+            if gh api "repos/$REPO/actions/runs/$candidate/artifacts" \
+                 --jq '.artifacts[] | select(.expired == false) | .name' 2>/dev/null \
+               | grep -qx 'build-artifact-android'; then
+              RUN_ID="$candidate"
+              break
+            fi
+            echo "  run $candidate has no surviving checkpoint - looking further back"
+          done
+
+          if [ -z "$RUN_ID" ]; then
+            echo "No run for $HEAD_SHA left a checkpoint that is still alive."
+            echo "This needs a fresh build (dispatch Build with fresh: true), not a resume."
+            exit 0
+          fi
+
           # Cap the auto-retry chain per commit. Dispatches made with the
-          # workflow token show actor github-actions[bot], so manual resumes
-          # by a human don't count against the cap.
-          attempts=$(gh api "$RUNS?head_sha=$HEAD_SHA&per_page=100" \
-            --jq '[.workflow_runs[] | select(.actor.login == "github-actions[bot]")] | length')
+          # workflow token show actor github-actions[bot], so manual resumes by
+          # a human do not count against the cap.
+          attempts=$(jq '[.workflow_runs[] | select(.actor.login == "github-actions[bot]")] | length' <<<"$runs_json")
           if [ "$attempts" -ge 5 ]; then
             echo "Already auto-resumed $attempts times for $HEAD_SHA - giving up, this needs a human."
             exit 0
           fi
+
           echo "Dispatching resume of run $RUN_ID (auto-attempt $((attempts + 1)))"
           gh api -X POST "repos/$REPO/actions/workflows/build.yml/dispatches" \
             -f ref=main -f "inputs[resume_run_id]=$RUN_ID"
