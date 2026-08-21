@@ -14,19 +14,43 @@ sed -i 's|^\(\s*\)You and Google\s*$|\1Your browser|' chrome/browser/ui/android/
 # Passwords/Payment methods/Addresses/Autofill options sub-items (orders
 # 11-17 in main_preferences.xml) - Aerium doesn't ship autofill/password
 # storage UI, so there's nothing left to point users at from here.
-perl -0777 -pi -e 's/    <org\.chromium\.components\.browser_ui\.settings\.ChromeBasePreference\n        android:key="autofill_and_passwords".*?android:key="autofill_options"\n        android:order="17" \/>\n\n//s' chrome/android/java/res/xml/main_preferences.xml
-# That perl is a silent no-op if upstream reflows the block, and nothing
-# checks it: devutils/verify-seds.sh intercepts sed, not perl, so this is the
-# one substitution in either script with no version-bump safety net. A miss no
-# longer crashes anything - theme.sh removes these preferences at runtime too -
-# but it would quietly put them back into settings search, so fail here
-# instead. Written as an if rather than `grep && {...}` so that set -e cannot
-# fire on the grep that correctly finds nothing, and so that verify-seds,
+#
+# These six keys are exactly the set theme.sh removes at runtime in
+# MainSettings.java; the two lists have to stay in step, because leaving an
+# entry here that the Java no longer expects (or vice versa) is what made
+# Settings crash on open in the 151 build.
+#
+# Removal is driven by the keys rather than by one literal multi-line block.
+# The old pattern required the element to open with the tag name immediately
+# followed by android:key, and Chromium 152 inserted an android:fragment
+# attribute between the two - so it silently matched nothing, which is
+# precisely the failure this kind of substitution is prone to. Matching each
+# element by its key tolerates attributes being added, removed or reordered,
+# and [^<>] keeps a match from ever running past the element it started in.
+#
+# A key that matches nothing is fatal rather than skipped: a missing entry
+# means upstream renamed or restructured it, and continuing would ship the
+# preference while the Java that backs it is gone.
+perl -0777 -pi -e '
+    my @keys = qw(autofill_and_passwords autofill_section passwords
+                  autofill_payment_methods autofill_addresses autofill_options);
+    for my $k (@keys) {
+        s{[ \t]*<[\w.]+\b[^<>]*?android:key="\Q$k\E"[^<>]*?/>\n}{}s
+            or die "[aerium] FATAL: no element with android:key=\"$k\" in "
+                   . "main_preferences.xml - upstream renamed or restructured it\n";
+    }
+    s/\n{3,}/\n\n/g;
+' chrome/android/java/res/xml/main_preferences.xml
+# The die above reports the operation; this reports the outcome. They are not
+# quite the same check - if upstream ever carried two elements under one of
+# these keys, each substitution would remove one and still succeed. Cheap
+# enough to keep both. Written as an if rather than `grep && {...}` so set -e
+# cannot fire on the grep that correctly finds nothing, and so verify-seds,
 # which sources this over an empty tree, sees the grep fail and moves on.
-if grep -q 'android:key="autofill_and_passwords"' \
+if grep -qE 'android:key="(autofill_and_passwords|autofill_section|passwords|autofill_payment_methods|autofill_addresses|autofill_options)"' \
         chrome/android/java/res/xml/main_preferences.xml; then
-    echo "[aerium] FATAL: the autofill entries are still in" \
-         "main_preferences.xml - the perl removal above stopped matching" >&2
+    echo "[aerium] FATAL: autofill entries remain in main_preferences.xml" \
+         "after the removal above" >&2
     return 1
 fi
 
