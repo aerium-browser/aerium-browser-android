@@ -201,52 +201,38 @@ sed -i 's/BASE_FEATURE(kSafetyHub, base::FEATURE_ENABLED_BY_DEFAULT);/BASE_FEATU
 sed -i 's/prefs::kHttpsFirstBalancedMode, false,/prefs::kHttpsFirstBalancedMode, true,/' \
     chrome/browser/ui/browser_ui_prefs.cc
 
-# --- Global Privacy Control (https://w3c.github.io/gpc/): a Sec-GPC opt-out
-# header plus a readable navigator.globalPrivacyControl JS property, neither
-# of which stock Chromium implements (Brave and DuckDuckGo do; CCPA requires
-# it from browsers serving California users starting 2027-01-01). Sent/
-# reported unconditionally - there's no per-site toggle, matching how DNT
-# (still present in Chromium, just hidden from the settings UI) already
-# behaves at these same call sites.
-sed -i 's|\[MeasureAs=NavigatorVendor\] readonly attribute DOMString vendor;|&\n    // https://w3c.github.io/gpc/#dom-navigator-globalprivacycontrol\n    readonly attribute boolean globalPrivacyControl;|' \
-    third_party/blink/renderer/core/frame/navigator.idl
-sed -i 's|String vendorSub() const;|&\n  bool globalPrivacyControl() const;|' \
-    third_party/blink/renderer/core/frame/navigator.h
-sed -i '/^String Navigator::vendorSub() const {$/,/^}$/{/^}$/a\
-\
-bool Navigator::globalPrivacyControl() const {\
-  // https://w3c.github.io/gpc/#dom-navigator-globalprivacycontrol\
-  return true;\
-}
-}' third_party/blink/renderer/core/frame/navigator.cc
-sed -i '/^  \/\/ TODO(crbug\.com\/40833603): WARNING: This bypasses the permissions policy\.$/i\
-  // Global Privacy Control opt-out signal (https://w3c.github.io/gpc/),\
-  // legally recognized under CCPA. Sent unconditionally, matching\
-  // Brave/DuckDuckGo'"'"'s default behavior - there'"'"'s no per-site toggle.\
-  if (should_update_existing_headers) {\
-    headers->RemoveHeader("Sec-GPC");\
-  }\
-  headers->SetHeaderIfMissing("Sec-GPC", "1");\
-' content/browser/loader/browser_initiated_resource_request.cc
-sed -i '/^  \/\/ The request.s extra data may indicate that we should set a custom user$/i\
-  // Global Privacy Control - see content\/browser\/loader\/\
-  \/\/ browser_initiated_resource_request.cc for the browser-initiated case.\
-  request.SetHttpHeaderField(blink::WebString::FromUtf8("Sec-GPC"), "1");
-' content/renderer/render_frame_impl.cc
-sed -i '/^  auto url_request_extra_data = base::MakeRefCounted<WebURLRequestExtraData>();$/i\
-  request.SetHttpHeaderField(WebString::FromUtf8("Sec-GPC"), "1");
-' third_party/blink/renderer/platform/loader/fetch/url_loader/dedicated_or_shared_worker_global_scope_context_impl.cc \
-  third_party/blink/renderer/modules/service_worker/web_service_worker_fetch_context_impl.cc
-# No allowlist patch is needed for the Sec-GPC injected above. The header
-# reaches the browser process on every renderer-initiated navigation's
-# BeginNavigation IPC, where ipc_utils.cc's VerifyNavigationHeaders() kills
-# the renderer for anything not on its allowlist (bad_message.h reason 342,
-# RFH_INVALID_NAVIGATION_HEADERS - the Windows/Linux repos hit exactly that
-# crash on any URL entry). Chromium 152 added net::HttpRequestHeaders::
-# kSecGPC ("Sec-GPC") and put it on that allowlist itself, so the widening
-# this used to do by hand is now upstream. Re-check on the next milestone
-# bump: if kSecGPC ever leaves the list, the browser starts killing the
-# renderer on every navigation again.
+# --- Global Privacy Control (https://w3c.github.io/gpc/). Chromium 152
+# implements this itself, in third_party/blink/renderer/modules/
+# global_privacy_control/ - a directory that does not exist at 151. Aerium
+# used to add the whole feature by hand: the navigator.globalPrivacyControl
+# IDL attribute, its Navigator member, and the Sec-GPC header at all four
+# request paths. All six substitutions are gone, because upstream now covers
+# every one of them.
+#
+# Keeping ours was not merely redundant, it broke the build. Upstream declares
+# the attribute on a mixin that Navigator includes, so our navigator.idl line
+# became a second declaration on the same interface and the generated bindings
+# failed to compile: "redefinition of GlobalPrivacyControlAttributeGetCallback"
+# in v8_navigator.cc, one definition from each. Run 81 died on it after 1h36m.
+#
+# What replaces them is one flag. Upstream gates both halves of the feature on
+# blink::features::kGlobalPrivacyControlForce: the JS property through the
+# GlobalPrivacyControl runtime feature it implies, and the header itself
+# through IsGlobalPrivacyControlEnabled(), which
+# browser_initiated_resource_request.cc consults at the same call site our sed
+# used to patch - it even removes and re-sets the header the same way. The
+# runtime feature ships off, so it is turned on here.
+#
+# Behaviour is unchanged from Aerium's own version: sent unconditionally, no
+# per-site toggle. The ipc_utils.cc navigation-header allowlist needs no
+# widening either, since 152 added net::HttpRequestHeaders::kSecGPC to it.
+#
+# Desktop is still on 151 and keeps its hand-written GPC patches. When Linux
+# and Windows move to 152 they will hit this same collision and need the same
+# treatment.
+sed_i '/^      name: "GlobalPrivacyControlForce",$/a\
+      status: "stable",' \
+    third_party/blink/renderer/platform/runtime_enabled_features.json5
 
 # --- Widevine, toggleable and off by default (Brave-style). Aerium doesn't
 # bundle Google's proprietary CDM binary, but the interface is compiled in
