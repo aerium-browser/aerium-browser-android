@@ -270,6 +270,38 @@ runs:
         compression-level: 0
         overwrite: true
 
+    - name: Record that this failure is deterministic
+      # build.sh has already turned the ordinary "ran out of time budget" case
+      # into exit 0 (RET=124 -> exit 0), so a non-zero code here can only be a
+      # failure that will reproduce: a compile error, a gn gen error, or a
+      # FATAL from the source-setup substitutions. Resuming such a run just
+      # recompiles up to the same broken target and dies in the same place.
+      #
+      # A runner death or a job timeout never reaches this step at all, and
+      # those are precisely the failures worth resuming. So the presence of
+      # this marker is the discriminator auto-resume needs, and it comes from
+      # the stage knowing what happened rather than from scraping logs.
+      if: inputs.finished != 'true' && steps.build.outputs.code != '0'
+      shell: bash
+      run: |
+        mkdir -p "$GITHUB_WORKSPACE/stage-status"
+        {
+          echo "exit_code=${{ steps.build.outputs.code }}"
+          echo "stage_run_id=$GITHUB_RUN_ID"
+          echo "commit=$GITHUB_SHA"
+        } > "$GITHUB_WORKSPACE/stage-status/build-error.txt"
+        sed -n '1,40p' "$GITHUB_WORKSPACE/chromium/src/out/Default/.siso_failed_targets" \
+          >> "$GITHUB_WORKSPACE/stage-status/build-error.txt" 2>/dev/null || true
+
+    - name: Upload deterministic-failure marker
+      if: inputs.finished != 'true' && steps.build.outputs.code != '0'
+      uses: actions/upload-artifact@v7
+      with:
+        name: build-error-android
+        path: ${{ github.workspace }}/stage-status/
+        retention-days: 10
+        overwrite: true
+
     - name: Upload final APK
       if: inputs.finished != 'true' && steps.pack.outputs.packed == 'finished'
       uses: actions/upload-artifact@v7

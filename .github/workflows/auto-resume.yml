@@ -10,6 +10,21 @@ name: auto-resume
 # The cap is higher than the Windows repo's because case 2 means one commit
 # can legitimately need several auto-continues.
 #
+# What it deliberately does NOT cover is a failure that will reproduce. The
+# stage uploads a build-error-android marker whenever build.sh returned
+# non-zero, and by that point non-zero can only mean a compile error, a gn gen
+# error, or a FATAL from the source-setup substitutions - build.sh turns the
+# ordinary "out of time budget" case into exit 0 first, and a runner death
+# never reaches the upload at all. So the marker separates "died on the way"
+# from "cannot succeed", and only the former is resumed.
+#
+# All three dead ends - deterministic failure, no surviving checkpoint, cap
+# reached - now fail this job rather than exiting green. Exiting green is what
+# let run 80 die in source setup and leave Android idle for 13.5 hours while
+# an hourly tick wrote "nothing to resume" into a log nobody was reading. A
+# red auto-resume run is the alarm, and it stops on its own once a build for a
+# newer commit runs.
+#
 # Resuming is scoped to the commit main currently points at, and to runs that
 # still hold a live checkpoint. Both halves matter:
 #
@@ -111,6 +126,41 @@ jobs:
           # tree behind, so ask that instead. Artifacts expire (10 days), so
           # expired ones are skipped rather than dispatched into a download
           # failure.
+          # Before looking for anything to resume, ask whether the newest
+          # failure is one that CAN be resumed. The stage uploads a
+          # build-error-android marker whenever build.sh returned non-zero,
+          # which by then can only mean a failure that reproduces - build.sh
+          # converts the ordinary "out of time budget" case to exit 0 before
+          # returning. A runner death or job timeout never gets far enough to
+          # upload it.
+          #
+          # Resuming a deterministic failure recompiles up to the same broken
+          # target and dies in the same place, and the only thing it spends is
+          # the retry cap. Run 81 failed on a GPC redefinition and was resumed
+          # five times, each attempt burning hours to reach the identical
+          # compile error, until the cap stopped it. The commit needed a code
+          # change; no number of retries was ever going to supply one.
+          newest_failed=$(jq -r '[.workflow_runs[] | select(.conclusion == "failure")]
+                                 | sort_by(.run_number) | reverse | .[0].id // empty' <<<"$runs_json")
+          if [ -n "$newest_failed" ] \
+             && gh api "repos/$REPO/actions/runs/$newest_failed/artifacts" \
+                  --jq '.artifacts[] | select(.expired == false) | .name' 2>/dev/null \
+                | grep -qx 'build-error-android'; then
+            {
+              echo "## Build needs a human, not a resume"
+              echo
+              echo "Run \`$newest_failed\` for \`$HEAD_SHA\` failed with a deterministic"
+              echo "error - a compile failure, a gn gen failure, or a FATAL from the"
+              echo "source-setup substitutions. Resuming would reproduce it."
+              echo
+              echo "Download the \`build-error-android\` artifact from that run for the"
+              echo "exit code and failed targets, fix the cause, and push. The next"
+              echo "build starts from the new commit."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "Newest failure for $HEAD_SHA is deterministic - not resuming."
+            exit 1
+          fi
+
           RUN_ID=""
           for candidate in $(jq -r '[.workflow_runs[] | select(.conclusion == "failure")]
                                     | sort_by(.run_number) | reverse | .[].id' <<<"$runs_json"); do
@@ -124,9 +174,23 @@ jobs:
           done
 
           if [ -z "$RUN_ID" ]; then
-            echo "No run for $HEAD_SHA left a checkpoint that is still alive."
-            echo "This needs a fresh build (dispatch Build with fresh: true), not a resume."
-            exit 0
+            # Exiting green here is what let Android sit idle for 13.5 hours:
+            # run 80 died in source setup, so it never packed a checkpoint,
+            # this branch printed a line into a log nobody reads, and the
+            # hourly tick did the same thing every hour until someone looked.
+            # A build that is stuck is worth a red mark in the Actions list -
+            # it clears itself as soon as a build for a newer commit runs.
+            {
+              echo "## Build stalled with nothing to resume"
+              echo
+              echo "No run for \`$HEAD_SHA\` left a checkpoint that is still alive,"
+              echo "so there is no tree to continue from. This usually means the"
+              echo "failure happened in source setup, before the first pack."
+              echo
+              echo "Dispatch Build manually to start it over."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "No surviving checkpoint for $HEAD_SHA - a fresh build is needed."
+            exit 1
           fi
 
           # Cap the auto-retry chain per commit. Dispatches made with the
@@ -134,8 +198,14 @@ jobs:
           # a human do not count against the cap.
           attempts=$(jq '[.workflow_runs[] | select(.actor.login == "github-actions[bot]")] | length' <<<"$runs_json")
           if [ "$attempts" -ge 5 ]; then
+            {
+              echo "## Auto-resume cap reached"
+              echo
+              echo "\`$HEAD_SHA\` has been auto-resumed $attempts times without"
+              echo "finishing. Something is wrong that resuming does not fix."
+            } >> "$GITHUB_STEP_SUMMARY"
             echo "Already auto-resumed $attempts times for $HEAD_SHA - giving up, this needs a human."
-            exit 0
+            exit 1
           fi
 
           echo "Dispatching resume of run $RUN_ID (auto-attempt $((attempts + 1)))"
