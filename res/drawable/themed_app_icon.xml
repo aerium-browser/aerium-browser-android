@@ -1,18 +1,48 @@
 <?xml version="1.0" encoding="utf-8"?>
 
+<!-- Monochrome (themed) launcher layer. The system tints this a single colour,
+     so shape and alpha are the only tools available - which is why the earlier
+     version, four flat silhouettes at full opacity, read as a plain blob.
+
+     This follows the same geometry as layered_app_icon_foreground.xml: 108dp,
+     scaled 0.66 and translated 87.04, so the themed icon sits exactly where the
+     colour one does instead of being smaller and offset.
+
+     The structure of aerium.svg is kept - the three swirl arms, then the four
+     concentric lens discs - with each original colour mapped to an alpha step
+     by how light it was. That is what brings back the depth: the arms stay
+     solid, the pale outer disc drops far back, and the inner discs step up
+     again so the lens still reads as a lens after tinting. A few of the larger
+     sparkles are kept for character; the smaller ones would disappear at
+     launcher size and only add noise. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="90dp"
-    android:height="90dp"
+    android:width="108dp"
+    android:height="108dp"
     android:viewportWidth="512"
     android:viewportHeight="512">
   <group
-      android:scaleX="0.62"
-      android:scaleY="0.62"
-      android:translateX="97.28"
-      android:translateY="97.28">
-    <path android:fillColor="#000000" android:pathData="M 330 384.17 L 149.1 488.61 A 256 256 0 0 1 108 47.12 L 108 256 A 148 148 0 0 0 330 384.17 Z"/>
-    <path android:fillColor="#000000" android:pathData="M 108 256 L 108 47.12 A 256 256 0 0 1 510.9 232.27 L 330 127.83 A 148 148 0 0 0 108 256 Z"/>
-    <path android:fillColor="#000000" android:pathData="M 330 127.83 L 510.9 232.27 A 256 256 0 0 1 149.1 488.61 L 330 384.17 A 148 148 0 0 0 330 127.83 Z"/>
-    <path android:fillColor="#000000" android:pathData="M 152.00 256 A 104 104 0 1 0 360.00 256 A 104 104 0 1 0 152.00 256 Z"/>
+      android:scaleX="0.66"
+      android:scaleY="0.66"
+      android:translateX="87.03999999999999"
+      android:translateY="87.03999999999999">
+
+    <!-- Swirl arms: #1B2C5E, #2A4485, #111C42 in the original. The mid arm is
+         a step back so the three stay distinguishable once flattened. -->
+    <path android:fillColor="#000000" android:fillAlpha="1.0" android:pathData="M 330 384.17 L 149.1 488.61 A 256 256 0 0 1 108 47.12 L 108 256 A 148 148 0 0 0 330 384.17 Z"/>
+    <path android:fillColor="#000000" android:fillAlpha="0.78" android:pathData="M 108 256 L 108 47.12 A 256 256 0 0 1 510.9 232.27 L 330 127.83 A 148 148 0 0 0 108 256 Z"/>
+    <path android:fillColor="#000000" android:fillAlpha="1.0" android:pathData="M 330 127.83 L 510.9 232.27 A 256 256 0 0 1 149.1 488.61 L 330 384.17 A 148 148 0 0 0 330 127.83 Z"/>
+
+    <!-- Larger sparkles only: the four-point star and the three biggest dots. -->
+    <path android:fillColor="#000000" android:fillAlpha="0.42" android:pathData="M 196 79 Q 198.34 89.66 209 92 Q 198.34 94.34 196 105 Q 193.66 94.34 183 92 Q 193.66 89.66 196 79 Z"/>
+    <path android:fillColor="#000000" android:fillAlpha="0.42" android:pathData="M 383.00 96 A 5 5 0 1 0 393.00 96 A 5 5 0 1 0 383.00 96 Z"/>
+    <path android:fillColor="#000000" android:fillAlpha="0.35" android:pathData="M 145.50 400 A 4.5 4.5 0 1 0 154.50 400 A 4.5 4.5 0 1 0 145.50 400 Z"/>
+    <path android:fillColor="#000000" android:fillAlpha="0.35" android:pathData="M 398.00 360 A 4 4 0 1 0 406.00 360 A 4 4 0 1 0 398.00 360 Z"/>
+
+    <!-- Lens: #E9F1FB, #2C6BAE, #4C97CF, #7FC4E4. The pale outer disc sits far
+         back, the inner discs step up, so the eye still has its rings. -->
+    <path android:fillColor="#000000" android:fillAlpha="0.20" android:pathData="M 122.00 256 A 134 134 0 1 0 390.00 256 A 134 134 0 1 0 122.00 256 Z"/>
+    <path android:fillColor="#000000" android:fillAlpha="0.62" android:pathData="M 152.00 256 A 104 104 0 1 0 360.00 256 A 104 104 0 1 0 152.00 256 Z"/>
+    <path android:fillColor="#000000" android:fillAlpha="0.44" android:pathData="M 156.00 236 A 82 82 0 1 0 320.00 236 A 82 82 0 1 0 156.00 236 Z"/>
+    <path android:fillColor="#000000" android:fillAlpha="0.26" android:pathData="M 176.00 218 A 46 46 0 1 0 268.00 218 A 46 46 0 1 0 176.00 218 Z"/>
   </group>
 </vector>
