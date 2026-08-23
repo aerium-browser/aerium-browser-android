@@ -170,6 +170,28 @@ sed_i '/^  \/\/ Ensure the pref is reset if platform autofill is restricted\.$/,
 # maybeStartPasswordsExportFlow() is kept and still called: it reads fragment
 # arguments and touches none of the removed preferences. Unused imports are
 # fine - RemoveUnusedImports is in errorprone.py's disable list.
+# The same six things are also reachable from the three-dot menu, which is a
+# separate surface from Settings and was still offering all of them: a
+# "Passwords and autofill" parent item whose submenu holds Google Password
+# Manager, Payment methods, and Addresses and more. Removing the preferences
+# from main_preferences.xml did nothing to this menu.
+#
+# The gate is one predicate, so that is what changes. Deleting the block that
+# adds the item would leave buildPasswordsAndAutofillParentItem() - and the
+# three submenu builders it calls - referenced by nothing, and Chromium builds
+# Java with treat_warnings_as_errors while errorprone maps UnusedMethod to a
+# warning, so dead private methods fail the build. Returning false keeps every
+# call site in place and simply never reaches them.
+TABBED_MENU=chrome/android/java/src/org/chromium/chrome/browser/tabbed_mode/TabbedAppMenuPropertiesDelegate.java
+sed_i '/^    private boolean shouldShowPasswordsAndAutofillParentItem() {$/,/^    }$/c\
+    private boolean shouldShowPasswordsAndAutofillParentItem() {\
+        \/\/ Aerium ships no password, payment or address storage UI, so the\
+        \/\/ menu entry that leads to it - and its Google Password Manager,\
+        \/\/ Payment methods and Addresses and more children - are never\
+        \/\/ built. Web forms are filled by the system autofill service.\
+        return false;\
+    }' $TABBED_MENU
+
 MAIN_SETTINGS=chrome/android/java/src/org/chromium/chrome/browser/settings/MainSettings.java
 sed_i '/^    private void updateAutofillPreferences() {$/,/^    }$/c\
     private void updateAutofillPreferences() {\
