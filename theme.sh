@@ -182,6 +182,33 @@ sed_i '/^  \/\/ Ensure the pref is reset if platform autofill is restricted\.$/,
 # Java with treat_warnings_as_errors while errorprone maps UnusedMethod to a
 # warning, so dead private methods fail the build. Returning false keeps every
 # call site in place and simply never reaches them.
+# --- Let the system autofill service win even when it is Google's.
+#
+# Chromium refuses to delegate to Autofill with Google: if the selected system
+# service is AWG, getAndroidAutofillFrameworkAvailability() returns
+# ANDROID_AUTOFILL_SERVICE_IS_GOOGLE and AutofillClientProvider falls back to
+# ChromeAutofillClient - the browser's own engine. So on a device set to
+# Google, forms were filled by Aerium rather than by the service the user
+# chose, which is the opposite of what this build wants: whatever the user
+# picked at the system level fills the form, browser included in nothing.
+#
+# Only the availability check goes. The matching AWG guard in
+# saveThirdPartyPackageUsedForAutofill() stays, because it is the last use of
+# AWG_COMPONENT_NAME and dropping it too would leave that constant unused -
+# UnusedVariable is only disabled for test code, so an unused private static
+# field fails the build. Keeping it costs nothing: it only skips recording the
+# package for the restore route, and the pref route (kept true by the latch
+# fix above) already keeps platform autofill selected.
+#
+# perl rather than sed_i because the `if (AWG_COMPONENT_NAME.equals(...))`
+# line occurs twice in this file and only the multi-line form tells them
+# apart. The die gives it the same fail-loudly behaviour sed_i provides.
+perl -0777 -pi -e '
+    s{\n        if \(AWG_COMPONENT_NAME\.equals\(autofillServicePackage\)\) \{\n            return AndroidAutofillAvailabilityStatus\.ANDROID_AUTOFILL_SERVICE_IS_GOOGLE;\n        \}\n}
+     {\n        // Aerium: no AWG exception. Whichever service the user selected\n        // at the system level is the one that fills forms.\n}
+     or die "[aerium] FATAL: AWG availability check not found in AutofillClientProviderUtils.java\n";
+' chrome/browser/autofill/android/java/src/org/chromium/chrome/browser/autofill/AutofillClientProviderUtils.java
+
 TABBED_MENU=chrome/android/java/src/org/chromium/chrome/browser/tabbed_mode/TabbedAppMenuPropertiesDelegate.java
 sed_i '/^    private boolean shouldShowPasswordsAndAutofillParentItem() {$/,/^    }$/c\
     private boolean shouldShowPasswordsAndAutofillParentItem() {\
