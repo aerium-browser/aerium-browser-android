@@ -395,30 +395,35 @@ sed_i 's|        getTabCreator(incognito).launchUrl(url, TabLaunchType.FROM_STAR
 
 # --- Let the system autofill service win even when it is Google's.
 #
-# Chromium refuses to delegate to Autofill with Google: if the selected system
-# service is AWG, getAndroidAutofillFrameworkAvailability() returns
+# Stock Chromium refuses to delegate to Autofill with Google: if the selected
+# system service is AWG, getAndroidAutofillFrameworkAvailability() returns
 # ANDROID_AUTOFILL_SERVICE_IS_GOOGLE and AutofillClientProvider falls back to
-# ChromeAutofillClient - the browser's own engine. So on a device set to
-# Google, forms were filled by Aerium rather than by the service the user
-# chose, which is the opposite of what this build wants: whatever the user
-# picked at the system level fills the form, browser included in nothing.
+# ChromeAutofillClient - the browser's own engine. On a device set to Google,
+# forms would be filled by Aerium rather than by the service the user chose,
+# which is the opposite of what this build wants.
 #
-# Only the availability check goes. The matching AWG guard in
-# saveThirdPartyPackageUsedForAutofill() stays, because it is the last use of
-# AWG_COMPONENT_NAME and dropping it too would leave that constant unused -
-# UnusedVariable is only disabled for test code, so an unused private static
-# field fails the build. Keeping it costs nothing: it only skips recording the
-# package for the restore route, and the pref route (kept true by the latch
-# fix above) already keeps platform autofill selected.
+# Vanadium already removes it. Patch 0254 ("remove unused separate autofill
+# status") deletes AWG_COMPONENT_NAME and both of its call sites, so by the
+# time this script runs there is nothing left to strip - an earlier version of
+# this block tried to strip it anyway and killed the build on its own guard.
 #
-# perl rather than sed_i because the `if (AWG_COMPONENT_NAME.equals(...))`
-# line occurs twice in this file and only the multi-line form tells them
-# apart. The die gives it the same fail-loudly behaviour sed_i provides.
-perl -0777 -pi -e '
-    s{\n        if \(AWG_COMPONENT_NAME\.equals\(autofillServicePackage\)\) \{\n            return AndroidAutofillAvailabilityStatus\.ANDROID_AUTOFILL_SERVICE_IS_GOOGLE;\n        \}\n}
-     {\n        // Aerium: no AWG exception. Whichever service the user selected\n        // at the system level is the one that fills forms.\n}
-     or die "[aerium] FATAL: AWG availability check not found in AutofillClientProviderUtils.java\n";
-' chrome/browser/autofill/android/java/src/org/chromium/chrome/browser/autofill/AutofillClientProviderUtils.java
+# What is left here is the assertion, which is the part that actually needs to
+# survive a bump: if Vanadium ever drops 0254, the exception comes back and
+# Aerium silently starts filling forms itself on Google-configured devices.
+# That is a behaviour regression no compiler would catch, so check the outcome
+# rather than redo the work.
+AUTOFILL_UTILS=chrome/browser/autofill/android/java/src/org/chromium/chrome/browser/autofill/AutofillClientProviderUtils.java
+if [ -e $AUTOFILL_UTILS ] \
+   && grep -q 'ANDROID_AUTOFILL_SERVICE_IS_GOOGLE' $AUTOFILL_UTILS; then
+    echo "[aerium] FATAL: the AWG exception is back in" \
+         "AutofillClientProviderUtils.java - Vanadium patch 0254 no longer" \
+         "removes it." >&2
+    echo "[aerium]        Without it gone, a device whose system autofill" \
+         "service is Google falls back to the browser's own engine instead" \
+         "of delegating. Strip the ANDROID_AUTOFILL_SERVICE_IS_GOOGLE branch" \
+         "of getAndroidAutofillFrameworkAvailability() here." >&2
+    return 1
+fi
 
 TABBED_MENU=chrome/android/java/src/org/chromium/chrome/browser/tabbed_mode/TabbedAppMenuPropertiesDelegate.java
 sed_i '/^    private boolean shouldShowPasswordsAndAutofillParentItem() {$/,/^    }$/c\

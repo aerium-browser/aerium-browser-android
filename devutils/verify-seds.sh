@@ -28,6 +28,23 @@
 # A NOOP is not automatically a bug, and a clean run is not proof the build
 # works - it only proves each pattern still matches something.
 #
+# Two blind spots, both worth knowing before trusting a clean run:
+#
+#   * The tree is PRISTINE CHROMIUM. Vanadium's 300-odd patches are not
+#     applied, so this cannot see anything they change. A substitution can pass
+#     here and still fail in the real build because a Vanadium patch got there
+#     first - theme.sh's AWG block did exactly that: it matched pristine
+#     Chromium happily while Vanadium patch 0254 had already deleted the code
+#     it was stripping, so the build died on the block's own guard 15 minutes
+#     in. The report now lists which targets Vanadium also touches; for those,
+#     read the patch before believing an OK.
+#
+#   * Only `sed`/`sed_i` are intercepted. A `perl -0777 -pi -e` substitution
+#     (patch.sh has one, on main_preferences.xml) is invisible to this script -
+#     it runs for real against the fetched tree, but its outcome is not
+#     recorded. It carries its own `die`, so it fails loudly in the build
+#     rather than silently, which is why this is a gap and not a hole.
+#
 # Known-expected results as of Chromium 152.0.7977.54:
 #   NOOP  build/config/android/rules.gni  - `if (!_omit_dex) {` is inserted by
 #         vanadium patch 0187, so it is absent from pristine Chromium. Correct.
@@ -209,4 +226,27 @@ fi
 if grep -qP '^MISSING' "$REPORT"; then
     echo "Targets absent from pristine Chromium (expect aerium/... here):"
     grep -P '^MISSING' "$REPORT" | cut -f3 | sort -u | sed 's/^/  /'
+    echo
+fi
+
+# Where this script's answer is least trustworthy. The tree is pristine
+# Chromium, so on any file Vanadium also patches, an OK means "the pattern
+# matches the file upstream ships" - not "the pattern matches the file the
+# build will see". Both directions bite: a patch can move the anchor, and a
+# patch can already have made the change, in which case the substitution is
+# redundant and its guard will kill the build.
+if [ -d "$SCRIPT_DIR/vanadium/patches" ]; then
+    grep -h '^+++ b/' "$SCRIPT_DIR"/vanadium/patches/*.patch 2>/dev/null \
+        | sed 's#^+++ b/##' | sort -u > "$WORK/vanadium-touched.txt"
+    comm -12 "$WORK/targets.txt" "$WORK/vanadium-touched.txt" \
+        > "$WORK/overlap.txt" 2>/dev/null || : > "$WORK/overlap.txt"
+    if [ -s "$WORK/overlap.txt" ]; then
+        echo "Targets Vanadium also patches - an OK here is about pristine"
+        echo "Chromium, not about the tree the build sees:"
+        while read -r f; do
+            pats=$(grep -l "^+++ b/$f\$" "$SCRIPT_DIR"/vanadium/patches/*.patch \
+                   2>/dev/null | xargs -r -n1 basename | cut -d- -f1 | paste -sd, -)
+            printf '  %-70s %s\n' "$f" "$pats"
+        done < "$WORK/overlap.txt"
+    fi
 fi
