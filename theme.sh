@@ -102,6 +102,49 @@ sed -i 's/prefs::kSafeBrowsingEnabled, true,/prefs::kSafeBrowsingEnabled, false,
 sed -i 's/registry->RegisterBooleanPref(kAutofillUsingPlatformAutofill, false);/registry->RegisterBooleanPref(kAutofillUsingPlatformAutofill, true);/' \
     components/autofill/core/common/autofill_prefs.cc
 
+# --- Stop platform autofill switching itself off after a few launches.
+#
+# The pref flipped above is not only read, it is written back. On every
+# profile construction AutofillClientProvider computes the current
+# availability and stores the result in the same pref, while the Java side
+# treats that pref as one of its two routes to AVAILABLE. That makes it a
+# latch. One launch where the autofill service does not resolve - the
+# AutofillManager not ready yet, or getAutofillServiceComponentName()
+# momentarily null - writes false, and the only automatic way back is the
+# saved-package route, which needs the package to have been recorded on an
+# earlier run and to still match the current service.
+#
+# This is a known upstream behaviour, not a theory: Chromium counts how often
+# it happens, in the Autofill.ResetAutofillPrefToChrome histogram, and its own
+# comment there says the pref is reset when platform autofill "isn't allowed
+# or doesn't fulfill all preconditions".
+#
+# On stock Chrome the user recovers in Settings -> Autofill services. Aerium
+# deliberately ships no autofill settings UI, so there is nothing to recover
+# with: third-party autofill works for the first few launches and then never
+# again. That matches the reported symptom, and it reproduces on the upstream
+# fork for the same reason.
+#
+# Only writing the pref when it is true costs nothing. Every durable
+# restriction - enterprise policy, an unsupported platform, Google being the
+# selected service - is re-checked inside
+# getAndroidAutofillFrameworkAvailability() on every single call and decides
+# the outcome there regardless of what this pref holds. The pref only needs to
+# carry the intent, and the intent here is always true.
+sed_i '/^  \/\/ Ensure the pref is reset if platform autofill is restricted\.$/,/^                    uses_platform_autofill_);$/c\
+  \/\/ Aerium: never write this pref false. Upstream stores the computed\
+  \/\/ availability here on every profile construction, and the Java side\
+  \/\/ reads it back as one of two routes to AVAILABLE, so a single launch\
+  \/\/ where the autofill service fails to resolve latches third-party\
+  \/\/ autofill off for good. Aerium has no autofill settings UI to turn it\
+  \/\/ back on, so the latch would be permanent. Durable restrictions are\
+  \/\/ re-checked in getAndroidAutofillFrameworkAvailability() on every call\
+  \/\/ and still win, so keeping the stored intent true changes nothing else.\
+  if (uses_platform_autofill_) {\
+    prefs->SetBoolean(prefs::kAutofillUsingPlatformAutofill,\
+                      uses_platform_autofill_);\
+  }' chrome/browser/ui/autofill/autofill_client_provider.cc
+
 # --- Stop Settings crashing on open. patch.sh deletes the six autofill and
 # password entries (orders 11-17) from main_preferences.xml, but MainSettings
 # .java still expects the XML to define them. Both branches of
