@@ -71,15 +71,19 @@ sed -i 's|static Intent maybeModifyCustomTabIntents(Context context, Intent inte
 # fails to compile with "cannot find symbol: method isEligible()".
 sed -i 's|private static void init(Context ctx, SpecType specType) {|private static boolean isEligible() { return false; }\n\n    private static void init(Context ctx, SpecType specType) { if (!isEligible()) { return; }|' aerium/android_config/parser/java/src/app/aerium/config/AeriumConfParser.java
 sed -i 's|if (!_omit_dex) {|if (_is_base_module \&\& !_omit_dex) {|' build/config/android/rules.gni
-sed -i '/safelyRemovePreference(prefFragment/d' aerium/chromium_src/chrome/browser/language/android/java/src/org/chromium/chrome/browser/language/settings/LanguageSettingsExt.java
-# Aerium keeps the translate switch (the line above drops Vanadium's removal
-# of the preference itself), so its settings-search index entry must stay too.
-# Vanadium adds this call in SearchIndexProviderHooks.java, not in
-# SettingsSearchCoordinator.java - see vanadium patch
-# 0263-Reflect-changes-for-removed-settings-in-search.patch, which only adds
-# the two Hooks call sites to the Coordinator. Pointing at the Coordinator made
-# this a silent no-op, leaving the index stripping an entry that still exists.
-sed -i '/removeEntryForKey(fragmentName, "translate_switch")/d' aerium/chromium_src/chrome/android/java/src/org/chromium/chrome/browser/settings/search/SearchIndexProviderHooks.java
+# Translate is left removed. Aerium used to undo two of Vanadium's removals
+# here - one sed dropped its safelyRemovePreference() call so the translate
+# preference came back, another dropped its removeEntryForKey() so the
+# settings-search index kept pointing at it. Both are gone, so vanadium
+# patches 0145 (remove translate offer preference) and 0262/0263 (reflect
+# removed settings in search) now apply as written: no preference, and
+# nothing in settings search that leads to one.
+#
+# The rest of the feature was already off and stays off - 0082 stops
+# translations being offered, 0097 keeps the Translate toolbar button off, and
+# ungoogled's own work on the translate backend never applied here in the
+# first place. Removing the two seds is what makes it complete rather than
+# merely defaulted off.
 
 sed -i '/feature_overrides.EnableFeature(::features::kSkipVulkanBlocklist);/d' chrome/browser/chrome_browser_field_trials.cc
 sed -i '/feature_overrides.EnableFeature(::features::kDefaultANGLEVulkan);/d' chrome/browser/chrome_browser_field_trials.cc
