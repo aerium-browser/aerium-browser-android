@@ -1,0 +1,230 @@
+name: upstream-watch
+# Watches GrapheneOS/Vanadium for a newer tag and opens a PR that bumps the
+# submodule to it.
+#
+# This exists because the slowest link in the security chain was a person
+# noticing. Chromium ships security fixes continuously, Vanadium rebases and
+# tags within days, and until now the only thing that turned that tag into an
+# Aerium build was somebody happening to look. That step had no upper bound;
+# everything after it does.
+#
+# An earlier version of this workflow watched jqssun/android-helium-browser
+# (where patch.sh came from) and reported by failing the run, because Issues
+# were assumed to be off. It was removed in b7a199c as unhelpful: it tracked
+# the wrong upstream - the Chromium base comes from Vanadium, not from the
+# script donor - and a permanently red Monday run is noise, not a signal. This
+# version watches the thing that actually determines what gets built, and says
+# nothing at all when there is nothing to say.
+#
+# It opens a PR rather than pushing to main on purpose, for two reasons. A bump
+# costs a multi-day staged build, which is worth a human glance first. And a
+# push made with GITHUB_TOKEN does not trigger workflows, so an auto-merged
+# bump would land without ever building - merging by hand is what starts the
+# build.
+#
+# Silence is the healthy state here: no new tag means no output and no PR. A
+# failure to *check* is different and fails the job loudly, because a watcher
+# that cannot see upstream is worse than none.
+
+on:
+  schedule:
+    - cron: '0 7 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: upstream-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: true
+
+      - name: Compare the pinned tag against upstream
+        id: check
+        run: |
+          set -euo pipefail
+          cd vanadium
+          git fetch --tags --quiet origin
+
+          PINNED=$(git describe --tags --exact-match HEAD 2>/dev/null || echo "")
+          if [ -z "$PINNED" ]; then
+            echo "The submodule is pinned to a commit that is not a tag." >&2
+            echo "Refusing to guess what it should track." >&2
+            exit 1
+          fi
+
+          # Vanadium tags are Chromium's four fields plus a Vanadium revision:
+          # 152.0.7977.54.1. sort -V orders those correctly, including
+          # .54.0 before .54.1 and 108 after 83. Taking the last line rather
+          # than comparing against PINNED directly means a tag that sorts
+          # *older* than the pin is ignored, which is what should happen if
+          # upstream ever retracts one.
+          LATEST=$(git tag --list | sort -V | tail -1)
+          cd ..
+
+          echo "pinned=$PINNED" >> "$GITHUB_OUTPUT"
+          echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
+          echo "Pinned $PINNED, newest upstream $LATEST"
+
+          if [ "$PINNED" = "$LATEST" ]; then
+            echo "up_to_date=true" >> "$GITHUB_OUTPUT"
+            echo "Already current - nothing to do."
+          else
+            echo "up_to_date=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip if a PR for this tag already exists
+        id: dedupe
+        if: steps.check.outputs.up_to_date == 'false'
+        env:
+          BRANCH: upstream/vanadium-${{ steps.check.outputs.latest }}
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Branch $BRANCH already exists - a PR was already opened for this tag."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check whether the new Chromium breaks any Aerium substitution
+        id: drift
+        if: steps.check.outputs.up_to_date == 'false' && steps.dedupe.outputs.exists == 'false'
+        env:
+          PINNED: ${{ steps.check.outputs.pinned }}
+          LATEST: ${{ steps.check.outputs.latest }}
+        run: |
+          set -uo pipefail
+          OLD_CR=$(git -C vanadium show "$PINNED:args.gn" | grep -m1 -oE '[0-9]+(\.[0-9]+){3}')
+          NEW_CR=$(git -C vanadium show "$LATEST:args.gn" | grep -m1 -oE '[0-9]+(\.[0-9]+){3}')
+          echo "old_cr=$OLD_CR" >> "$GITHUB_OUTPUT"
+          echo "new_cr=$NEW_CR" >> "$GITHUB_OUTPUT"
+          echo "Chromium $OLD_CR -> $NEW_CR"
+
+          if [ "$OLD_CR" = "$NEW_CR" ]; then
+            echo "verdict=Chromium version unchanged, so no substitution target can have moved." >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Unlike the desktop repos, Aerium for Android carries no .patch
+          # files of its own - its changes are the ~124 sed substitutions in
+          # patch.sh and theme.sh, and `sed -i` exits 0 when its pattern stops
+          # matching. So the drift check is devutils/verify-seds.sh, which runs
+          # the real scripts against files fetched from chromium.googlesource
+          # .com and reports every substitution that did nothing.
+          #
+          # Run it at BOTH versions and diff the results. A raw NOOP list is not
+          # actionable on its own: a handful are permanently expected (targets
+          # that a Vanadium patch creates or a line a Vanadium patch inserts are
+          # absent from pristine Chromium by definition). What matters is a
+          # substitution that worked on the old Chromium and stopped working on
+          # the new one, and that only shows up in the difference.
+          run_check() {
+            local ver="$1" dir="$2"
+            mkdir -p "$dir"
+            WORK="$dir" bash devutils/verify-seds.sh "$ver" > "$dir.log" 2>&1
+            echo "rc=$? for $ver"
+            tail -25 "$dir.log"
+          }
+
+          run_check "$OLD_CR" /tmp/vs-old
+          run_check "$NEW_CR" /tmp/vs-new
+
+          # Insist on OK rows, not merely a non-empty file. verify-seds writes
+          # TARGET rows during pass 1 and truncates the report before pass 2,
+          # so a run that died in pass 1 leaves a report that is non-empty and
+          # contains no verdicts at all - which would diff to zero differences
+          # and report a false all-clear. An OK row can only come from pass 2.
+          for d in /tmp/vs-old /tmp/vs-new; do
+            if ! grep -qP '^OK\t' "$d/report.tsv" 2>/dev/null; then
+              echo "verdict=**verify-seds.sh did not finish** - the drift check could not run, so this bump is unvetted. Run \`devutils/verify-seds.sh $NEW_CR\` locally before merging, and see this run's log for why it stopped." >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            grep -P '^(NOOP|ERROR|MISSING)\t' "$d/report.tsv" | sort -u > "$d.sig"
+          done
+
+          comm -13 /tmp/vs-old.sig /tmp/vs-new.sig > /tmp/broken.txt
+          BROKEN=$(wc -l < /tmp/broken.txt)
+          TOTAL=$(grep -cP '^OK\t' /tmp/vs-new/report.tsv)
+
+          if [ "$BROKEN" = 0 ]; then
+            echo "verdict=Every substitution that applied on Chromium $OLD_CR still applies on $NEW_CR ($TOTAL OK). No anchors moved." >> "$GITHUB_OUTPUT"
+          else
+            {
+              echo "verdict<<VERDICT_EOF"
+              echo "**$BROKEN substitution(s) stopped applying between Chromium $OLD_CR and $NEW_CR.** Each one is an Aerium change that would go missing from a green build - fix the pattern before merging:"
+              echo
+              awk -F'\t' '{printf "- `%s` — %s #%s\n", $3, $1, $2}' /tmp/broken.txt
+              echo
+              echo "Re-check locally with \`devutils/verify-seds.sh $NEW_CR\`."
+              echo "VERDICT_EOF"
+            } >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open the bump PR
+        if: steps.check.outputs.up_to_date == 'false' && steps.dedupe.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PINNED: ${{ steps.check.outputs.pinned }}
+          LATEST: ${{ steps.check.outputs.latest }}
+          OLD_CR: ${{ steps.drift.outputs.old_cr }}
+          NEW_CR: ${{ steps.drift.outputs.new_cr }}
+          VERDICT: ${{ steps.drift.outputs.verdict }}
+          BRANCH: upstream/vanadium-${{ steps.check.outputs.latest }}
+        run: |
+          set -euo pipefail
+          git config user.name  'fatih-gh'
+          git config user.email 'me@mehmetfatihyaman.me'
+          git checkout -b "$BRANCH"
+
+          git -C vanadium checkout --quiet "$LATEST"
+          git add vanadium
+          git -C vanadium diff --stat "$PINNED" "$LATEST" | tail -20 > /tmp/diff.txt
+
+          {
+            echo "Bump Vanadium to $LATEST"
+            echo
+            echo "Chromium $OLD_CR -> $NEW_CR."
+            echo
+            echo "Opened automatically by upstream-watch. The submodule pointer is the only"
+            echo "change: build.sh reads the Chromium version out of vanadium/args.gn, so"
+            echo "nothing else needs editing for the version itself."
+            echo
+            echo "$VERDICT"
+          } > /tmp/commit.txt
+          git commit -q -F /tmp/commit.txt
+          git push -u origin "$BRANCH"
+
+          {
+            echo "\`$PINNED\` to \`$LATEST\` &middot; Chromium \`$OLD_CR\` to \`$NEW_CR\`"
+            echo
+            echo "$VERDICT"
+            echo
+            echo "### Before merging"
+            echo
+            echo "- Read the verdict above. It is the output of \`devutils/verify-seds.sh\` at both Chromium versions, diffed - it does not cover whether Vanadium's own patches still apply, only ours."
+            echo "- Port anything new from the upstream scripts by hand (step 2-3 of [UPDATING.md](../blob/main/UPDATING.md)). Upstream force-pushes its \`main\`, so cherry-pick; never merge."
+            echo
+            echo "### What changed upstream"
+            echo
+            echo '```'
+            cat /tmp/diff.txt
+            echo '```'
+            echo
+            echo "Merging this pushes to \`main\`, which starts a staged build from scratch"
+            echo "(a push carries no \`resume_run_id\`, so no saved tree is restored - there is"
+            echo "no need to dispatch with \`fresh: true\` by hand). A push made by the workflow"
+            echo "token would not start anything, which is why this is a PR rather than a"
+            echo "direct commit."
+          } > /tmp/pr.md
+
+          gh pr create --title "Bump Vanadium to $LATEST" \
+            --base main --head "$BRANCH" --body-file /tmp/pr.md

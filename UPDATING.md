@@ -1,9 +1,17 @@
 # Updating Aerium (Android)
 
-How to move Aerium onto a newer Chromium/Vanadium release when the
-**Upstream watch** workflow's weekly run goes red (this repo has Issues
-disabled, so it reports via a failed run + job summary, not a tracking
-issue - see the workflow file for why).
+How to move Aerium onto a newer Chromium/Vanadium release.
+
+Most of this is now done for you: the **upstream-watch** workflow checks
+GrapheneOS/Vanadium daily and, when a newer tag exists, opens a PR that
+bumps the submodule and reports whether the new Chromium broke any of our
+substitutions. Steps 1, 4 and 6 below are what that PR already did - read
+its verdict, do steps 2-3 and 5 by hand on the PR branch, then merge.
+Do the whole thing manually only when there is no PR (e.g. you are
+bumping to a tag the watcher skipped).
+
+The watcher says nothing when there is nothing to say; a red run means it
+could not reach upstream, which is a real problem worth looking at.
 
 ## Where things live
 
@@ -45,8 +53,12 @@ issue - see the workflow file for why).
    a `NOOP` on a line that a Vanadium patch *adds* is expected, since the
    baseline is pristine Chromium; cross-check with
    `grep -r '<pattern>' vanadium/patches`.
-7. Commit, then dispatch **Build** with `fresh: true` (the saved tree is
-   for the old version and must be discarded).
+7. Commit and push to `main`. That starts **Build** on its own, from
+   scratch: the stage action only restores a saved tree when the run
+   carries a `resume_run_id`, and a push carries none - so there is no
+   need to dispatch with `fresh: true` by hand. (Dispatching manually
+   *does* need it, since a manual run with `fresh: false` will pick up
+   the previous version's tree.)
 8. When green, the `publish-release` job tags `v<version>` automatically.
 
 ## Why stages die with no log
@@ -60,7 +72,7 @@ went away, so nothing was ever uploaded. Two causes, both addressed:
   packing plus uploading happens after. `build.sh` now measures its
   compile window from `STAGE_START_TS` (exported by the stage action
   before the restore step) rather than from its own start, and reserves
-  `CHECKPOINT_RESERVE_MIN` (80) for the pack/upload tail. That reserve
+  `CHECKPOINT_RESERVE_MIN` (30) for the pack/upload tail. That reserve
   self-corrects as the checkpoint grows; raise it if stages start dying
   during "Pack build tree".
 - **The root filesystem filled.** `maximize-build-space` leaves only a
@@ -73,10 +85,6 @@ went away, so nothing was ever uploaded. Two causes, both addressed:
 
 If stages still die, check the `df -h` output that each stage prints
 before and after the build step before assuming a compile problem.
-8. Update `.github/.upstream-seen` to the commit SHA reported in the
-   watcher's job summary - the workflow keeps failing every Monday on
-   that same commit until this file is updated, it does not clear
-   itself.
 
 ## When a patch fails to apply
 
@@ -97,9 +105,19 @@ silently no-ops or `git am` (Vanadium patches) rejects.
   `git am` patch (those run pre-sync). Its fallback-ID sed matches both
   `google.id` and `duckduckgo.id` because Vanadium's patch 0116 already
   retargets the stock lookup — if Vanadium drops or renames 0116 this
-  still works. Our engine IDs start at 1001 so upstream additions can
-  never collide; if upstream raises `kCurrentDataVersion` past 250,
-  raise ours above it again.
+  still works. Neither of the two magic numbers here is hardcoded any
+  more: `kCurrentDataVersion` is read out of upstream's
+  `prepopulated_engines.json` and re-emitted as that value plus
+  `SE_DATA_VERSION_OFFSET` (41), so a Chromium bump carries it forward
+  by itself. Our engine ids (117-119) deliberately are *not* derived -
+  Chromium stores a prepopulated engine's id in the profile's keyword
+  database, so renumbering between releases would orphan rows existing
+  installs hold. They sit one above upstream's highest instead, and
+  `theme.sh` hard-fails if upstream's `kMaxPrepopulatedEngineID` ever
+  reaches 117 (a collision is a data conflict, not a build error, so
+  nothing downstream would catch it). If that guard fires, renumber the
+  engines above upstream's range, move both constants with them, and
+  treat it as a profile migration.
 - **Fingerprint-protection block in `theme.sh`**: touches
   `runtime_enabled_features.json5` (new `status: "stable"` entries -
   no flag or command-line switch needed, unlike Windows's
@@ -130,5 +148,5 @@ Cross-*version* seeding (reuse the previous version's compiled tree when
 bumping Chromium) is **not yet wired up** — it requires checking a new
 Chromium tag out over a tree that carries Vanadium's `git am` commits and
 already-applied `patch.sh`/`theme.sh` edits, which is fiddly to get right
-and must be validated against a real bump. Until then, bump builds use
-`fresh: true` and rebuild from scratch. Track this in the roadmap.
+and must be validated against a real bump. Until then, every bump build
+rebuilds from scratch. Track this in the roadmap.
