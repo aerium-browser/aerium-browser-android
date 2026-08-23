@@ -182,6 +182,217 @@ sed_i '/^  \/\/ Ensure the pref is reset if platform autofill is restricted\.$/,
 # Java with treat_warnings_as_errors while errorprone maps UnusedMethod to a
 # warning, so dead private methods fail the build. Returning false keeps every
 # call site in place and simply never reaches them.
+# --- chrome://aerium-first-run - the onboarding page, shown once on the very
+# first launch.
+#
+# The desktop repos get this from ungoogled-chromium's ungoogled_first_run.h,
+# which Aerium then extends. Android has no ungoogled layer and no
+# StartupBrowserCreator, so neither the page nor the AddFirstRunTabs() call
+# that opens it exists here - both halves are built rather than ported.
+#
+# The page is header-only, the same shape as the desktop chrome://aerium page:
+# a DefaultWebUIConfig plus an inline URLDataSource needs no BUILD.gn entry, no
+# .cc and no TypeScript, which keeps a page of static text out of the resource
+# pipeline entirely.
+#
+# What is deliberately NOT carried over is the desktop page's preset chooser.
+# On desktop it exists because the browser ships with Chromium's defaults and
+# the page is what changes them. On Android the same decisions are compiled in
+# by this script - Safe Browsing, network prediction, HTTPS-First, the search
+# engine list - so a preset button would mostly re-apply settings the build
+# already made. Several of the prefs it writes (background mode, the memory
+# and battery saver tiers, Aerium's own clear-on-exit pref) do not exist on
+# Android at all. So the page explains what was decided instead of offering to
+# decide it again.
+cat > chrome/browser/ui/webui/aerium_first_run.h <<'AERIUM_FIRST_RUN_H'
+#ifndef CHROME_BROWSER_UI_WEBUI_AERIUM_FIRST_RUN_H_
+#define CHROME_BROWSER_UI_WEBUI_AERIUM_FIRST_RUN_H_
+
+#include <string>
+
+#include "base/memory/ref_counted_memory.h"
+#include "chrome/browser/profiles/profile.h"
+#include "content/public/browser/url_data_source.h"
+#include "content/public/browser/web_ui.h"
+#include "content/public/browser/web_ui_controller.h"
+#include "content/public/browser/webui_config.h"
+
+// chrome://aerium-first-run - shown once, on the first launch after install.
+// ChromeTabbedActivity::createInitialTab opens this instead of the New Tab
+// Page when the AERIUM_FIRST_RUN_PAGE_SHOWN preference is still unset.
+class AeriumFirstRunDataSource : public content::URLDataSource {
+ public:
+  AeriumFirstRunDataSource() = default;
+  AeriumFirstRunDataSource(const AeriumFirstRunDataSource&) = delete;
+  AeriumFirstRunDataSource& operator=(const AeriumFirstRunDataSource&) = delete;
+  ~AeriumFirstRunDataSource() override = default;
+
+  std::string GetSource() override { return "aerium-first-run"; }
+  std::string GetMimeType(const GURL& url) override { return "text/html"; }
+
+  void StartDataRequest(const GURL& url,
+                        const content::WebContents::Getter& wc_getter,
+                        GotDataCallback callback) override {
+    std::move(callback).Run(
+        base::MakeRefCounted<base::RefCountedString>(std::string(
+            R"AERIUMHTML(<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Welcome to Aerium</title>
+<style>
+  :root {
+    --bg: #f6f8fc; --card: #ffffff; --ink: #14203f; --muted: #4a5878;
+    --line: #dde4f0; --accent: #2c6bae; --chip: #eaf1fa;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1428; --card: #141d38; --ink: #e9f1fb; --muted: #9fb0d0;
+      --line: #24304f; --accent: #7fc4e4; --chip: #1b2747;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  main { max-width: 44rem; margin: 0 auto; padding: 1.5rem 1.1rem 3rem; }
+  header { text-align: center; padding: 1rem 0 0.5rem; }
+  .mark { width: 84px; height: 84px; }
+  h1 { font-size: 1.6rem; line-height: 1.25; margin: 0.75rem 0 0.35rem; }
+  .lede { color: var(--muted); margin: 0 0 1.5rem; }
+  section {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 14px; padding: 1rem 1.1rem; margin: 0 0 0.9rem;
+  }
+  h2 { font-size: 1.05rem; margin: 0 0 0.5rem; }
+  p { margin: 0 0 0.6rem; }
+  p:last-child, ul:last-child { margin-bottom: 0; }
+  ul { margin: 0 0 0.6rem; padding-left: 1.15rem; }
+  li { margin: 0.25rem 0; }
+  a { color: var(--accent); }
+  .chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.15rem 0 0; padding: 0; list-style: none; }
+  .chips li {
+    background: var(--chip); border-radius: 999px;
+    padding: 0.25rem 0.7rem; font-size: 0.85rem; margin: 0;
+  }
+  .note { color: var(--muted); font-size: 0.9rem; }
+  footer { text-align: center; color: var(--muted); font-size: 0.85rem; margin-top: 1.5rem; }
+</style>
+<main>
+  <header>
+    <svg class="mark" viewBox="0 0 512 512" aria-hidden="true">
+      <path d="M 330 384.17 L 149.1 488.61 A 256 256 0 0 1 108 47.12 L 108 256 A 148 148 0 0 0 330 384.17 Z" fill="#1B2C5E"/>
+      <path d="M 108 256 L 108 47.12 A 256 256 0 0 1 510.9 232.27 L 330 127.83 A 148 148 0 0 0 108 256 Z" fill="#2A4485"/>
+      <path d="M 330 127.83 L 510.9 232.27 A 256 256 0 0 1 149.1 488.61 L 330 384.17 A 148 148 0 0 0 330 127.83 Z" fill="#111C42"/>
+      <circle cx="256" cy="256" r="134" fill="#E9F1FB"/>
+      <circle cx="256" cy="256" r="104" fill="#2C6BAE"/>
+      <circle cx="238" cy="236" r="82" fill="#4C97CF"/>
+      <circle cx="222" cy="218" r="46" fill="#7FC4E4"/>
+    </svg>
+    <h1>Welcome to Aerium</h1>
+    <p class="lede">A Chromium build with the Google plumbing taken out. Here is what it already did for you, and the two things worth setting up yourself.</p>
+  </header>
+
+  <section>
+    <h2>Already decided for you</h2>
+    <p>These are compiled into the build, not toggles someone hoped you would find:</p>
+    <ul>
+      <li><strong>Safe Browsing is off.</strong> It was the main recurring call home &mdash; every URL you visit, checked against Google.</li>
+      <li><strong>Nothing is preloaded or predicted.</strong> Pages, DNS and links are fetched when you ask for them, which is also easier on the battery.</li>
+      <li><strong>HTTPS-First is on</strong> in its balanced mode, so plain HTTP is upgraded where a site supports it.</li>
+      <li><strong>Global Privacy Control is sent</strong> on every request &mdash; a legally recognised opt-out under CCPA.</li>
+      <li><strong>The search engine list is privacy-first</strong>, with Startpage as the default and DuckDuckGo and SearXNG alongside it.</li>
+      <li><strong>Translate is gone</strong>, along with the settings entry and its search index.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Passwords and autofill</h2>
+    <p>Aerium ships no password manager, no saved payment methods and no stored addresses, and the settings and menu entries for them are removed rather than merely hidden.</p>
+    <p>Instead, web forms are filled by <strong>whichever autofill service you have chosen in Android</strong>. Set one in <em>Settings &rsaquo; Passwords &amp; accounts &rsaquo; Autofill service</em>. Any of these work well:</p>
+    <ul class="chips">
+      <li>Bitwarden</li><li>Proton Pass</li><li>KeePassDX</li><li>1Password</li><li>Enpass</li>
+    </ul>
+    <p class="note" style="margin-top:0.7rem">A dedicated manager also fills apps, not just this browser, and your vault outlives any one browser.</p>
+  </section>
+
+  <section>
+    <h2>Extensions</h2>
+    <p>This build supports extensions, which stock Chrome on Android does not. A content blocker such as uBlock Origin is the single most useful thing to add.</p>
+  </section>
+
+  <section>
+    <h2>Secure DNS</h2>
+    <p>Turn it on in <a href="chrome://settings/privacy">Privacy and security</a> and pick a resolver you trust. It keeps the names of the sites you visit away from your network and your carrier.</p>
+  </section>
+
+  <section>
+    <h2>Updates</h2>
+    <p>There is no auto-updater and no Play Store listing, so security updates are not automatic. New builds are published on GitHub &mdash; check occasionally, or subscribe to releases to be told.</p>
+    <p><a href="https://github.com/aerium-browser/aerium-browser-android/releases">github.com/aerium-browser/aerium-browser-android/releases</a></p>
+  </section>
+
+  <section>
+    <h2>Where this build comes from</h2>
+    <p>Aerium for Android is built on <a href="https://github.com/GrapheneOS/Vanadium">Vanadium</a>, the hardened Chromium from GrapheneOS, with Aerium's own changes on top. Everything is public: the patches, the scripts that apply them, and the CI that produced the file you installed.</p>
+  </section>
+
+  <footer>You can reach this page again at any time from chrome://aerium-first-run</footer>
+</main>
+)AERIUMHTML")));
+  }
+};
+
+class AeriumFirstRun;
+
+class AeriumFirstRunUIConfig
+    : public content::DefaultWebUIConfig<AeriumFirstRun> {
+ public:
+  AeriumFirstRunUIConfig()
+      : DefaultWebUIConfig("chrome", "aerium-first-run") {}
+};
+
+class AeriumFirstRun : public content::WebUIController {
+ public:
+  explicit AeriumFirstRun(content::WebUI* web_ui)
+      : content::WebUIController(web_ui) {
+    content::URLDataSource::Add(Profile::FromWebUI(web_ui),
+                                std::make_unique<AeriumFirstRunDataSource>());
+  }
+  AeriumFirstRun(const AeriumFirstRun&) = delete;
+  AeriumFirstRun& operator=(const AeriumFirstRun&) = delete;
+};
+
+#endif  // CHROME_BROWSER_UI_WEBUI_AERIUM_FIRST_RUN_H_
+AERIUM_FIRST_RUN_H
+
+# Registered inside the IS_ANDROID arm of both lists, next to the webapks
+# entries, so it exists only where it is reachable.
+sed_i 's|#include "chrome/browser/ui/webui/webapks/webapks_ui.h"|&\n#include "chrome/browser/ui/webui/aerium_first_run.h"|' \
+    chrome/browser/ui/webui/chrome_web_ui_configs.cc
+sed_i 's|  map.AddWebUIConfig(std::make_unique<WebApksUIConfig>());|&\n  map.AddWebUIConfig(std::make_unique<AeriumFirstRunUIConfig>());|' \
+    chrome/browser/ui/webui/chrome_web_ui_configs.cc
+
+# The "have we greeted this install yet" flag. Chromium keeps its
+# SharedPreferences keys in one registry and validates membership in tests and
+# debug builds, so the key is added to both the constants and getKeysInUse()
+# rather than only where it is read. The Chrome.<Feature>.<Key> shape is the
+# format that validation expects for new keys.
+CPK=chrome/browser/preferences/android/java/src/org/chromium/chrome/browser/preferences/ChromePreferenceKeys.java
+sed_i 's|    public static final String FIRST_RUN_FLOW_COMPLETE = "first_run_flow";|    /** Whether the Aerium first-run page has been shown for this install. */\n    public static final String AERIUM_FIRST_RUN_PAGE_SHOWN =\n            "Chrome.Aerium.FirstRunPageShown";\n\n&|' \
+    $CPK
+sed_i 's|^                ADAPTIVE_TOOLBAR_CUSTOMIZATION_ENABLED,$|                AERIUM_FIRST_RUN_PAGE_SHOWN,\n&|' \
+    $CPK
+
+# The trigger. createInitialTab() is where Android picks the New Tab Page or
+# the homepage for a cold start with no tabs to restore, which is the closest
+# thing here to the desktop AddFirstRunTabs() call. Never in incognito, and the
+# flag is written before the tab is launched so a crash on the way cannot leave
+# it greeting on every launch.
+sed_i 's|        getTabCreator(incognito).launchUrl(url, TabLaunchType.FROM_STARTUP);|        // Aerium: greet once, on the first launch after install.\n        if (!incognito\n                \&\& !ChromeSharedPreferences.getInstance()\n                        .readBoolean(\n                                ChromePreferenceKeys.AERIUM_FIRST_RUN_PAGE_SHOWN, false)) {\n            ChromeSharedPreferences.getInstance()\n                    .writeBoolean(ChromePreferenceKeys.AERIUM_FIRST_RUN_PAGE_SHOWN, true);\n            url = "chrome://aerium-first-run/";\n        }\n&|' \
+    chrome/android/java/src/org/chromium/chrome/browser/ChromeTabbedActivity.java
+
 # --- Let the system autofill service win even when it is Google's.
 #
 # Chromium refuses to delegate to Autofill with Google: if the selected system
