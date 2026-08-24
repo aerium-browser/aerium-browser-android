@@ -294,7 +294,16 @@ inline void AeriumFirstRunDataSource::StartDataRequest(
   .chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.15rem 0 0; padding: 0; list-style: none; }
   .chips li {
     background: var(--chip); border-radius: 999px;
-    padding: 0.25rem 0.7rem; font-size: 0.85rem; margin: 0;
+    font-size: 0.85rem; margin: 0;
+  }
+  /* The padding lives on the anchor, not the li, so the whole pill is the
+     tap target rather than just the width of the words. */
+  .chips a {
+    display: block; padding: 0.45rem 0.9rem; border-radius: inherit;
+    color: var(--accent); text-decoration: none;
+  }
+  .chips a:hover, .chips a:focus-visible {
+    background: var(--accent); color: var(--card);
   }
   .note { color: var(--muted); font-size: 0.9rem; }
   footer { text-align: center; color: var(--muted); font-size: 0.85rem; margin-top: 1.5rem; }
@@ -332,7 +341,9 @@ inline void AeriumFirstRunDataSource::StartDataRequest(
     <p>Aerium ships no password manager, no saved payment methods and no stored addresses, and the settings and menu entries for them are removed rather than merely hidden.</p>
     <p>Instead, web forms are filled by <strong>whichever autofill service you have chosen in Android</strong>. Set one in <em>Settings &rsaquo; Passwords &amp; accounts &rsaquo; Autofill service</em>. Any of these work well:</p>
     <ul class="chips">
-      <li>Bitwarden</li><li>Proton Pass</li><li>KeePassDX</li><li>1Password</li><li>Enpass</li>
+      <li><a href="https://bitwarden.com" rel="noreferrer">Bitwarden</a></li>
+      <li><a href="https://proton.me/pass" rel="noreferrer">Proton Pass</a></li>
+      <li><a href="https://www.keepassdx.com" rel="noreferrer">KeePassDX</a></li>
     </ul>
     <p class="note" style="margin-top:0.7rem">A dedicated manager also fills apps, not just this browser, and your vault outlives any one browser.</p>
   </section>

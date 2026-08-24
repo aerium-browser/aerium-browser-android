@@ -216,34 +216,43 @@ if [ -f "$SBI" ] && grep -q ShuffleSubchannelColorData "$SBI" && ! grep -q allow
     echo "[aerium] resume hotfix: allow_unsafe_buffers pragma applied to $SBI"
 fi
 
-# --- Resume hotfix (removable once a build that STARTED after 2026-08-24
-# goes green): same reason as the one above - theme.sh only runs during
-# source setup, so a tree saved by an earlier stage never re-runs it.
+# --- Resume sync for the first-run page: theme.sh only runs during source
+# setup, so a tree saved by an earlier stage keeps whatever version of the
+# page it was built with. Re-emit the header from theme.sh whenever the tree's
+# copy differs, which keeps a resumed tree matching a freshly synced one.
 #
-# The first-run page's data source declared three virtual methods with
-# non-empty bodies inside the class body. The chromium-style clang plugin
-# rejects that ("virtual methods with non-empty bodies shouldn't be declared
-# inline"), and it is what stopped build-1 of runs 32633921251 and
-# 32716211686 on chrome_web_ui_configs.o - the only translation unit that
-# includes this header. theme.sh now writes those definitions below the
-# class instead, which is what the plugin asks for: it gates the diagnostic
-# on CXXMethodDecl::hasInlineBody(), which is false once the definition is
-# out-of-line.
+# This started as a fix for one bug: the page's data source declared three
+# virtual methods with non-empty bodies inside the class body. The
+# chromium-style plugin rejects that ("virtual methods with non-empty bodies
+# shouldn't be declared inline") and it stopped build-1 of runs 32633921251
+# and 32716211686 on chrome_web_ui_configs.o, the only translation unit that
+# includes this header. theme.sh now writes those definitions below the class,
+# which is what the plugin asks for - it gates the diagnostic on
+# CXXMethodDecl::hasInlineBody(), false once the definition is out-of-line.
 #
-# Re-emit the header straight out of theme.sh rather than editing it in
-# place, so there stays exactly one copy of the page and a resumed tree
-# cannot drift from a freshly synced one. Idempotent: a fresh tree already
-# has the new form and is skipped.
+# Comparing against theme.sh rather than grepping for that one bug means
+# ordinary edits to the page - wording, links - also reach a resumed tree, so
+# a text change costs one translation unit instead of a full re-sync. Copying
+# from theme.sh rather than editing in place keeps exactly one copy of the
+# page. On a fresh tree the two are identical and nothing happens.
 AFR=chrome/browser/ui/webui/aerium_first_run.h
-if [ -f "$AFR" ] && grep -q 'GetSource() override { return' "$AFR"; then
+if [ -f "$AFR" ]; then
+    AFR_FRESH=$(mktemp)
     awk '/^cat > chrome\/browser\/ui\/webui\/aerium_first_run.h <<.AERIUM_FIRST_RUN_H.$/{f=1;next} /^AERIUM_FIRST_RUN_H$/{f=0} f' \
-        "$SCRIPT_DIR/theme.sh" > "$AFR"
-    if ! grep -q '^inline std::string AeriumFirstRunDataSource::GetSource' "$AFR"; then
-        echo "[aerium] FATAL: could not re-emit $AFR from theme.sh." >&2
+        "$SCRIPT_DIR/theme.sh" > "$AFR_FRESH"
+    if ! grep -q '^inline std::string AeriumFirstRunDataSource::GetSource' "$AFR_FRESH"; then
+        echo "[aerium] FATAL: could not extract the first-run page from theme.sh." >&2
         echo "[aerium] The heredoc markers in theme.sh must have moved." >&2
+        rm -f "$AFR_FRESH"
         exit 1
     fi
-    echo "[aerium] resume hotfix: re-emitted $AFR with out-of-line virtual bodies"
+    if cmp -s "$AFR_FRESH" "$AFR"; then
+        echo "[aerium] first-run page in the tree already matches theme.sh"
+    else
+        cp "$AFR_FRESH" "$AFR"
+        echo "[aerium] resume sync: refreshed $AFR from theme.sh"
+    fi
+    rm -f "$AFR_FRESH"
 fi
 
 # compile prerequisites must exist on every fresh runner
