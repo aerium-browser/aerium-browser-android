@@ -216,6 +216,36 @@ if [ -f "$SBI" ] && grep -q ShuffleSubchannelColorData "$SBI" && ! grep -q allow
     echo "[aerium] resume hotfix: allow_unsafe_buffers pragma applied to $SBI"
 fi
 
+# --- Resume hotfix (removable once a build that STARTED after 2026-08-24
+# goes green): same reason as the one above - theme.sh only runs during
+# source setup, so a tree saved by an earlier stage never re-runs it.
+#
+# The first-run page's data source declared three virtual methods with
+# non-empty bodies inside the class body. The chromium-style clang plugin
+# rejects that ("virtual methods with non-empty bodies shouldn't be declared
+# inline"), and it is what stopped build-1 of runs 32633921251 and
+# 32716211686 on chrome_web_ui_configs.o - the only translation unit that
+# includes this header. theme.sh now writes those definitions below the
+# class instead, which is what the plugin asks for: it gates the diagnostic
+# on CXXMethodDecl::hasInlineBody(), which is false once the definition is
+# out-of-line.
+#
+# Re-emit the header straight out of theme.sh rather than editing it in
+# place, so there stays exactly one copy of the page and a resumed tree
+# cannot drift from a freshly synced one. Idempotent: a fresh tree already
+# has the new form and is skipped.
+AFR=chrome/browser/ui/webui/aerium_first_run.h
+if [ -f "$AFR" ] && grep -q 'GetSource() override { return' "$AFR"; then
+    awk '/^cat > chrome\/browser\/ui\/webui\/aerium_first_run.h <<.AERIUM_FIRST_RUN_H.$/{f=1;next} /^AERIUM_FIRST_RUN_H$/{f=0} f' \
+        "$SCRIPT_DIR/theme.sh" > "$AFR"
+    if ! grep -q '^inline std::string AeriumFirstRunDataSource::GetSource' "$AFR"; then
+        echo "[aerium] FATAL: could not re-emit $AFR from theme.sh." >&2
+        echo "[aerium] The heredoc markers in theme.sh must have moved." >&2
+        exit 1
+    fi
+    echo "[aerium] resume hotfix: re-emitted $AFR with out-of-line virtual bodies"
+fi
+
 # compile prerequisites must exist on every fresh runner
 ./build/install-build-deps.sh --no-prompt || true
 # ...and its .debs must not be left sitting on the small root filesystem.

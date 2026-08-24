@@ -227,15 +227,35 @@ class AeriumFirstRunDataSource : public content::URLDataSource {
   AeriumFirstRunDataSource& operator=(const AeriumFirstRunDataSource&) = delete;
   ~AeriumFirstRunDataSource() override = default;
 
-  std::string GetSource() override { return "aerium-first-run"; }
-  std::string GetMimeType(const GURL& url) override { return "text/html"; }
+  // Defined below the class rather than here. The chromium-style clang
+  // plugin rejects a virtual method whose non-empty body is written inside
+  // the class declaration - it forces every translation unit that includes
+  // the header to carry the code. Writing the definitions out-of-line keeps
+  // the page header-only, which is the whole point of this file, and is what
+  // the plugin actually asks for.
+  std::string GetSource() override;
+  std::string GetMimeType(const GURL& url) override;
 
   void StartDataRequest(const GURL& url,
                         const content::WebContents::Getter& wc_getter,
-                        GotDataCallback callback) override {
-    std::move(callback).Run(
-        base::MakeRefCounted<base::RefCountedString>(std::string(
-            R"AERIUMHTML(<!doctype html>
+                        GotDataCallback callback) override;
+};
+
+inline std::string AeriumFirstRunDataSource::GetSource() {
+  return "aerium-first-run";
+}
+
+inline std::string AeriumFirstRunDataSource::GetMimeType(const GURL& url) {
+  return "text/html";
+}
+
+inline void AeriumFirstRunDataSource::StartDataRequest(
+    const GURL& url,
+    const content::WebContents::Getter& wc_getter,
+    content::URLDataSource::GotDataCallback callback) {
+  std::move(callback).Run(
+      base::MakeRefCounted<base::RefCountedString>(std::string(
+          R"AERIUMHTML(<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Welcome to Aerium</title>
@@ -341,8 +361,7 @@ class AeriumFirstRunDataSource : public content::URLDataSource {
   <footer>You can reach this page again at any time from chrome://aerium-first-run</footer>
 </main>
 )AERIUMHTML")));
-  }
-};
+}
 
 class AeriumFirstRun;
 
