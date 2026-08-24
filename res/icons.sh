@@ -5,10 +5,18 @@
 svg=$(dirname "$0")/aerium.svg
 w=$(identify -format %w "$1")
 
-# Darkest navy in aerium.svg (the outer arm of the swirl). Kept in one place
-# so the icon can never go back to being framed in a colour the logo does not
-# contain.
-bg='#111C42'
+# The field the logo sits on. White, so the colour icon reads the way the
+# themed one does: a small mark centred on a plain light tile, like the stock
+# Phone, Messages and Camera icons next to it.
+#
+# White here is not the white-corner bug coming back. That bug was a logo
+# scaled to fill the whole tile, drawn on transparency, so all that showed of
+# the background was four mismatched corners - an artifact. This is one flat
+# field behind a mark that no longer reaches the edges, which is a deliberate
+# and uniform look. What matters is that the field is painted at all: a legacy
+# icon left transparent gets dropped onto whatever plate the launcher supplies,
+# which is not a choice we control.
+bg='#FFFFFF'
 
 # The logo is a circle that fills its whole 512 viewBox, so these percentages
 # are the circle's diameter as a share of the icon's width.
@@ -34,15 +42,10 @@ render_over() {
 
 case $(basename "$1") in
   layered_app_icon_background*)
-    # Adaptive icon background layer: full bleed in the logo's darkest navy,
-    # the same colour as the outer arm of the swirl.
-    #
-    # This used to be solid white, which is what put white corners on the
-    # launcher icon. The background layer is what fills the launcher's mask,
-    # the logo is a circle drawn at 40%, and every launcher mask is some
-    # rounded square - so the four corners the circle cannot reach showed the
-    # layer behind it. Painting them navy makes them continuous with the
-    # swirl instead of framing it in white.
+    # Adaptive icon background layer: one flat field, full bleed. This is
+    # what fills the launcher's mask, whatever shape that mask happens to be,
+    # so the tile is this colour edge to edge and the foreground layer only
+    # has to carry the logo.
     convert -size ${w}x${w} xc:"$bg" "$1" ;;
   layered_app_icon_foreground*)
     # Adaptive icon foreground layer: the logo on transparency, because the
@@ -52,13 +55,11 @@ case $(basename "$1") in
     # Everything else - layered_app_icon.png and app_icon.png - is a legacy,
     # non-adaptive icon: one square bitmap, no separate background layer.
     #
-    # These used to be drawn on transparency too, which is the second source
-    # of white corners and the one the background-layer fix above did not
-    # reach. The logo is a circle, so a transparent square leaves four empty
-    # corners, and a launcher given a legacy icon with transparency composites
-    # it onto a white plate. Painting the same navy behind it means the
-    # corners are part of the icon rather than whatever the launcher puts
-    # under it.
+    # These used to be drawn on transparency, which is what left four empty
+    # corners around a circular logo and let the launcher fill them with a
+    # plate of its own choosing. They now get the same painted field as the
+    # adaptive background layer, so the two kinds of icon match and the tile
+    # is ours rather than the launcher's.
     render_over "$1" $legacy_pct "$bg" ;;
 esac
 echo "aerium icon: $1 (${w}px)"
