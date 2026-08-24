@@ -364,8 +364,30 @@ runs:
           chromium/build_stdout.log 2>/dev/null || echo "(none)"
 
         echo
-        echo "=== [9] FIRST 200 lines of the build output (does siso report loading state?) ==="
-        head -n 200 chromium/build_stdout.log 2>/dev/null || echo "(no build output was captured)"
+        echo "=== [9] FIRST 60 lines of the build output (does siso report loading state?) ==="
+        head -n 60 chromium/build_stdout.log 2>/dev/null || echo "(no build output was captured)"
+
+        echo
+        echo "=== [10] WHY THE BUILD STOPPED ==="
+        # The head of the build output answers a question about incremental
+        # state. It cannot answer "what failed", because a compile error is at
+        # the END - and the Actions API only returns the tail of a job log, so
+        # a 200-line head dump is exactly what pushes the error out of reach.
+        # Stage 4 of run 32633921251 failed with a real compile error that was
+        # unreadable for precisely this reason, and the marker artifact holding
+        # it needs credentials the session did not have.
+        #
+        # So: name the failed targets, then print the error itself.
+        if [ -s "$OUT/.siso_failed_targets" ]; then
+          echo "--- failed targets ---"
+          cat "$OUT/.siso_failed_targets"
+        else
+          echo "(no .siso_failed_targets - the stage did not fail on a target)"
+        fi
+        echo
+        echo "--- last 200 lines of build output ---"
+        tail -n 200 chromium/build_stdout.log 2>/dev/null \
+          || echo "(no build output was captured)"
         echo
         echo "=== end of stage diagnostics ==="
         exit 0
