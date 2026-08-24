@@ -5,8 +5,16 @@
      version, four flat silhouettes at full opacity, read as a plain blob.
 
      This follows the same geometry as layered_app_icon_foreground.xml: 108dp,
-     scaled 0.66 and translated 87.04, so the themed icon sits exactly where the
-     colour one does instead of being smaller and offset.
+     scaled 0.40 and translated 153.6, so the themed icon sits exactly where the
+     colour one does.
+
+     On the scale: the drawable is a 108dp canvas of which the launcher only
+     ever shows the middle 72dp. At the old 0.66 the logo came out 71.28dp
+     across - it filled that visible area edge to edge, so a themed launcher
+     tinted almost the whole tile and the icon read as a solid blob next to
+     stock icons, which are a small glyph on a plain field. 0.40 puts the logo
+     at 43.2dp, about 60% of the visible tile, which is where the system
+     Phone/Messages/Camera glyphs sit.
 
      The structure of aerium.svg is kept - the three swirl arms, then the four
      concentric lens discs - with each original colour mapped to an alpha step
@@ -14,17 +22,18 @@
      solid, the pale outer disc drops far back, and the inner discs step up
      again so the lens still reads as a lens after tinting. A few of the larger
      sparkles are kept for character; the smaller ones would disappear at
-     launcher size and only add noise. -->
+     launcher size and only add noise.
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="512"
     android:viewportHeight="512">
   <group
-      android:scaleX="0.66"
-      android:scaleY="0.66"
-      android:translateX="87.03999999999999"
-      android:translateY="87.03999999999999">
+      android:scaleX="0.40"
+      android:scaleY="0.40"
+      android:translateX="153.6"
+      android:translateY="153.6">
 
     <!-- Swirl arms: #1B2C5E, #2A4485, #111C42 in the original. The mid arm is
          a step back so the three stay distinguishable once flattened. -->

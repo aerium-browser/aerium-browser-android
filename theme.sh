@@ -84,6 +84,19 @@ grep -rl --include='*.grd' --include='*.grdp' --include='*.xtb' 'Chromium' \
     sed -i 's/The Chromium Authors/Dioide/g; s/Chromium/Aerium/g' "$f"
 done
 
+# --- The copyright line under Settings -> About Aerium -> Legal information.
+# The sweep above rewrites "The Chromium Authors" to Dioide, but this string
+# names Google LLC instead, so it survived as "Copyright 2026 Google LLC" on
+# a screen where every other name had already been rebranded.
+#
+# sed_i rather than sed: if a Chromium bump reflows this line the build should
+# stop and say so, not quietly ship Google's name in Aerium's about screen.
+# The <ph> element is kept exactly as upstream writes it - grit requires the
+# %1$d formatter to sit inside a <ph>, and moving it out is what broke an
+# earlier build.
+sed_i 's|Copyright <ph name="year">%1$d<ex>2014</ex></ph> Google LLC. All rights reserved.|Aerium. Copyright <ph name="year">%1$d<ex>2014</ex></ph> Dioide. All rights reserved.|' \
+    chrome/browser/ui/android/strings/android_chrome_strings.grd
+
 # --- Ungoogled-style privacy default: disable Safe Browsing by default. It
 # is the main recurring Google phone-home on Android (URL/reputation pings);
 # ungoogled-chromium removes it at build level. Left toggleable in
