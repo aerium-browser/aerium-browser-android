@@ -65,7 +65,8 @@ jobs:
   resume:
     if: >-
       github.event_name == 'schedule' ||
-      (github.event.workflow_run.conclusion == 'failure' &&
+      ((github.event.workflow_run.conclusion == 'failure' ||
+        github.event.workflow_run.conclusion == 'cancelled') &&
        github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
     steps:
@@ -75,6 +76,7 @@ jobs:
           REPO: ${{ github.repository }}
           EVENT: ${{ github.event_name }}
           EVENT_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
         run: |
           set -euo pipefail
           RUNS="repos/$REPO/actions/workflows/build.yml/runs"
@@ -100,6 +102,29 @@ jobs:
           else
             HEAD_SHA="$EVENT_HEAD_SHA"
           fi
+          # Cancelled counts as stopped, not just failed - the Windows repo lost
+          # nine hours of finished work to a cancellation nobody made, because a
+          # cancelled run reports conclusion 'cancelled' and this job only
+          # matched 'failure', so its checkpoint went unread.
+          #
+          # One kind of cancellation must NOT be resumed: superseding an
+          # in-flight build by pushing a newer commit. Resuming that would fight
+          # the rule that only the newest commit builds. The other routine case
+          # - killing a duplicate run on the same commit - is already handled by
+          # the active-run check above, which refuses to stack on a live build.
+          #
+          # Exit 0, not 1: declining to resume a build someone cancelled on
+          # purpose is this job working, and marking it red would put a failure
+          # in the Actions list every time a superseded run is killed.
+          if [ "$EVENT" != "schedule" ] && [ "$CONCLUSION" = cancelled ]; then
+            main_sha=$(gh api "repos/$REPO/commits/main" --jq '.sha')
+            if [ "$main_sha" != "$HEAD_SHA" ]; then
+              echo "main is now $main_sha - that run was superseded, not interrupted."
+              exit 0
+            fi
+            echo "Run cancelled with nothing replacing it - treating as an interruption."
+          fi
+
           echo "Looking for a resumable checkpoint for $HEAD_SHA"
 
           runs_json=$(gh api "$RUNS?head_sha=$HEAD_SHA&per_page=50")
@@ -162,7 +187,7 @@ jobs:
           fi
 
           RUN_ID=""
-          for candidate in $(jq -r '[.workflow_runs[] | select(.conclusion == "failure")]
+          for candidate in $(jq -r '[.workflow_runs[] | select(.conclusion == "failure" or .conclusion == "cancelled")]
                                     | sort_by(.run_number) | reverse | .[].id' <<<"$runs_json"); do
             if gh api "repos/$REPO/actions/runs/$candidate/artifacts" \
                  --jq '.artifacts[] | select(.expired == false) | .name' 2>/dev/null \
