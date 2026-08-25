@@ -592,16 +592,16 @@ sed_i 's|"opt_out", true};|"opt_out", false};|' \
 # New Tab Page, settings, sheets and cards at once, and can be switched on and
 # off per launch instead of being baked in.
 #
-# The big surfaces go fully black. The two "lifted" roles keep a faint grey so
-# a menu or a bottom sheet still has an edge against the page behind it -
-# pure-black-on-pure-black loses the boundary. elevationOverlayEnabled is
-# turned off because Material's elevation overlay lightens a surface in
-# proportion to its elevation, which would undo the black it is applied to.
-sed_i 's|^</resources>$|    <!-- Aerium: see theme.sh. Pure black for OLED panels. -->\n    <style name="ThemeOverlay.BrowserUI.AeriumPureBlack" parent="">\n        <item name="android:colorBackground">@android:color/black</item>\n        <item name="colorSurface">@android:color/black</item>\n        <item name="colorSurfaceDim">@android:color/black</item>\n        <item name="colorSurfaceContainerLowest">@android:color/black</item>\n        <item name="colorSurfaceContainerLow">@android:color/black</item>\n        <item name="colorSurfaceContainer">@android:color/black</item>\n        <item name="colorSurfaceContainerHigh">@android:color/black</item>\n        <item name="colorSurfaceBright">@color/aerium_pure_black_lifted</item>\n        <item name="colorSurfaceContainerHighest">@color/aerium_pure_black_lifted</item>\n        <item name="elevationOverlayEnabled">false</item>\n    </style>\n&|' \
+# Every surface role goes to #000000, including the overflow menu, the cards
+# inside settings and the progress-bar track. Those three float over or sit on
+# another surface, so black-on-black leaves them without an edge - that is a
+# deliberate trade, taking the boundary in exchange for the pixels being off.
+# elevationOverlayEnabled is turned off because Material's elevation overlay
+# lightens a surface in proportion to its elevation, which would put the grey
+# straight back.
+sed_i 's|^</resources>$|    <!-- Aerium: see theme.sh. Pure black for OLED panels. -->\n    <style name="ThemeOverlay.BrowserUI.AeriumPureBlack" parent="">\n        <item name="android:colorBackground">@android:color/black</item>\n        <item name="colorSurface">@android:color/black</item>\n        <item name="colorSurfaceDim">@android:color/black</item>\n        <item name="colorSurfaceContainerLowest">@android:color/black</item>\n        <item name="colorSurfaceContainerLow">@android:color/black</item>\n        <item name="colorSurfaceContainer">@android:color/black</item>\n        <item name="colorSurfaceContainerHigh">@android:color/black</item>\n        <item name="colorSurfaceBright">@android:color/black</item>\n        <item name="colorSurfaceContainerHighest">@android:color/black</item>\n        <item name="elevationOverlayEnabled">false</item>\n    </style>\n&|' \
     components/browser_ui/styles/android/java/res/values/themes.xml
 
-sed_i 's|^</resources>$|    <!-- Aerium: the one step above black, for surfaces that must lift off it. -->\n    <color name="aerium_pure_black_lifted">#121212</color>\n&|' \
-    components/browser_ui/styles/android/java/res/values/colors.xml
 
 # The toggle. theme_preferences.xml holds only the radio group, so the switch
 # goes in beside it rather than into RadioButtonGroupThemePreference, whose
@@ -642,6 +642,32 @@ sed_i 's|^                ADAPTIVE_TOOLBAR_CUSTOMIZATION_ENABLED,$|             
 # The two strings for the switch.
 sed_i 's|^      <message name="IDS_THEME_SETTINGS" desc="Title for the Theme settings.*|      <message name="IDS_AERIUM_PURE_BLACK_TITLE" desc="Title of the switch in Appearance - Theme that paints the browser pure black instead of dark grey.">\n        Pure black\n      </message>\n      <message name="IDS_AERIUM_PURE_BLACK_SUMMARY" desc="Summary under the Pure black switch explaining what it does and why.">\n        Use true black instead of dark grey in dark mode. Saves power on OLED screens, where black pixels are switched off.\n      </message>\n&|' \
     chrome/browser/ui/android/strings/android_chrome_strings.grd
+
+# --- AMOLED backgrounds for darkened web pages. Turning on "Darken websites"
+# above does not give black pages: Blink inverts lightness in LAB space and
+# then floors near-black greys at #121212 on purpose. dark_mode_color_filter.cc
+# says why - "Further darken dark grays to match the primary surface color
+# recommended by the material design guidelines".
+#
+# Following the pipeline for a white page: L=100, inverted by
+# lab.x = min(110 - lab.x, 100) to L=10, back to sRGB as 27.5/255, then
+# AdjustGray sees a neutral grey inside (18/255, 32/255) and clamps it to
+# 18/255 - #121212 exactly. Every white and near-white page lands there.
+#
+# Dropping the floor to zero sends that same band to #000000 instead, so a
+# darkened page is off pixels rather than Material's dark surface. The upper
+# threshold is left alone: it decides which greys are treated as near-black at
+# all, and widening it would flatten a page background into the cards sitting
+# on it. Pages that are already light grey rather than white (#F1F1F1 inverts
+# to about #252525) stay outside the band and keep their own separation.
+#
+# This rides the existing "Darken websites" switch rather than adding a third
+# one. That switch is off by default and is already the separate control for
+# web content; making its output black is what an OLED panel wants, and a
+# grey-vs-black choice underneath it would mean plumbing a new setting from
+# Java through the renderer into Blink for a distinction nobody asks for.
+sed_i 's|    static const float kAdjustedBrightness = 18.0f / 255.0f;|    // Aerium: 0 instead of 18/255 - see theme.sh. Pure black, not Material grey.\n    static const float kAdjustedBrightness = 0.0f;|' \
+    third_party/blink/renderer/platform/graphics/dark_mode_color_filter.cc
 
 # --- HTTPS-First Balanced Mode by default: upgrades navigations to HTTPS
 # when a site is expected to support it, without the disruptive full-site
