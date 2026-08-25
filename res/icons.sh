@@ -21,15 +21,19 @@ bg='#FFFFFF'
 # The logo is a circle that fills its whole 512 viewBox, so these percentages
 # are the circle's diameter as a share of the icon's width.
 #
-# 40 matches the 0.40 scale in layered_app_icon_foreground.xml and
-# themed_app_icon.xml. Those drawables are a 108dp canvas of which the
-# launcher only shows the middle 72dp, so 40% of 108dp is 43.2dp - about 60%
-# of what you actually see, which is where stock glyphs sit.
+# 36 matches the 0.36 scale in layered_app_icon_foreground.xml. That drawable
+# is a 108dp canvas of which the launcher only shows the middle 72dp, so 36%
+# of 108dp is 38.9dp - a little over half of what you actually see.
 #
-# A legacy icon has no such canvas: the whole PNG is what the launcher masks.
-# So the same visual size is 60% of the file rather than 40%.
-adaptive_pct=40
-legacy_pct=60
+# themed_app_icon.xml stays at 0.40 and is not rendered here. The two differ on
+# purpose: a flat tint lets the low-alpha edges of the monochrome fade into the
+# background, while the colour logo is opaque to its edge, so equal geometry
+# read as unequal size. See the comment in themed_app_icon.xml.
+#
+# A legacy icon has no 108dp canvas: the whole PNG is what the launcher masks.
+# So the same on-screen size is 38.9/72 of the file, i.e. 54% rather than 36%.
+adaptive_pct=36
+legacy_pct=54
 
 # Draws the logo at $2 percent of the icon width, centred on background $3.
 # Pass 'none' for a transparent background.

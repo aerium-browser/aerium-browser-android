@@ -4,10 +4,6 @@
      so shape and alpha are the only tools available - which is why the earlier
      version, four flat silhouettes at full opacity, read as a plain blob.
 
-     This follows the same geometry as layered_app_icon_foreground.xml: 108dp,
-     scaled 0.40 and translated 153.6, so the themed icon sits exactly where the
-     colour one does.
-
      On the scale: the drawable is a 108dp canvas of which the launcher only
      ever shows the middle 72dp. At the old 0.66 the logo came out 71.28dp
      across - it filled that visible area edge to edge, so a themed launcher
@@ -15,6 +11,17 @@
      stock icons, which are a small glyph on a plain field. 0.40 puts the logo
      at 43.2dp, about 60% of the visible tile, which is where the system
      Phone/Messages/Camera glyphs sit.
+
+     This layer is deliberately 0.40 while layered_app_icon_foreground.xml is
+     0.36, even though the two were identical at 206x206 in the 512 viewport
+     when both were 0.40. Identical geometry did not read as identical size.
+     Everything here is a single flat tint, and the parts that carry the
+     silhouette outward - the outer lens disc at alpha 0.20, the sparkles at
+     0.35 to 0.42 - fade toward the tint background, so the eye stops at the
+     solid core. The colour layer has no such falloff: it is opaque navy on
+     white at full contrast all the way to its edge, so the same 206 pixels
+     read bigger. The colour one is scaled down to match what this one looks
+     like, rather than what it measures.
 
      The structure of aerium.svg is kept - the three swirl arms, then the four
      concentric lens discs - with each original colour mapped to an alpha step
