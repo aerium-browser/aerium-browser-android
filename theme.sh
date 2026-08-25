@@ -669,6 +669,63 @@ sed_i 's|^      <message name="IDS_THEME_SETTINGS" desc="Title for the Theme set
 sed_i 's|    static const float kAdjustedBrightness = 18.0f / 255.0f;|    // Aerium: 0 instead of 18/255 - see theme.sh. Pure black, not Material grey.\n    static const float kAdjustedBrightness = 0.0f;|' \
     third_party/blink/renderer/platform/graphics/dark_mode_color_filter.cc
 
+# --- Blacken sites that ship their own dark theme. Off by default.
+#
+# Force dark does not touch these sites, and that is correct: its classifiers
+# are brightness-gated (150 for foreground, 205 for background, set in
+# dark_mode_settings_builder.cc), so a site whose background is already dark
+# falls below the threshold and is left alone rather than inverted back to
+# light. What it keeps, though, is the site's own grey - GitHub is #0d1117,
+# YouTube #181818 - and on an OLED panel every one of those pixels is lit.
+#
+# So: when the classifier declines to invert a background and the colour is
+# already near black, pull it the rest of the way to #000000. Anything lighter
+# is left alone, which keeps a genuinely mid-grey background distinct from the
+# cards drawn on it.
+#
+# This cannot be a live setting. DarkModeFilter is built once per renderer
+# process from GetCurrentDarkModeSettings(), itself a function-static, so
+# nothing about force dark's tuning can change without a new process - even
+# Chromium's own thresholds are fixed at startup. It is therefore a
+# base::Feature appended to the command line before native starts, and the
+# switch says so. Features propagate to renderers on their own, which a plain
+# switch would not.
+sed_i 's|  int background_brightness_threshold = 0;|&\n  // Aerium: pull near-black backgrounds the classifier skips to #000000.\n  bool blacken_dark_backgrounds = false;|' \
+    third_party/blink/renderer/platform/graphics/dark_mode_settings.h
+
+DMSB=third_party/blink/renderer/platform/graphics/dark_mode_settings_builder.cc
+sed_i 's|#include "base/command_line.h"|&\n#include "base/feature_list.h"|' $DMSB
+sed_i 's|const constexpr int kDefaultForegroundBrightnessThreshold = 150;|// Aerium: see theme.sh. Named "AeriumBlackenDarkBackgrounds" on the command\n// line, which is what ChromeApplicationImpl appends when the setting is on.\nBASE_FEATURE(kAeriumBlackenDarkBackgrounds, base::FEATURE_DISABLED_BY_DEFAULT);\n\n&|' $DMSB
+sed_i 's|      Clamp<int>(kDefaultBackgroundBrightnessThreshold, 0, 255);|&\n  settings.blacken_dark_backgrounds =\n      base::FeatureList::IsEnabled(kAeriumBlackenDarkBackgrounds);|' $DMSB
+
+sed_i 's|    sk_sp<cc::ColorFilter> image_filter;|&\n    // Aerium: see theme.sh.\n    bool blacken_dark_backgrounds = false;|' \
+    third_party/blink/renderer/platform/graphics/dark_mode_filter.h
+
+DMF=third_party/blink/renderer/platform/graphics/dark_mode_filter.cc
+sed_i 's|  image_classifier = std::make_unique<DarkModeImageClassifier>();|&\n  blacken_dark_backgrounds = settings.blacken_dark_backgrounds;|' $DMF
+sed_i '/^SkColor4f DarkModeFilter::InvertColorIfNeeded(const SkColor4f\& color,$/{N;s|                                              ElementRole role) {|                                              ElementRole role) {\n  // Aerium: a site with its own dark theme is skipped by the classifier and\n  // keeps its own grey, which still lights every pixel on OLED. Take a\n  // background that is already near black the rest of the way down. Checked\n  // before the classifier because a colour this dark is one it would decline\n  // to invert anyway.\n  if (immutable_.blacken_dark_backgrounds \&\& role == ElementRole::kBackground) {\n    constexpr float kNearBlack = 48.0f / 255.0f;\n    if (color.fR < kNearBlack \&\& color.fG < kNearBlack \&\&\n        color.fB < kNearBlack) {\n      return SkColor4f{0.0f, 0.0f, 0.0f, color.fA};\n    }\n  }\n|}' $DMF
+
+# The key, the startup hook and the switch.
+sed_i 's|    public static final String FIRST_RUN_FLOW_COMPLETE = "first_run_flow";|    /** Whether Aerium blackens sites that ship their own dark theme. */\n    public static final String AERIUM_BLACKEN_DARK_SITES = "Chrome.Aerium.BlackenDarkSites";\n\n&|' \
+    $CPK
+sed_i 's|^                ADAPTIVE_TOOLBAR_CUSTOMIZATION_ENABLED,$|                AERIUM_BLACKEN_DARK_SITES,\n&|' \
+    $CPK
+
+CAI=chrome/android/java/src/org/chromium/chrome/browser/ChromeApplicationImpl.java
+sed_i 's|^import org.chromium.base.CommandLine;$|&\nimport org.chromium.chrome.browser.preferences.ChromePreferenceKeys;\nimport org.chromium.chrome.browser.preferences.ChromeSharedPreferences;|' \
+    $CAI
+sed_i 's|            FontPreloader.getInstance().load(getApplication());|&\n\n            // Aerium: the renderer fixes its dark-mode settings at process\n            // start, so this has to be on the command line before native\n            // comes up rather than flipped live. Merged into any existing\n            // value instead of overwriting whatever else asked for features.\n            if (ChromeSharedPreferences.getInstance()\n                    .readBoolean(ChromePreferenceKeys.AERIUM_BLACKEN_DARK_SITES, false)) {\n                CommandLine commandLine = CommandLine.getInstance();\n                String existing = commandLine.getSwitchValue("enable-features");\n                String merged =\n                        (existing == null \|\| existing.isEmpty())\n                                ? "AeriumBlackenDarkBackgrounds"\n                                : existing + ",AeriumBlackenDarkBackgrounds";\n                commandLine.appendSwitchWithValue("enable-features", merged);\n            }|' \
+    $CAI
+
+sed_i 's|^</PreferenceScreen>$|    <org.chromium.components.browser_ui.settings.ChromeSwitchPreference\n        android:key="aerium_blacken_dark_sites"\n        android:title="@string/aerium_blacken_dark_sites_title"\n        android:summary="@string/aerium_blacken_dark_sites_summary" />\n&|' \
+    chrome/browser/ui/android/night_mode/java/res/xml/theme_preferences.xml
+
+sed_i 's|^        // TODO(crbug.com/40198953): Notify feature engagement system that settings were opened.$|        ChromeSwitchPreference blackenDarkSites =\n                (ChromeSwitchPreference) findPreference("aerium_blacken_dark_sites");\n        if (blackenDarkSites != null) {\n            blackenDarkSites.setChecked(\n                    sharedPreferencesManager.readBoolean(\n                            ChromePreferenceKeys.AERIUM_BLACKEN_DARK_SITES, false));\n            blackenDarkSites.setOnPreferenceChangeListener(\n                    (preference, newValue) -> {\n                        sharedPreferencesManager.writeBoolean(\n                                ChromePreferenceKeys.AERIUM_BLACKEN_DARK_SITES,\n                                (boolean) newValue);\n                        return true;\n                    });\n        }\n\n&|' \
+    $TSF
+
+sed_i 's|^      <message name="IDS_AERIUM_PURE_BLACK_TITLE" desc=|      <message name="IDS_AERIUM_BLACKEN_DARK_SITES_TITLE" desc="Title of the switch that also blackens websites which already have their own dark theme.">\n        Blacken dark sites\n      </message>\n      <message name="IDS_AERIUM_BLACKEN_DARK_SITES_SUMMARY" desc="Summary under the Blacken dark sites switch. Mentions that a restart is needed.">\n        Also use true black on sites that have their own dark theme, instead of their dark grey. Restart Aerium to apply.\n      </message>\n&|' \
+    chrome/browser/ui/android/strings/android_chrome_strings.grd
+
 # --- HTTPS-First Balanced Mode by default: upgrades navigations to HTTPS
 # when a site is expected to support it, without the disruptive full-site
 # interstitials of strict HTTPS-Only Mode. Stock Chromium ships this off,
