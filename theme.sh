@@ -543,6 +543,106 @@ sed -i 's/BASE_FEATURE(kInterestFeedV2, base::FEATURE_ENABLED_BY_DEFAULT);/BASE_
 sed -i 's/BASE_FEATURE(kSafetyHub, base::FEATURE_ENABLED_BY_DEFAULT);/BASE_FEATURE(kSafetyHub, base::FEATURE_DISABLED_BY_DEFAULT);/' \
     components/safety_check/features.cc
 
+# --- Auto-darken web content, offered but off. Chromium already implements
+# this end to end: RadioButtonGroupThemePreference draws a "darken websites"
+# checkbox under Settings -> Appearance -> Theme whenever the theme is Dark or
+# System default, and ThemeSettingsFragment already reads and writes it through
+# WebContentsDarkModeController. The whole feature is wired and simply hidden
+# behind a disabled flag, so this exposes it rather than building anything.
+#
+# On an OLED panel the display is usually the largest single power draw, and
+# web content is most of the screen - the browser's own chrome is a small strip
+# at the top. Darkening pages is therefore where the real saving is, which is
+# why it is worth offering at all.
+#
+# It has to be TWO changes, not one. Enabling the feature alone would turn auto
+# dark ON for everyone, because the content setting's registered default is
+# derived from the feature's own param:
+#
+#   const auto auto_dark_web_content_setting =
+#       content_settings::kDarkenWebsitesCheckboxOptOut.Get()
+#           ? CONTENT_SETTING_ALLOW
+#           : CONTENT_SETTING_BLOCK;
+#
+# and opt_out ships as true. Setting it false makes the default BLOCK, so the
+# checkbox appears unchecked and darkening only happens if asked for. Auto dark
+# misrenders some sites, so it must never be the default.
+#
+# The BASE_FEATURE macro is split across two lines, hence the N to pull the
+# second line into the pattern space before substituting.
+sed_i '/BASE_FEATURE(kDarkenWebsitesCheckboxInThemesSetting,/{N;s/base::FEATURE_DISABLED_BY_DEFAULT/base::FEATURE_ENABLED_BY_DEFAULT/}' \
+    components/content_settings/core/common/features.cc
+sed_i 's|"opt_out", true};|"opt_out", false};|' \
+    components/content_settings/core/common/features.cc
+
+# --- Pure black (AMOLED) surfaces. On an OLED panel a black pixel is switched
+# off and draws no power, while Chromium's dark theme paints #1F1F1F - about
+# 12% grey - so every pixel stays lit. Aerium is named after aerogel and the
+# battery pass above already trims background CPU and radio work; the display
+# is the one large draw it never touched.
+#
+# This is possible cheaply because of how Chromium 152 resolves colour.
+# semantic_colors_dynamic.xml routes the surfaces through Material 3 theme
+# attributes rather than fixed values:
+#
+#   <macro name="default_bg_color">?attr/colorSurface</macro>
+#   <macro name="settings_bg_color">?attr/colorSurfaceContainerHigh</macro>
+#
+# so overriding those attributes in a theme overlay repaints the toolbar, the
+# New Tab Page, settings, sheets and cards at once, and can be switched on and
+# off per launch instead of being baked in.
+#
+# The big surfaces go fully black. The two "lifted" roles keep a faint grey so
+# a menu or a bottom sheet still has an edge against the page behind it -
+# pure-black-on-pure-black loses the boundary. elevationOverlayEnabled is
+# turned off because Material's elevation overlay lightens a surface in
+# proportion to its elevation, which would undo the black it is applied to.
+sed_i 's|^</resources>$|    <!-- Aerium: see theme.sh. Pure black for OLED panels. -->\n    <style name="ThemeOverlay.BrowserUI.AeriumPureBlack" parent="">\n        <item name="android:colorBackground">@android:color/black</item>\n        <item name="colorSurface">@android:color/black</item>\n        <item name="colorSurfaceDim">@android:color/black</item>\n        <item name="colorSurfaceContainerLowest">@android:color/black</item>\n        <item name="colorSurfaceContainerLow">@android:color/black</item>\n        <item name="colorSurfaceContainer">@android:color/black</item>\n        <item name="colorSurfaceContainerHigh">@android:color/black</item>\n        <item name="colorSurfaceBright">@color/aerium_pure_black_lifted</item>\n        <item name="colorSurfaceContainerHighest">@color/aerium_pure_black_lifted</item>\n        <item name="elevationOverlayEnabled">false</item>\n    </style>\n&|' \
+    components/browser_ui/styles/android/java/res/values/themes.xml
+
+sed_i 's|^</resources>$|    <!-- Aerium: the one step above black, for surfaces that must lift off it. -->\n    <color name="aerium_pure_black_lifted">#121212</color>\n&|' \
+    components/browser_ui/styles/android/java/res/values/colors.xml
+
+# The toggle. theme_preferences.xml holds only the radio group, so the switch
+# goes in beside it rather than into RadioButtonGroupThemePreference, whose
+# checkbox is an accessory view reparented under the selected radio button -
+# a mechanism worth staying out of for a setting that is not per-theme.
+sed_i 's|^</PreferenceScreen>$|    <org.chromium.components.browser_ui.settings.ChromeSwitchPreference\n        android:key="aerium_pure_black"\n        android:title="@string/aerium_pure_black_title"\n        android:summary="@string/aerium_pure_black_summary" />\n&|' \
+    chrome/browser/ui/android/night_mode/java/res/xml/theme_preferences.xml
+
+TSF=chrome/browser/ui/android/night_mode/java/src/org/chromium/chrome/browser/night_mode/settings/ThemeSettingsFragment.java
+sed_i 's|^import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;$|import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;\n&|' \
+    $TSF
+sed_i 's|^import org.chromium.components.browser_ui.settings.CustomDividerFragment;$|import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;\n&|' \
+    $TSF
+sed_i 's|^        // TODO(crbug.com/40198953): Notify feature engagement system that settings were opened.$|        // Aerium: pure black surfaces. Stored in shared preferences rather than\n        // a profile pref because it is read in Activity.onCreate, before the\n        // profile is available. Default on: it only takes effect in dark mode,\n        // which the user has already chosen, and a battery feature nobody finds\n        // is not one.\n        ChromeSwitchPreference pureBlack =\n                (ChromeSwitchPreference) findPreference("aerium_pure_black");\n        if (pureBlack != null) {\n            pureBlack.setChecked(\n                    sharedPreferencesManager.readBoolean(\n                            ChromePreferenceKeys.AERIUM_PURE_BLACK, true));\n            pureBlack.setOnPreferenceChangeListener(\n                    (preference, newValue) -> {\n                        sharedPreferencesManager.writeBoolean(\n                                ChromePreferenceKeys.AERIUM_PURE_BLACK, (boolean) newValue);\n                        // Surfaces are chosen when an Activity is themed, so the\n                        // change lands on the next one rather than repainting this\n                        // screen underneath the switch that just moved.\n                        return true;\n                    });\n        }\n\n&|' \
+    $TSF
+
+# The overlay is applied per Activity. applyThemeOverlays() runs inside
+# onCreate before super.onCreate, which is where Chromium already applies its
+# dynamic-colour and density overlays - and after initializeNightModeStateProvider(),
+# so the night-mode state is known. Applying last means it wins over the
+# Material You palette, which otherwise supplies the surfaces on Android 12+.
+#
+# Shared preferences rather than a profile pref: this is read before the
+# profile exists.
+CBACA=chrome/android/java/src/org/chromium/chrome/browser/ChromeBaseAppCompatActivity.java
+sed_i 's|^import org.chromium.chrome.browser.night_mode.NightModeUtils;$|&\nimport org.chromium.chrome.browser.preferences.ChromePreferenceKeys;\nimport org.chromium.chrome.browser.preferences.ChromeSharedPreferences;|' \
+    $CBACA
+sed_i 's|^        if (StyleUtils.shouldApplyDesktopDensity()) {$|        // Aerium: pure black surfaces on OLED. Applied last so it overrides the\n        // dynamic-colour palette above, and only in dark mode - there is nothing\n        // to blacken in a light theme.\n        if (getNightModeStateProvider().isInNightMode()\n                \&\& ChromeSharedPreferences.getInstance()\n                        .readBoolean(ChromePreferenceKeys.AERIUM_PURE_BLACK, true)) {\n            applySingleThemeOverlay(R.style.ThemeOverlay_BrowserUI_AeriumPureBlack);\n        }\n\n&|' \
+    $CBACA
+
+# The key itself. Same registry and the same getKeysInUse() list the first-run
+# flag was added to - Chromium validates membership in tests and debug builds.
+sed_i 's|    public static final String FIRST_RUN_FLOW_COMPLETE = "first_run_flow";|    /** Whether Aerium paints pure black surfaces while in dark mode. */\n    public static final String AERIUM_PURE_BLACK = "Chrome.Aerium.PureBlack";\n\n&|' \
+    $CPK
+sed_i 's|^                ADAPTIVE_TOOLBAR_CUSTOMIZATION_ENABLED,$|                AERIUM_PURE_BLACK,\n&|' \
+    $CPK
+
+# The two strings for the switch.
+sed_i 's|^      <message name="IDS_THEME_SETTINGS" desc="Title for the Theme settings.*|      <message name="IDS_AERIUM_PURE_BLACK_TITLE" desc="Title of the switch in Appearance - Theme that paints the browser pure black instead of dark grey.">\n        Pure black\n      </message>\n      <message name="IDS_AERIUM_PURE_BLACK_SUMMARY" desc="Summary under the Pure black switch explaining what it does and why.">\n        Use true black instead of dark grey in dark mode. Saves power on OLED screens, where black pixels are switched off.\n      </message>\n&|' \
+    chrome/browser/ui/android/strings/android_chrome_strings.grd
+
 # --- HTTPS-First Balanced Mode by default: upgrades navigations to HTTPS
 # when a site is expected to support it, without the disruptive full-site
 # interstitials of strict HTTPS-Only Mode. Stock Chromium ships this off,
