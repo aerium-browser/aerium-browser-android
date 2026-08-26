@@ -987,6 +987,68 @@ sed_i '/^  xr_module_desc,$/d' \
 sed_i 's|            FontPreloader.getInstance().load(getApplication());|&\n\n            // Aerium: media keeps playing when the browser is backgrounded or\n            // the screen goes off - see theme.sh. Read in the renderer, and\n            // forwarded there by content on its own, so setting it here is\n            // the whole change.\n            CommandLine.getInstance().appendSwitch("disable-background-media-suspend");|' \
     $CAI
 
+# --- The other half of background playback: pages that pause themselves.
+#
+# Disabling media suspend keeps the pipeline alive, but plenty of sites stop
+# their own video the moment the Page Visibility API says the tab went away -
+# a `visibilitychange` listener calling video.pause(), or a poll of
+# `document.visibilityState`. YouTube is the famous one. The decoder is
+# perfectly happy to keep going; the page has simply told it to stop.
+#
+# The extensions people install to work around this all do the same three
+# things: force `document.hidden` to false, force `document.visibilityState`
+# to "visible", and swallow the `visibilitychange` event. Doing it in the
+# engine means no extension to install, no per-site script injection, and
+# nothing in the page for a site to notice.
+#
+# It is still a lie told to a web page, so it is kept as small as a lie can
+# be. Three separate limits:
+#
+#   * Only while the page is actually making sound. PageScheduler already
+#     tracks that - it is what lights up the tab's audio indicator - and it
+#     holds the state for a few seconds after the sound stops, so a brief gap
+#     between tracks does not flip the page back. A silent background tab is
+#     told the plain truth, exactly as before.
+#   * Only the two web-facing accessors. Document::IsPageVisible(), which the
+#     rest of Blink reads to decide about animations, throttling, canvas and
+#     compositing, is left completely alone - so a backgrounded page still
+#     costs what it always did. The two callers inside
+#     DidChangeVisibilityState() that happened to go through hidden() are
+#     moved onto IsPageVisible() so they keep seeing the truth too.
+#   * Only on the way out. Becoming visible is always announced, so a page
+#     that paused itself for reasons of its own still learns the user is
+#     back, and a page that is being unloaded is told the truth throughout.
+DOCUMENT_CC=third_party/blink/renderer/core/dom/document.cc
+
+sed_i 's|#include "third_party/blink/renderer/platform/scheduler/public/frame_or_worker_scheduler.h"|&\n#include "third_party/blink/renderer/platform/scheduler/public/page_scheduler.h"|' \
+    $DOCUMENT_CC
+
+sed_i 's|^V8VisibilityState Document::visibilityState() const {$|namespace {\n\n// Aerium: whether this document should be told it is visible when it is not.\n// True for a backgrounded page that is still playing sound to someone. See\n// theme.sh for why the test is drawn exactly here.\nbool AeriumAudibleInBackground(const Document\& document) {\n  if (document.IsPageVisible() \|\| document.UnloadStarted()) {\n    return false;\n  }\n  LocalFrame* frame = document.GetFrame();\n  if (!frame \|\| !frame->GetPage()) {\n    return false;\n  }\n  PageScheduler* page_scheduler = frame->GetPage()->GetPageScheduler();\n  return page_scheduler \&\& page_scheduler->IsAudioPlaying();\n}\n\n}  // namespace\n\n&|' \
+    $DOCUMENT_CC
+
+sed_i 's|^  return !IsPageVisible();$|  // Aerium: audible in the background counts as visible - see theme.sh.\n  if (AeriumAudibleInBackground(*this)) {\n    return false;\n  }\n&|' \
+    $DOCUMENT_CC
+
+sed_i '/^  DispatchEvent(\*Event::CreateBubble(event_type_names::kVisibilitychange));$/,/^      \*Event::CreateBubble(event_type_names::kWebkitvisibilitychange));$/c\
+  // Aerium: a page that went to the background while playing sound has been\
+  // told it is still visible, so the event that would contradict that is\
+  // withheld. Becoming visible is always announced. See theme.sh.\
+  if (!AeriumAudibleInBackground(*this)) {\
+    DispatchEvent(*Event::CreateBubble(event_type_names::kVisibilitychange));\
+    // Also send out the deprecated version until it can be removed.\
+    DispatchEvent(\
+        *Event::CreateBubble(event_type_names::kWebkitvisibilitychange));\
+  }' \
+    $DOCUMENT_CC
+
+# The two internal readers below wanted the real state and only used hidden()
+# because it was the shorter spelling; point them at the source instead.
+sed_i 's|^  if (hidden() && canvas_font_cache_)$|  if (!IsPageVisible() \&\& canvas_font_cache_)|' \
+    $DOCUMENT_CC
+
+sed_i 's|^    interactive_detector->OnPageHiddenChanged(hidden());$|    interactive_detector->OnPageHiddenChanged(!IsPageVisible());|' \
+    $DOCUMENT_CC
+
 # --- HTTPS-First Balanced Mode by default: upgrades navigations to HTTPS
 # when a site is expected to support it, without the disruptive full-site
 # interstitials of strict HTTPS-Only Mode. Stock Chromium ships this off,

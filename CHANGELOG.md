@@ -38,6 +38,14 @@ behind any of this.
   off. Chromium suspends media in a hidden page on Android; Aerium doesn't.
   Anything with sound keeps going — a muted video still pauses, since nobody is
   listening to it and running it would cost battery for a picture you can't see.
+- Sites that stop their own video when you look away now keep playing as well.
+  YouTube is the one everyone runs into: the page is told it went to the
+  background and pauses itself, which no browser setting could undo. Aerium
+  lets a page that is making sound go on believing it is still on screen, so
+  it never reaches for the pause button. This only applies while sound is
+  actually playing — a silent background tab is told the plain truth and is
+  slowed down and put to sleep exactly as before, so nothing here costs you
+  battery. No extension to install, and nothing a site can see.
 
 **Smaller download**
 
