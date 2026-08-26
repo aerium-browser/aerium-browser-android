@@ -6,8 +6,9 @@
 
 <p align="center"><i>by Dioide</i></p>
 
-[![build](https://img.shields.io/github/actions/workflow/status/aerium-browser/aerium-browser-android/build.yml?label=build)](https://github.com/aerium-browser/aerium-browser-android/actions/workflows/build.yml)
 [![release](https://img.shields.io/github/v/release/aerium-browser/aerium-browser-android)](https://github.com/aerium-browser/aerium-browser-android/releases/latest)
+[![released](https://img.shields.io/github/release-date/aerium-browser/aerium-browser-android?label=released)](https://github.com/aerium-browser/aerium-browser-android/releases/latest)
+[![downloads](https://img.shields.io/github/downloads/aerium-browser/aerium-browser-android/total?label=downloads)](https://github.com/aerium-browser/aerium-browser-android/releases)
 [![license](https://img.shields.io/badge/License-GPLv2-blue.svg)](LICENSE)
 
 Aerium is a browser for people who'd rather their browser stayed out of the way. No telemetry calling home, no ad platform baked into the settings page. Extensions — including Manifest V2 — install straight from the Chrome Web Store, something most Android browsers still can't do.
@@ -19,7 +20,7 @@ Aerium is a browser for people who'd rather their browser stayed out of the way.
 - **Extensions that actually work.** Manifest V2 support and Chrome Web Store access, plus Opera and Microsoft Edge add-on stores. Load an unpacked extension manually if you need to.
 - **Your password manager, working properly.** Android's own autofill framework is on by default, so Bitwarden and similar apps fill forms natively instead of falling back to flaky accessibility tricks.
 - **Search that works from the first keystroke.** Startpage is the default engine, with DuckDuckGo, DuckDuckGo Lite, DuckDuckGo HTML, and SearXNG ready to pick in Settings — and any other engine addable by hand.
-- **Its own name, its own icon — your own colors.** Dynamic color from your wallpaper and the light/dark toggle work exactly like stock Android Chrome; nothing forces a palette on top of it.
+- **Its own look, and a true-black dark mode.** Aerium ships its own palette instead of taking colours from your wallpaper. Dark mode can go fully black — on an OLED screen a black pixel is switched off and draws no power — with separate switches for the browser itself and for web pages under **Settings → Appearance → Theme**.
 - **Safe Browsing off by default.** It's the one Android feature that phones home to Google on every page you visit. Turn it back on in Settings if you want it.
 - **Lighter by default.** Background network chatter — hint prefetching, the Discover feed's background refresh, domain reliability pings — is off out of the box. The name comes from aerogel, the lightest solid there is.
 - **HTTPS by default.** Balanced Mode upgrades navigations to HTTPS automatically, without the disruptive full-site warnings of strict HTTPS-only enforcement.
@@ -41,6 +42,16 @@ Open the [Chrome Web Store](https://chromewebstore.google.com/), switch on **Des
 Opera and Microsoft Edge add-on stores work too. To load an unpacked extension, open **Manage extensions** (`chrome://extensions`), enable **Developer mode**, and choose **Load unpacked**.
 
 Pin an extension's icon to the toolbar from the <kbd>⋮</kbd> menu next to it in the extensions list to reach its popup directly. To allow one in Incognito, go to **Manage extensions → Details** and enable **Allow in Incognito**.
+
+## Why the download is large
+
+The APK is around 300 MB, which is bigger than most browsers. Two reasons, both deliberate.
+
+**Extensions.** Supporting Chrome Web Store extensions on Android means building Chromium's *desktop* browser for Android rather than its phone build, and that carries the whole extension system and desktop UI layer with it. The browser engine alone is roughly 218 MB of the APK. Almost no other Android browser offers extensions; this is what it costs.
+
+**The engine isn't compressed inside the package.** Android can map an uncompressed library straight out of the APK, which starts faster and avoids keeping a second unpacked copy on your device. Compressing it would roughly halve the download and give up both. It also means the installed size is close to the download size rather than double it.
+
+What Aerium does cut is anything it isn't using — around 20 MB of Android XR and ARCore libraries that Chromium packs in by default for features Aerium disables.
 
 ## Other things worth knowing
 

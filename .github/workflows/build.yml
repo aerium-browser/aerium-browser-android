@@ -520,6 +520,13 @@ jobs:
     steps:
       - name: Verify build finished
         run: echo "Build finished - publishing the Aerium APK."
+      # Only for CHANGELOG.md. No submodules and no history: the release notes
+      # come from a file in the tree, not from the git log, precisely so that
+      # what users read is written for them rather than assembled from commit
+      # subjects.
+      - uses: actions/checkout@v5
+        with:
+          submodules: false
       - name: Download APK artifact
         uses: actions/download-artifact@v8
         with:
@@ -538,6 +545,25 @@ jobs:
           cd release
           sha256sum aerium-*-arm64-v8a.apk > SHA256SUMS.txt
           cat SHA256SUMS.txt
+      # The section of CHANGELOG.md for this version, if it has one. Written in
+      # plain language and kept in the tree so it is reviewed like any other
+      # change; GitHub's generated commit list still follows underneath it for
+      # anyone who wants the detail. A version with no section publishes with
+      # just the generated list rather than failing the release.
+      - name: Compose release notes
+        id: notes
+        run: |
+          set -euo pipefail
+          V="${{ steps.ver.outputs.version }}"
+          awk -v v="$V" 'BEGIN{f=0} /^## /{ if (f) exit; if ($2 == v) { f=1; next } } f' \
+            CHANGELOG.md > /tmp/notes.md || true
+          if [ -s /tmp/notes.md ]; then
+            echo "Using the CHANGELOG.md section for $V:"
+            cat /tmp/notes.md
+          else
+            echo "No CHANGELOG.md section for $V - publishing with generated notes only."
+          fi
+
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
@@ -550,6 +576,7 @@ jobs:
           token: ${{ secrets.RELEASE_TOKEN || github.token }}
           tag_name: v${{ steps.ver.outputs.version }}
           name: Aerium ${{ steps.ver.outputs.version }} (arm64)
+          body_path: /tmp/notes.md
           generate_release_notes: true
           fail_on_unmatched_files: true
           files: |
