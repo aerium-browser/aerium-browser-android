@@ -947,6 +947,46 @@ sed_i 's|^        // Aerium: see theme.sh. The Activity path applies this too; a
 sed_i '/^  xr_module_desc,$/d' \
     chrome/android/modules/chrome_feature_modules.gni
 
+# --- Keep media playing when the browser goes to the background.
+#
+# Chromium suspends media in a hidden page on Android. The path is
+# WebMediaPlayerImpl::ShouldPausePlaybackWhenHidden(), which ends in
+#
+#     if (IsBackgroundSuspendEnabled(this)) {
+#       return !preserve_audio || (IsResumeBackgroundVideosEnabled() &&
+#                                  !allow_background_video_playback_);
+#     }
+#     ...
+#     return !preserve_audio;
+#
+# and IsBackgroundSuspendEnabled() is exactly one command-line switch away
+# from false:
+#
+#     bool IsBackgroundSuspendEnabled(const WebMediaPlayerImpl* wmpi) {
+#       if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+#               switches::kDisableBackgroundMediaSuspend)) {
+#         return false;
+#       }
+#       return wmpi->IsBackgroundMediaSuspendEnabled();
+#     }
+#
+# With it set, a hidden player falls through to `return !preserve_audio` and
+# anything with unmuted audio keeps playing. A muted video still pauses, which
+# is the right answer - nobody is listening to it, and letting it run would
+# burn battery for a picture no one can see.
+#
+# A switch rather than a feature this time, and unusually it needs no plumbing:
+# the value is read in the renderer, and content/browser/renderer_host/
+# render_process_host_impl.cc already carries kDisableBackgroundMediaSuspend in
+# the kSwitchNames list it copies from the browser command line into every
+# renderer it spawns. Appending it before native starts is enough.
+#
+# No setting for it. "Media keeps playing" is what a browser should do; making
+# it optional would mean shipping the wrong behaviour by default and hoping
+# people find the switch.
+sed_i 's|            FontPreloader.getInstance().load(getApplication());|&\n\n            // Aerium: media keeps playing when the browser is backgrounded or\n            // the screen goes off - see theme.sh. Read in the renderer, and\n            // forwarded there by content on its own, so setting it here is\n            // the whole change.\n            CommandLine.getInstance().appendSwitch("disable-background-media-suspend");|' \
+    $CAI
+
 # --- HTTPS-First Balanced Mode by default: upgrades navigations to HTTPS
 # when a site is expected to support it, without the disruptive full-site
 # interstitials of strict HTTPS-Only Mode. Stock Chromium ships this off,

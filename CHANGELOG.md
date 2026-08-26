@@ -32,6 +32,13 @@ behind any of this.
   effect on a restart, and previously nothing said so, which made them look
   broken.
 
+**Media keeps playing**
+
+- Video and audio no longer stop when you leave the browser or the screen turns
+  off. Chromium suspends media in a hidden page on Android; Aerium doesn't.
+  Anything with sound keeps going — a muted video still pauses, since nobody is
+  listening to it and running it would cost battery for a picture you can't see.
+
 **Smaller download**
 
 - About 20 MB lighter. Chromium packs in Android XR and ARCore libraries by
