@@ -800,6 +800,73 @@ sed_i 's|^    "//chrome/browser/settings:java",$|    "//chrome/browser/lifetime/
 sed_i 's|^      <message name="IDS_AERIUM_BLACKEN_DARK_SITES_TITLE" desc=|      <message name="IDS_AERIUM_RESTART_TO_APPLY" desc="Text of the bar shown after changing an appearance setting that only takes effect once the browser has been restarted.">\n        Restart Aerium to apply this change\n      </message>\n      <message name="IDS_AERIUM_RELAUNCH" desc="Button on that bar which closes and reopens the browser.">\n        Relaunch\n      </message>\n&|' \
     chrome/browser/ui/android/strings/android_chrome_strings.grd
 
+# --- Incognito follows the pure black switch too.
+#
+# ChromeColors reaches for a fixed baseline colour whenever isIncognito is set,
+# in three places:
+#
+#     return isIncognito
+#             ? context.getColor(R.color.default_bg_color_dark)
+#             : SemanticColorUtils.getDefaultBgColor(context);
+#
+# The second branch resolves the default_bg_color macro to ?attr/colorSurface,
+# which is what the overlay above replaces - so normal tabs go black. The first
+# branch is a colour resource and deliberately ignores the dynamic palette, so
+# that incognito looks the same on every device. That also puts it out of reach
+# of the overlay, leaving incognito on Chromium's dark grey while every other
+# surface is black.
+#
+# So the overlay names a colour for it, and ChromeColors reads that instead.
+# Read defensively rather than through MaterialColors.getColor: the attribute
+# only exists while the overlay is applied, and these three are called with
+# whatever context the caller has - including ones themed from outside
+# browser_ui. Missing attribute means the upstream colour, exactly as before,
+# rather than an exception.
+#
+# It follows the switch, and with it the night-mode gate: incognito in a light
+# theme keeps its grey. That is the same rule the rest of the overlay follows
+# and a browser being run for its OLED behaviour is not in a light theme.
+sed_i 's|    <!-- Aerium: see theme.sh. Pure black for OLED panels. -->|    <!-- Aerium: set by the overlay below and read by ChromeColors, so that\n         incognito - which ignores the dynamic palette by design - follows the\n         pure black switch as well. Absent whenever the overlay is not\n         applied, which is what makes the fallback there the upstream colour. -->\n    <attr name="aeriumIncognitoBgColor" format="color" />\n\n&|' \
+    components/browser_ui/styles/android/java/res/values/themes.xml
+sed_i 's|        <item name="colorSurfaceContainerHighest">@android:color/black</item>|&\n        <item name="aeriumIncognitoBgColor">@android:color/black</item>|' \
+    components/browser_ui/styles/android/java/res/values/themes.xml
+
+CC=components/browser_ui/styles/android/java/src/org/chromium/components/browser_ui/styles/ChromeColors.java
+sed_i 's|^import android.content.res.ColorStateList;$|&\nimport android.util.TypedValue;|' $CC
+sed_i 's|^    private static final String TAG = "ChromeColors";$|&\n\n    /**\n     * Aerium: the incognito colour named by the pure black overlay, or {@code\n     * fallbackColorRes} when that overlay is not on this context'"'"'s theme. See\n     * theme.sh.\n     */\n    private static @ColorInt int incognitoSurfaceColor(\n            Context context, @ColorRes int fallbackColorRes) {\n        TypedValue value = new TypedValue();\n        if (context.getTheme().resolveAttribute(R.attr.aeriumIncognitoBgColor, value, true)\n                \&\& value.type >= TypedValue.TYPE_FIRST_COLOR_INT\n                \&\& value.type <= TypedValue.TYPE_LAST_COLOR_INT) {\n            return value.data;\n        }\n        return context.getColor(fallbackColorRes);\n    }|' \
+    $CC
+sed_i 's|^                ? context.getColor(R.color.toolbar_background_incognito)$|                ? incognitoSurfaceColor(context, R.color.toolbar_background_incognito)|' $CC
+sed_i 's|^                ? context.getColor(R.color.default_bg_color_dark)$|                ? incognitoSurfaceColor(context, R.color.default_bg_color_dark)|' $CC
+sed_i 's|^            return context.getColor(R.color.default_bg_color_dark);$|            return incognitoSurfaceColor(context, R.color.default_bg_color_dark);|' $CC
+
+# --- The same overlay on the pre-inflated toolbar.
+#
+# There are two applyThemeOverlays in the tree. The one above, on
+# ChromeBaseAppCompatActivity, is the one every Activity runs. WarmupManager
+# has its own - its own TODO admits the duplication - and it applies only the
+# elegant-text-height and font-family overlays, because those were all it ever
+# needed.
+#
+# WarmupManager inflates the toolbar hierarchy before an Activity exists, and
+# where that pre-inflated hierarchy is taken up - Custom Tabs in particular -
+# its views resolve colours against the warmup context, which has no pure black
+# overlay on it. The result is a grey toolbar over black content on exactly the
+# launches the warmup path is there to speed up.
+#
+# The night-mode state comes from the global provider rather than the context
+# Configuration, because the app'"'"'s own light/dark choice does not reach an
+# application context'"'"'s Configuration - only the system setting does, and the
+# two disagree whenever someone has set the browser to Dark on a light phone.
+#
+# Applied first here rather than last, unlike the Activity path. The two
+# overlays beside it set text attributes and nothing about surfaces, so there
+# is no ordering to preserve.
+WM=chrome/android/java/src/org/chromium/chrome/browser/WarmupManager.java
+sed_i 's|^import org.chromium.chrome.browser.flags.ChromeFeatureList;$|&\nimport org.chromium.chrome.browser.night_mode.GlobalNightModeStateProviderHolder;\nimport org.chromium.chrome.browser.preferences.ChromePreferenceKeys;\nimport org.chromium.chrome.browser.preferences.ChromeSharedPreferences;|' \
+    $WM
+sed_i 's|^    static void applyThemeOverlays(Context context) {$|&\n        // Aerium: see theme.sh. The Activity path applies this too; a view\n        // inflated here is themed before any Activity exists, so it has to be\n        // applied on both or a warm start comes up grey.\n        if (GlobalNightModeStateProviderHolder.getInstance().isInNightMode()\n                \&\& ChromeSharedPreferences.getInstance()\n                        .readBoolean(ChromePreferenceKeys.AERIUM_PURE_BLACK, true)) {\n            context.getTheme().applyStyle(R.style.ThemeOverlay_BrowserUI_AeriumPureBlack, true);\n        }\n|' \
+    $WM
+
 # --- HTTPS-First Balanced Mode by default: upgrades navigations to HTTPS
 # when a site is expected to support it, without the disruptive full-site
 # interstitials of strict HTTPS-Only Mode. Stock Chromium ships this off,
