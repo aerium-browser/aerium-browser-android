@@ -615,7 +615,7 @@ sed_i 's|^import org.chromium.chrome.browser.preferences.ChromeSharedPreferences
     $TSF
 sed_i 's|^import org.chromium.components.browser_ui.settings.CustomDividerFragment;$|import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;\n&|' \
     $TSF
-sed_i 's|^        // TODO(crbug.com/40198953): Notify feature engagement system that settings were opened.$|        // Aerium: pure black surfaces. Stored in shared preferences rather than\n        // a profile pref because it is read in Activity.onCreate, before the\n        // profile is available. Default on: it only takes effect in dark mode,\n        // which the user has already chosen, and a battery feature nobody finds\n        // is not one.\n        ChromeSwitchPreference pureBlack =\n                (ChromeSwitchPreference) findPreference("aerium_pure_black");\n        if (pureBlack != null) {\n            pureBlack.setChecked(\n                    sharedPreferencesManager.readBoolean(\n                            ChromePreferenceKeys.AERIUM_PURE_BLACK, true));\n            pureBlack.setOnPreferenceChangeListener(\n                    (preference, newValue) -> {\n                        sharedPreferencesManager.writeBoolean(\n                                ChromePreferenceKeys.AERIUM_PURE_BLACK, (boolean) newValue);\n                        // Surfaces are chosen when an Activity is themed, so the\n                        // change lands on the next one rather than repainting this\n                        // screen underneath the switch that just moved.\n                        return true;\n                    });\n        }\n\n&|' \
+sed_i 's|^        // TODO(crbug.com/40198953): Notify feature engagement system that settings were opened.$|        // Aerium: pure black surfaces. Stored in shared preferences rather than\n        // a profile pref because it is read in Activity.onCreate, before the\n        // profile is available. Default on: it only takes effect in dark mode,\n        // which the user has already chosen, and a battery feature nobody finds\n        // is not one.\n        ChromeSwitchPreference pureBlack =\n                (ChromeSwitchPreference) findPreference("aerium_pure_black");\n        if (pureBlack != null) {\n            pureBlack.setChecked(\n                    sharedPreferencesManager.readBoolean(\n                            ChromePreferenceKeys.AERIUM_PURE_BLACK, true));\n            pureBlack.setOnPreferenceChangeListener(\n                    (preference, newValue) -> {\n                        sharedPreferencesManager.writeBoolean(\n                                ChromePreferenceKeys.AERIUM_PURE_BLACK, (boolean) newValue);\n                        // Surfaces are chosen when an Activity is themed, so the\n                        // change lands on the next one rather than repainting this\n                        // screen underneath the switch that just moved.\n                        showRestartSnackbar();\n                        return true;\n                    });\n        }\n\n&|' \
     $TSF
 
 # The overlay is applied per Activity. applyThemeOverlays() runs inside
@@ -720,10 +720,84 @@ sed_i 's|            FontPreloader.getInstance().load(getApplication());|&\n\n  
 sed_i 's|^</PreferenceScreen>$|    <org.chromium.components.browser_ui.settings.ChromeSwitchPreference\n        android:key="aerium_blacken_dark_sites"\n        android:title="@string/aerium_blacken_dark_sites_title"\n        android:summary="@string/aerium_blacken_dark_sites_summary" />\n&|' \
     chrome/browser/ui/android/night_mode/java/res/xml/theme_preferences.xml
 
-sed_i 's|^        // TODO(crbug.com/40198953): Notify feature engagement system that settings were opened.$|        ChromeSwitchPreference blackenDarkSites =\n                (ChromeSwitchPreference) findPreference("aerium_blacken_dark_sites");\n        if (blackenDarkSites != null) {\n            blackenDarkSites.setChecked(\n                    sharedPreferencesManager.readBoolean(\n                            ChromePreferenceKeys.AERIUM_BLACKEN_DARK_SITES, false));\n            blackenDarkSites.setOnPreferenceChangeListener(\n                    (preference, newValue) -> {\n                        sharedPreferencesManager.writeBoolean(\n                                ChromePreferenceKeys.AERIUM_BLACKEN_DARK_SITES,\n                                (boolean) newValue);\n                        return true;\n                    });\n        }\n\n&|' \
+sed_i 's|^        // TODO(crbug.com/40198953): Notify feature engagement system that settings were opened.$|        ChromeSwitchPreference blackenDarkSites =\n                (ChromeSwitchPreference) findPreference("aerium_blacken_dark_sites");\n        if (blackenDarkSites != null) {\n            blackenDarkSites.setChecked(\n                    sharedPreferencesManager.readBoolean(\n                            ChromePreferenceKeys.AERIUM_BLACKEN_DARK_SITES, false));\n            blackenDarkSites.setOnPreferenceChangeListener(\n                    (preference, newValue) -> {\n                        sharedPreferencesManager.writeBoolean(\n                                ChromePreferenceKeys.AERIUM_BLACKEN_DARK_SITES,\n                                (boolean) newValue);\n                        showRestartSnackbar();\n                        return true;\n                    });\n        }\n\n&|' \
     $TSF
 
 sed_i 's|^      <message name="IDS_AERIUM_PURE_BLACK_TITLE" desc=|      <message name="IDS_AERIUM_BLACKEN_DARK_SITES_TITLE" desc="Title of the switch that also blackens websites which already have their own dark theme.">\n        Blacken dark sites\n      </message>\n      <message name="IDS_AERIUM_BLACKEN_DARK_SITES_SUMMARY" desc="Summary under the Blacken dark sites switch. Mentions that a restart is needed.">\n        Also use true black on sites that have their own dark theme, instead of their dark grey. Restart Aerium to apply.\n      </message>\n&|' \
+    chrome/browser/ui/android/strings/android_chrome_strings.grd
+
+# --- Make the blacken switch reach sites that ship their own dark theme.
+#
+# The switch above did nothing on YouTube or Reddit, and the reason sits
+# upstream of the filter rather than in it. ComputedStyle::ForceDark() is
+#
+#     DarkColorScheme() && ColorSchemeForced()
+#
+# and ComputedStyleBuilder::SetUsedColorScheme computes the second as
+#
+#     forced_scheme = (!has_dark && dark_scheme) || (force_dark && !prefers_dark)
+#
+# A site that declares color-scheme: dark, read with night mode on, has both
+# has_dark and prefers_dark true, so neither clause fires - the scheme is dark
+# because the page asked for it, not because we forced it. ForceDark() is
+# false, DarkModeFilter is never consulted, and the clamp above never runs.
+#
+# A site with no color-scheme declaration has has_dark false, so the first
+# clause fires and the clamp does run. That is exactly the split observed:
+# eksisozluk went black, YouTube and Reddit kept their own grey.
+#
+# So when the setting is on, a dark scheme counts as forced even where the page
+# chose it, which is what puts the filter in the paint path. Gated on
+# force_dark too, so "Darken websites" being off still switches all of this off
+# rather than leaving the filter running by itself.
+#
+# ColorSchemeForced() has exactly one reader in the tree - ForceDark() - so
+# nothing else about how the page is styled changes.
+CSTYLE=third_party/blink/renderer/core/style/computed_style.cc
+sed_i 's|#include "third_party/blink/renderer/platform/graphics/graphics_context.h"|#include "third_party/blink/renderer/platform/graphics/dark_mode_settings_builder.h"\n&|' \
+    $CSTYLE
+sed_i 's|^  SetColorSchemeForced(forced_scheme);$|  // Aerium: see theme.sh. A page that ships its own dark theme is skipped by\n  // force dark, which is where the blacken switch lives, so treat its dark\n  // scheme as forced when that switch is on.\n  if (force_dark \&\& dark_scheme \&\&\n      GetCurrentDarkModeSettings().blacken_dark_backgrounds) {\n    forced_scheme = true;\n  }\n\n&|' \
+    $CSTYLE
+
+# Engaging force dark on a page that is already dark means its images go
+# through the filter too, and those are the one thing on such a page that is
+# not meant to be darkened - a photo on YouTube is already the right colour.
+# The classifier would leave photographs alone (ShouldApplyFilterToImage only
+# accepts kIcon and kSeparator), but icons drawn on a dark page are light and
+# inverting them would be wrong, so images are skipped outright. Chromium has
+# the same switch for its own reasons in AutoDarkModeSkipImages; this reuses
+# that exit rather than adding a second one.
+sed_i 's|  if (RuntimeEnabledFeatures::AutoDarkModeSkipImagesEnabled()) {|  // Aerium: see theme.sh - never filter images when blackening dark sites.\n  if (immutable_.blacken_dark_backgrounds \|\|\n      RuntimeEnabledFeatures::AutoDarkModeSkipImagesEnabled()) {|' $DMF
+
+# --- Tell the user a restart is needed, and offer to do it.
+#
+# Neither switch can take effect where it is flipped. Pure black is chosen when
+# an Activity is themed, so it lands on the next one; blacken dark sites is a
+# command-line feature the renderer reads once at process start. Leaving that
+# to a line of summary text means the setting looks broken until the user
+# happens to restart.
+#
+# A snackbar rather than a dialog, and the relaunch on a button rather than
+# automatic: restarting the browser out from under someone who was mid-session
+# to apply a colour preference is worse than the wrong colour for a minute.
+sed_i 's|^import android.content.Context;$|import android.app.Activity;\n&|' $TSF
+sed_i 's|^import org.chromium.chrome.browser.settings.ChromeBaseSettingsFragment;$|&\nimport org.chromium.chrome.browser.lifetime.ApplicationLifetime;\nimport org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;\nimport org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;\nimport org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager.SnackbarManageable;|' \
+    $TSF
+sed_i '/^    @Override$/{N;s|^    @Override\n    public void onCreatePreferences|    // Aerium: see theme.sh. Long enough to read and act on. The instanceof is\n    // not defensive padding - this fragment is reachable from more than one\n    // host, and only a SnackbarManageable one can show it; the interface\n    // itself promises a non-null manager, so there is nothing further to\n    // check.\n    private static final int RESTART_SNACKBAR_DURATION_MS = 10000;\n\n    private void showRestartSnackbar() {\n        Activity activity = getActivity();\n        if (!(activity instanceof SnackbarManageable)) return;\n        SnackbarManager manager = ((SnackbarManageable) activity).getSnackbarManager();\n        manager.showSnackbar(\n                Snackbar.make(\n                                getString(R.string.aerium_restart_to_apply),\n                                new SnackbarManager.SnackbarController() {\n                                    @Override\n                                    public void onAction(@Nullable Object actionData) {\n                                        ApplicationLifetime.terminate(true);\n                                    }\n                                },\n                                Snackbar.TYPE_ACTION,\n                                Snackbar.UMA_UNKNOWN)\n                        .setAction(getString(R.string.aerium_relaunch), null)\n                        .setDuration(RESTART_SNACKBAR_DURATION_MS));\n    }\n\n    @Override\n    public void onCreatePreferences|}' \
+    $TSF
+
+# The snackbar and the restart come from targets night_mode did not depend on.
+# Neither depends back on night_mode, so this adds no cycle.
+#
+# Both go in at the settings:java line because it is the only dep in this file
+# that appears once - flags:java and preferences:java are each repeated in the
+# two test targets, and sed would have added the dep to those as well. It
+# leaves lifetime one line out of alphabetical order, which gn build does not
+# mind; only `gn format` would, and nothing in this pipeline runs it.
+sed_i 's|^    "//chrome/browser/settings:java",$|    "//chrome/browser/lifetime/android:java",\n&\n    "//chrome/browser/ui/messages/android:java",|' \
+    chrome/browser/ui/android/night_mode/BUILD.gn
+
+sed_i 's|^      <message name="IDS_AERIUM_BLACKEN_DARK_SITES_TITLE" desc=|      <message name="IDS_AERIUM_RESTART_TO_APPLY" desc="Text of the bar shown after changing an appearance setting that only takes effect once the browser has been restarted.">\n        Restart Aerium to apply this change\n      </message>\n      <message name="IDS_AERIUM_RELAUNCH" desc="Button on that bar which closes and reopens the browser.">\n        Relaunch\n      </message>\n&|' \
     chrome/browser/ui/android/strings/android_chrome_strings.grd
 
 # --- HTTPS-First Balanced Mode by default: upgrades navigations to HTTPS
