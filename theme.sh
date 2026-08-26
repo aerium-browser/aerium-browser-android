@@ -913,6 +913,40 @@ sed_i '/^import com\.google\.android\.material\.color\.DynamicColors;$/d' $CBACA
 sed_i 's|^        // Aerium: see theme.sh. The Activity path applies this too; a view$|        // Aerium: the brand palette, ahead of the black one so black still\n        // wins on surfaces. See theme.sh.\n        context.getTheme()\n                .applyStyle(\n                        GlobalNightModeStateProviderHolder.getInstance().isInNightMode()\n                                ? R.style.ThemeOverlay_BrowserUI_AeriumBrandDark\n                                : R.style.ThemeOverlay_BrowserUI_AeriumBrandLight,\n                        /* force= */ true);\n\n&|' \
     $WM
 
+# --- Drop the XR feature module. Worth ~20 MB of the APK, for a feature four
+# separate gn args already turn off.
+#
+# args.gn sets enable_vr, enable_arcore, enable_openxr and enable_cardboard all
+# false, and the shipped APK nevertheless contains:
+#
+#     18.64 MB  lib/arm64-v8a/libimpress_api_jni.so
+#      0.70 MB  lib/arm64-v8a/libandroidx.xr.arcore.openxr.so
+#      0.56 MB  lib/arm64-v8a/libandroidx.xr.runtime.openxr.so
+#      0.10 MB  lib/arm64-v8a/libarcore_sdk_jni.so
+#      0.07 MB  lib/arm64-v8a/libarcore_sdk_c.so
+#
+# measured off the central directory of the published 152.0.7977.54 build.
+#
+# Those five names appear in exactly one place in the tree - the
+# loadable_modules_64_bit list of xr_module_desc - and they arrive as a dynamic
+# feature module rather than as ordinary deps, which is why the gn args do not
+# reach them: the args gate Chromium's own XR code, while the module carries
+# prebuilt AARs (androidx.xr, Google's impress, the ARCore client). A bundle
+# would deliver that module on demand; a monolithic APK packs it in
+# unconditionally.
+#
+# So the module is removed from the list the APK is built from. chrome_java
+# keeps its :xr_java dependency, which is only the module-installer bridge and
+# pulls none of the AARs, so nothing stops compiling; at runtime the module is
+# simply not installed, which is a state the installer already handles because
+# it is the normal state for a DFM.
+#
+# Nothing here affects startup. It removes code that was never loaded - four
+# args say the features behind it are off - and a smaller APK is marginally
+# kinder to page cache, not worse.
+sed_i '/^  xr_module_desc,$/d' \
+    chrome/android/modules/chrome_feature_modules.gni
+
 # --- HTTPS-First Balanced Mode by default: upgrades navigations to HTTPS
 # when a site is expected to support it, without the disruptive full-site
 # interstitials of strict HTTPS-Only Mode. Stock Chromium ships this off,
