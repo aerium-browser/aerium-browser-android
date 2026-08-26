@@ -703,7 +703,7 @@ sed_i 's|    sk_sp<cc::ColorFilter> image_filter;|&\n    // Aerium: see theme.sh
 
 DMF=third_party/blink/renderer/platform/graphics/dark_mode_filter.cc
 sed_i 's|  image_classifier = std::make_unique<DarkModeImageClassifier>();|&\n  blacken_dark_backgrounds = settings.blacken_dark_backgrounds;|' $DMF
-sed_i '/^SkColor4f DarkModeFilter::InvertColorIfNeeded(const SkColor4f\& color,$/{N;s|                                              ElementRole role) {|                                              ElementRole role) {\n  // Aerium: a site with its own dark theme is skipped by the classifier and\n  // keeps its own grey, which still lights every pixel on OLED. Take a\n  // background that is already near black the rest of the way down. Checked\n  // before the classifier because a colour this dark is one it would decline\n  // to invert anyway.\n  if (immutable_.blacken_dark_backgrounds \&\& role == ElementRole::kBackground) {\n    constexpr float kNearBlack = 48.0f / 255.0f;\n    if (color.fR < kNearBlack \&\& color.fG < kNearBlack \&\&\n        color.fB < kNearBlack) {\n      return SkColor4f{0.0f, 0.0f, 0.0f, color.fA};\n    }\n  }\n|}' $DMF
+sed_i '/^SkColor4f DarkModeFilter::InvertColorIfNeeded(const SkColor4f\& color,$/{N;s|                                              ElementRole role) {|                                              ElementRole role) {\n  // Aerium: take a background that is already near black the rest of the way\n  // down. Checked before the classifier because a colour this dark is one it\n  // would decline to invert anyway.\n  //\n  // Ungated on purpose. AdjustGray, which the colour filter applies after\n  // inverting, only touches NEUTRAL greys - it tests IsWithinEpsilon on the\n  // channels - so a page with a tinted background inverts to a tinted near\n  // black and keeps the cast, while a white page goes to true black. Same\n  // switch, two different answers. This tests the channels independently, so\n  // it catches both. It runs only when force dark is running at all, which is\n  // to say only when the user asked for darkening.\n  if (role == ElementRole::kBackground) {\n    constexpr float kNearBlack = 48.0f / 255.0f;\n    if (color.fR < kNearBlack \&\& color.fG < kNearBlack \&\&\n        color.fB < kNearBlack) {\n      return SkColor4f{0.0f, 0.0f, 0.0f, color.fA};\n    }\n  }\n|}' $DMF
 
 # The key, the startup hook and the switch.
 sed_i 's|    public static final String FIRST_RUN_FLOW_COMPLETE = "first_run_flow";|    /** Whether Aerium blackens sites that ship their own dark theme. */\n    public static final String AERIUM_BLACKEN_DARK_SITES = "Chrome.Aerium.BlackenDarkSites";\n\n&|' \
@@ -723,7 +723,7 @@ sed_i 's|^</PreferenceScreen>$|    <org.chromium.components.browser_ui.settings.
 sed_i 's|^        // TODO(crbug.com/40198953): Notify feature engagement system that settings were opened.$|        ChromeSwitchPreference blackenDarkSites =\n                (ChromeSwitchPreference) findPreference("aerium_blacken_dark_sites");\n        if (blackenDarkSites != null) {\n            blackenDarkSites.setChecked(\n                    sharedPreferencesManager.readBoolean(\n                            ChromePreferenceKeys.AERIUM_BLACKEN_DARK_SITES, false));\n            blackenDarkSites.setOnPreferenceChangeListener(\n                    (preference, newValue) -> {\n                        sharedPreferencesManager.writeBoolean(\n                                ChromePreferenceKeys.AERIUM_BLACKEN_DARK_SITES,\n                                (boolean) newValue);\n                        showRestartSnackbar();\n                        return true;\n                    });\n        }\n\n&|' \
     $TSF
 
-sed_i 's|^      <message name="IDS_AERIUM_PURE_BLACK_TITLE" desc=|      <message name="IDS_AERIUM_BLACKEN_DARK_SITES_TITLE" desc="Title of the switch that also blackens websites which already have their own dark theme.">\n        Blacken dark sites\n      </message>\n      <message name="IDS_AERIUM_BLACKEN_DARK_SITES_SUMMARY" desc="Summary under the Blacken dark sites switch. Mentions that a restart is needed.">\n        Also use true black on sites that have their own dark theme, instead of their dark grey. Restart Aerium to apply.\n      </message>\n&|' \
+sed_i 's|^      <message name="IDS_AERIUM_PURE_BLACK_TITLE" desc=|      <message name="IDS_AERIUM_BLACKEN_DARK_SITES_TITLE" desc="Title of the switch that also blackens websites which already have their own dark theme.">\n        Blacken dark sites\n      </message>\n      <message name="IDS_AERIUM_BLACKEN_DARK_SITES_SUMMARY" desc="Summary under the Blacken dark sites switch. Mentions that a restart is needed.">\n        Extend darkening to sites that ship their own dark theme, so their dark grey becomes true black too. Restart Aerium to apply.\n      </message>\n&|' \
     chrome/browser/ui/android/strings/android_chrome_strings.grd
 
 # --- Make the blacken switch reach sites that ship their own dark theme.
@@ -865,6 +865,52 @@ WM=chrome/android/java/src/org/chromium/chrome/browser/WarmupManager.java
 sed_i 's|^import org.chromium.chrome.browser.flags.ChromeFeatureList;$|&\nimport org.chromium.chrome.browser.night_mode.GlobalNightModeStateProviderHolder;\nimport org.chromium.chrome.browser.preferences.ChromePreferenceKeys;\nimport org.chromium.chrome.browser.preferences.ChromeSharedPreferences;|' \
     $WM
 sed_i 's|^    static void applyThemeOverlays(Context context) {$|&\n        // Aerium: see theme.sh. The Activity path applies this too; a view\n        // inflated here is themed before any Activity exists, so it has to be\n        // applied on both or a warm start comes up grey.\n        if (GlobalNightModeStateProviderHolder.getInstance().isInNightMode()\n                \&\& ChromeSharedPreferences.getInstance()\n                        .readBoolean(ChromePreferenceKeys.AERIUM_PURE_BLACK, true)) {\n            context.getTheme().applyStyle(R.style.ThemeOverlay_BrowserUI_AeriumPureBlack, true);\n        }\n|' \
+    $WM
+
+# --- Aerium's own palette, the Android half of the desktop brand work.
+#
+# Chromium Android takes its colours from the wallpaper on Android 12 and up
+# (DynamicColors.applyToActivityIfAvailable), so the browser looks like
+# whatever picture is behind it rather than like itself. Brave does not do
+# that and neither should this: a brand that changes with the wallpaper is not
+# a brand. Below Android 12 the same call is a no-op and the baseline palette
+# shows through, so today Aerium has two different unbranded looks.
+#
+# The values are the desktop ones, unchanged, so the two platforms agree: the
+# same #2C6BAE seed, the same pale ladder in light, the same DEEP navy ladder
+# in dark that replaced the first, too-light attempt.
+#
+# Surfaces and the primary role only. On-colours, secondary, tertiary, error
+# and the outlines are left to the baseline palette, for the same reason the
+# desktop mixer leaves them to the generated one: Chromium tuned its contrast
+# against surfaces of these lightnesses, and re-deriving readability by hand
+# buys nothing. Baseline on-surface is near-black in light and near-white in
+# dark, which is right over both ladders.
+#
+# Only the wallpaper branch is replaced, not shouldApplyDynamicColors(). The
+# branch above it honours a colour the user picked for the New Tab Page, and
+# taking that away to install a brand would be answering a question nobody
+# asked. So: their choice first, ours instead of the wallpaper's.
+#
+# Dark surfaces here are what shows when Pure black is switched off. With it
+# on, the AeriumPureBlack overlay is applied after this one and takes the
+# surfaces to black, leaving the primary from here - which is the intended
+# stack: brand accent on an OLED-black ground.
+sed_i 's|^</resources>$|    <!-- Aerium: see theme.sh. The desktop palette, applied to Android. -->\n    <style name="ThemeOverlay.BrowserUI.AeriumBrandLight" parent="">\n        <item name="colorPrimary">#2C6BAE</item>\n        <item name="colorOnPrimary">#FFFFFF</item>\n        <item name="colorPrimaryContainer">#D8E6F5</item>\n        <item name="colorOnPrimaryContainer">#0B2138</item>\n        <item name="colorSurface">#F2F7FD</item>\n        <item name="colorSurfaceDim">#DCE7F4</item>\n        <item name="colorSurfaceBright">#FFFFFF</item>\n        <item name="colorSurfaceContainerLowest">#FFFFFF</item>\n        <item name="colorSurfaceContainerLow">#F7FAFE</item>\n        <item name="colorSurfaceContainer">#E9F1FB</item>\n        <item name="colorSurfaceContainerHigh">#E1ECF9</item>\n        <item name="colorSurfaceContainerHighest">#D8E6F5</item>\n    </style>\n\n    <style name="ThemeOverlay.BrowserUI.AeriumBrandDark" parent="">\n        <item name="colorPrimary">#7FC4E4</item>\n        <item name="colorOnPrimary">#06283D</item>\n        <item name="colorPrimaryContainer">#1B2A57</item>\n        <item name="colorOnPrimaryContainer">#D8E6F5</item>\n        <item name="colorSurface">#0E1834</item>\n        <item name="colorSurfaceDim">#060B16</item>\n        <item name="colorSurfaceBright">#1B2A57</item>\n        <item name="colorSurfaceContainerLowest">#060B16</item>\n        <item name="colorSurfaceContainerLow">#0A1226</item>\n        <item name="colorSurfaceContainer">#141F44</item>\n        <item name="colorSurfaceContainerHigh">#1B2A57</item>\n        <item name="colorSurfaceContainerHighest">#22376E</item>\n    </style>\n\n&|' \
+    components/browser_ui/styles/android/java/res/values/themes.xml
+
+sed_i 's|^            DynamicColors.applyToActivityIfAvailable(this);$|            // Aerium: our palette rather than the wallpaper'"'"'s - see theme.sh.\n            // Applied on every OS version, where the call it replaces did\n            // nothing below Android 12.\n            applySingleThemeOverlay(\n                    getNightModeStateProvider().isInNightMode()\n                            ? R.style.ThemeOverlay_BrowserUI_AeriumBrandDark\n                            : R.style.ThemeOverlay_BrowserUI_AeriumBrandLight);|' \
+    $CBACA
+# That was the file's only use of the DynamicColors class - the NTP branch
+# above goes through NtpCustomizationUtils - so the import has to go with it or
+# the Java build fails on an unused import.
+sed_i '/^import com\.google\.android\.material\.color\.DynamicColors;$/d' $CBACA
+
+# The pre-inflated CCT hierarchy needs it for the same reason it needed the
+# black overlay, and upstream says so itself at the top of the Activity copy:
+# "if you're adding new overlays here, it's quite likely they're needed in
+# WarmupManager". Brand first, black second, matching the Activity order.
+sed_i 's|^        // Aerium: see theme.sh. The Activity path applies this too; a view$|        // Aerium: the brand palette, ahead of the black one so black still\n        // wins on surfaces. See theme.sh.\n        context.getTheme()\n                .applyStyle(\n                        GlobalNightModeStateProviderHolder.getInstance().isInNightMode()\n                                ? R.style.ThemeOverlay_BrowserUI_AeriumBrandDark\n                                : R.style.ThemeOverlay_BrowserUI_AeriumBrandLight,\n                        /* force= */ true);\n\n&|' \
     $WM
 
 # --- HTTPS-First Balanced Mode by default: upgrades navigations to HTTPS
