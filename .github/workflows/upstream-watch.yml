@@ -172,7 +172,16 @@ jobs:
       - name: Open the bump PR
         if: steps.check.outputs.up_to_date == 'false' && steps.dedupe.outputs.exists == 'false'
         env:
-          GH_TOKEN: ${{ github.token }}
+          # RELEASE_TOKEN first, because GITHUB_TOKEN cannot open this PR. The
+          # Android watcher pushed a bump branch on 26 Aug and then failed with
+          # "GitHub Actions is not permitted to create or approve pull requests
+          # (createPullRequest)" - a repository/organisation policy no
+          # `permissions:` block can lift, so the branch sat there with nothing
+          # pointing at it. A PAT is not subject to that policy, and this repo
+          # already carries one for releases, where GITHUB_TOKEN hit its own
+          # cap. Falls back to the workflow token, so nothing changes where the
+          # policy is not in force.
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
           PINNED: ${{ steps.check.outputs.pinned }}
           LATEST: ${{ steps.check.outputs.latest }}
           OLD_CR: ${{ steps.drift.outputs.old_cr }}
