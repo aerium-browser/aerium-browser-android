@@ -83,8 +83,30 @@ jobs:
 
           # Never stack a second build on a live one. Any run that is not yet
           # completed means the chain is still healthy.
-          active=$(gh api "$RUNS?branch=main&per_page=30" \
-            --jq '[.workflow_runs[] | select(.status != "completed")] | length')
+          #
+          # Asked twice, because the run list can lag its own writes and the
+          # window that matters is precisely the narrow one. Cancelling a run
+          # and dispatching its replacement is a two-step act, and on the
+          # workflow_run path this job starts the moment step one lands: in
+          # the Linux repo run 32935653134 was cancelled at 06:11:5x, its
+          # replacement was created at 06:12:00, and the equivalent check
+          # there ran at 06:12:01 and saw nothing active. A second look after
+          # a pause covers a replacement made alongside the cancellation. It
+          # costs 30 seconds only when nothing is running at all, which on a
+          # schedule tick is the quiet case and on the event path is the case
+          # where the build has already stopped.
+          active=0
+          for attempt in 1 2; do
+            if [ "$attempt" -eq 2 ]; then
+              echo "Nothing active yet - looking again in 30s in case a build is still registering."
+              sleep 30
+            fi
+            active=$(gh api "$RUNS?branch=main&per_page=30" \
+              --jq '[.workflow_runs[] | select(.status != "completed")] | length')
+            if [ "$active" -gt 0 ]; then
+              break
+            fi
+          done
           if [ "$active" -gt 0 ]; then
             echo "A build is still active - nothing to resume."
             exit 0
