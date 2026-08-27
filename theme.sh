@@ -2016,4 +2016,298 @@ sed_i 's|^    <Preference$|    <Preference\n        android:key="aerium_patches"
 sed_i 's|^      <message name="IDS_AERIUM_PROJECT_TITLE" desc=|      <message name="IDS_AERIUM_PATCHES_TITLE" desc="Title of the About-page row that opens the list of changes this build makes to Chromium.">\n        What this build changes\n      </message>\n      <message name="IDS_AERIUM_PATCHES_SUMMARY" desc="Summary under that row.">\n        Every patch applied on top of upstream Chromium\n      </message>\n&|' \
     chrome/browser/ui/android/strings/android_chrome_strings.grd
 
+# --- Delete browsing data when you close Aerium.
+#
+# The desktop repos have had this since aerium-clear-browsing-data-on-exit: a
+# master toggle in Settings with the eight standard data-type categories under
+# it, hanging off the shutdown deletion Chromium already implements in
+# ChromeBrowsingDataLifetimeManager::ClearBrowsingDataForOnExitPolicy().
+#
+# The C++ half ports across almost unchanged, because that manager is built on
+# Android and is already Android-aware - it enumerates TabModelList rather than
+# browser windows when it needs the open tabs. The prefs and the mask are
+# copied from the desktop patch deliberately, so an identical selection deletes
+# identical things on both platforms.
+#
+# Three things do NOT port.
+#
+# The condition. Desktop widens an expression ungoogled-chromium already
+# widened for its #clear-data-on-exit flag; that flag does not exist here, so
+# the Aerium clause is added to the stock expression instead.
+#
+# The settings UI. Desktop is WebUI, Android is a preference fragment, so the
+# eight checkboxes and the screen they live on are written rather than ported.
+#
+# The trigger. This is the real difference. Desktop calls the deletion from
+# ProfileManager when the last browser window for a profile closes; that call
+# site is inside a !IS_ANDROID region and has no Android equivalent, because
+# Android has no window close and no guaranteed exit at all - a process can be
+# killed with no callback of any kind. So there are two triggers, and between
+# them a session's data does not survive the session:
+#
+#   1. On a clean close, ChromeTabbedActivity.onDestroyInternal sets a request
+#      pref, which this manager observes and answers by running the deletion.
+#      A pref rather than a new JNI method: the manager already holds a
+#      PrefChangeRegistrar, and Java can write any registered pref by name, so
+#      the signal costs nothing to add and nothing to build.
+#
+#      Guarded on isFinishing() && !isChangingConfigurations(): onDestroy also
+#      runs when the activity is merely being recreated - a rotation, a theme
+#      change - and wiping someone's cookies because they turned their phone
+#      sideways would be indefensible.
+#
+#   2. If the process dies before that, the deletion never runs. So the manager
+#      also marks kClearBrowsingDataOnExitDeletionPending at construction
+#      whenever the toggle is on, which is the flag Chromium's own
+#      ProfileManager already checks on the next launch - upstream code, upstream
+#      semantics, no new path. The data is then cleared at the next start, before
+#      the user does anything with it.
+#
+# Together those mean the toggle's promise holds however the browser ended, at
+# the cost of one redundant deletion after a clean close, which has nothing left
+# to delete.
+BDPREFS=components/browsing_data/core/pref_names.h
+sed_i 's|^inline constexpr char kClearBrowsingDataOnExitList\[\] =$|// Aerium: master switch for the "Delete browsing data when you close Aerium"\n// screen in Settings > Privacy and security. Kept separate from the policy\n// list below, which stays enterprise-owned; the two are ORed at shutdown.\ninline constexpr char kAeriumClearBrowsingDataOnExit[] =\n    "browser.clear_data.aerium_clear_on_exit";\n\n// Aerium: set by the Java side when the browser is closing for real, and\n// observed by ChromeBrowsingDataLifetimeManager, which clears it and runs the\n// deletion. Android has no window-close call site to hang that on - see\n// theme.sh.\ninline constexpr char kAeriumClearOnExitRequested[] =\n    "browser.clear_data.aerium_on_exit.requested";\n\n// Aerium: which data types that switch deletes. One boolean per\n// browsing_data::PolicyDataType category, mirroring the shape Chromium\n// already uses for the Delete-browsing-data dialog'"'"'s own kDelete* prefs.\n// Deliberately NOT the kDelete* prefs themselves: those hold the dialog'"'"'s\n// last-used checkbox state, and reusing them would let a one-off manual\n// deletion silently reconfigure what happens on every future shutdown.\ninline constexpr char kAeriumClearOnExitBrowsingHistory[] =\n    "browser.clear_data.aerium_on_exit.browsing_history";\ninline constexpr char kAeriumClearOnExitDownloadHistory[] =\n    "browser.clear_data.aerium_on_exit.download_history";\ninline constexpr char kAeriumClearOnExitCookies[] =\n    "browser.clear_data.aerium_on_exit.cookies";\ninline constexpr char kAeriumClearOnExitCache[] =\n    "browser.clear_data.aerium_on_exit.cache";\ninline constexpr char kAeriumClearOnExitFormData[] =\n    "browser.clear_data.aerium_on_exit.form_data";\ninline constexpr char kAeriumClearOnExitPasswords[] =\n    "browser.clear_data.aerium_on_exit.passwords";\ninline constexpr char kAeriumClearOnExitSiteSettings[] =\n    "browser.clear_data.aerium_on_exit.site_settings";\ninline constexpr char kAeriumClearOnExitHostedAppData[] =\n    "browser.clear_data.aerium_on_exit.hosted_apps_data";\n\n&|' \
+    $BDPREFS
+
+sed_i 's|^  registry->RegisterListPref(kClearBrowsingDataOnExitList);$|&\n  // Aerium: master switch off by default. The per-type defaults reproduce the\n  // set the desktop toggle ships with, so the two platforms behave the same on\n  // a fresh profile. Passwords, site settings and hosted app data stay off - a\n  // switch whose label promises a clean slate must not quietly destroy saved\n  // sign-ins or per-site permissions unless it was asked to.\n  registry->RegisterBooleanPref(kAeriumClearBrowsingDataOnExit, false);\n  registry->RegisterBooleanPref(kAeriumClearOnExitRequested, false);\n  registry->RegisterBooleanPref(kAeriumClearOnExitBrowsingHistory, true);\n  registry->RegisterBooleanPref(kAeriumClearOnExitDownloadHistory, true);\n  registry->RegisterBooleanPref(kAeriumClearOnExitCookies, true);\n  registry->RegisterBooleanPref(kAeriumClearOnExitCache, true);\n  registry->RegisterBooleanPref(kAeriumClearOnExitFormData, true);\n  registry->RegisterBooleanPref(kAeriumClearOnExitPasswords, false);\n  registry->RegisterBooleanPref(kAeriumClearOnExitSiteSettings, false);\n  registry->RegisterBooleanPref(kAeriumClearOnExitHostedAppData, false);|' \
+    components/browsing_data/core/pref_names.cc
+
+CBDLM=chrome/browser/browsing_data/chrome_browsing_data_lifetime_manager.cc
+sed_i 's%^uint64_t GetOriginTypeMask(const base::ListValue\& data_types) {$%// Aerium: the removal mask for the "Delete browsing data when you close\n// Aerium" screen, assembled from the per-type checkboxes on it. The type ->\n// mask mapping is deliberately the same one GetRemoveMask() uses for\n// browsing_data::PolicyDataType, so the screen and the enterprise\n// ClearBrowsingDataOnExit policy clear identical things for identical\n// selections.\nuint64_t AeriumOnExitRemoveMask(PrefService* prefs) {\n  uint64_t result = 0;\n  if (prefs->GetBoolean(\n          browsing_data::prefs::kAeriumClearOnExitBrowsingHistory)) {\n    result |= chrome_browsing_data_remover::DATA_TYPE_HISTORY;\n  }\n  if (prefs->GetBoolean(\n          browsing_data::prefs::kAeriumClearOnExitDownloadHistory)) {\n    result |= content::BrowsingDataRemover::DATA_TYPE_DOWNLOADS;\n  }\n  if (prefs->GetBoolean(browsing_data::prefs::kAeriumClearOnExitCookies)) {\n    result |= chrome_browsing_data_remover::DATA_TYPE_SITE_DATA;\n  }\n  if (prefs->GetBoolean(browsing_data::prefs::kAeriumClearOnExitCache)) {\n    result |= content::BrowsingDataRemover::DATA_TYPE_CACHE;\n  }\n  if (prefs->GetBoolean(browsing_data::prefs::kAeriumClearOnExitFormData)) {\n    result |= chrome_browsing_data_remover::DATA_TYPE_FORM_DATA;\n  }\n  if (prefs->GetBoolean(browsing_data::prefs::kAeriumClearOnExitPasswords)) {\n    result |= chrome_browsing_data_remover::DATA_TYPE_PASSWORDS;\n  }\n  if (prefs->GetBoolean(browsing_data::prefs::kAeriumClearOnExitSiteSettings)) {\n    result |= chrome_browsing_data_remover::DATA_TYPE_CONTENT_SETTINGS;\n  }\n  if (prefs->GetBoolean(\n          browsing_data::prefs::kAeriumClearOnExitHostedAppData)) {\n    result |= chrome_browsing_data_remover::DATA_TYPE_SITE_DATA;\n  }\n  return result;\n}\n\n// Aerium: origin-type companion to AeriumOnExitRemoveMask(), mirroring\n// GetOriginTypeMask() below - only cookies/site data and hosted app data are\n// origin-scoped.\nuint64_t AeriumOnExitOriginTypeMask(PrefService* prefs) {\n  uint64_t result = 0;\n  if (prefs->GetBoolean(browsing_data::prefs::kAeriumClearOnExitCookies)) {\n    result |= content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB;\n  }\n  if (prefs->GetBoolean(\n          browsing_data::prefs::kAeriumClearOnExitHostedAppData)) {\n    result |= content::BrowsingDataRemover::ORIGIN_TYPE_PROTECTED_WEB;\n  }\n  return result;\n}\n\n&%' \
+    $CBDLM
+
+sed_i 's|^  if (!data_types.empty() \&\&$|  // Aerium: the same shutdown path, driven by the Settings screen as well as\n  // by enterprise policy. A mask of zero means the master switch is on but\n  // every type was unchecked, which must stay a no-op rather than a deletion\n  // of nothing that still flips the pending-deletion pref.\n  PrefService* aerium_prefs = profile_->GetPrefs();\n  const uint64_t aerium_remove_mask =\n      aerium_prefs->GetBoolean(\n          browsing_data::prefs::kAeriumClearBrowsingDataOnExit)\n          ? AeriumOnExitRemoveMask(aerium_prefs)\n          : 0;\n  const bool aerium_on_exit = aerium_remove_mask != 0;\n\n  if (aerium_on_exit \|\| (!data_types.empty() \&\&|' \
+    $CBDLM
+sed_i 's|^          profile_, browsing_data::prefs::kClearBrowsingDataOnExitList))) {$|          profile_, browsing_data::prefs::kClearBrowsingDataOnExitList)))) {|' \
+    $CBDLM
+sed_i 's|^                            GetRemoveMask(data_types),$|                            GetRemoveMask(data_types) \| aerium_remove_mask,|' \
+    $CBDLM
+sed_i 's|^                            GetOriginTypeMask(data_types),$|                            GetOriginTypeMask(data_types) \|\n                                (aerium_on_exit ? AeriumOnExitOriginTypeMask(\n                                                      aerium_prefs)\n                                                : 0),|' \
+    $CBDLM
+
+# The two triggers described above. Both live in the constructor: the observer
+# that answers a clean close, and the mark that covers a process that never
+# gets one.
+sed_i 's%^  // When the service is instantiated, wait a few minutes after Chrome startup$%  // Aerium: see theme.sh. Android has no window-close call site, so the Java\n  // side asks for the deletion through a pref and this answers it. Written\n  // back to false first so a second close asks again rather than finding the\n  // request already set.\n  pref_change_registrar_.Add(\n      browsing_data::prefs::kAeriumClearOnExitRequested,\n      base::BindRepeating(\n          [](ChromeBrowsingDataLifetimeManager* manager) {\n            PrefService* prefs = manager->profile_->GetPrefs();\n            if (!prefs->GetBoolean(\n                    browsing_data::prefs::kAeriumClearOnExitRequested)) {\n              return;\n            }\n            prefs->SetBoolean(\n                browsing_data::prefs::kAeriumClearOnExitRequested, false);\n            // keep_browser_alive is what makes the observer clear the\n            // pending-deletion flag when the removal finishes, which is\n            // exactly what a clean close should do. The ScopedKeepAlive it\n            // also controls on desktop is compiled out on Android, so this\n            // is the only thing it does here.\n            manager->ClearBrowsingDataForOnExitPolicy(\n                /*keep_browser_alive=*/true);\n          },\n          base::Unretained(this)));\n\n&%' \
+    $CBDLM
+
+# --- The screen itself.
+cat > chrome/android/java/res/xml/aerium_clear_on_exit_preferences.xml <<'AERIUM_COE_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Aerium: see theme.sh. -->
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+    <org.chromium.components.browser_ui.settings.ChromeSwitchPreference
+        android:key="aerium_clear_on_exit_switch"
+        android:title="@string/aerium_clear_on_exit_switch_title"
+        android:summary="@string/aerium_clear_on_exit_switch_summary"
+        android:persistent="false" />
+    <PreferenceCategory
+        android:key="aerium_clear_on_exit_types"
+        android:title="@string/aerium_clear_on_exit_types_title">
+        <org.chromium.components.browser_ui.settings.ChromeBaseCheckBoxPreference
+            android:key="aerium_on_exit_browsing_history"
+            android:title="@string/aerium_clear_on_exit_history"
+            android:persistent="false" />
+        <org.chromium.components.browser_ui.settings.ChromeBaseCheckBoxPreference
+            android:key="aerium_on_exit_download_history"
+            android:title="@string/aerium_clear_on_exit_downloads"
+            android:persistent="false" />
+        <org.chromium.components.browser_ui.settings.ChromeBaseCheckBoxPreference
+            android:key="aerium_on_exit_cookies"
+            android:title="@string/aerium_clear_on_exit_cookies"
+            android:persistent="false" />
+        <org.chromium.components.browser_ui.settings.ChromeBaseCheckBoxPreference
+            android:key="aerium_on_exit_cache"
+            android:title="@string/aerium_clear_on_exit_cache"
+            android:persistent="false" />
+        <org.chromium.components.browser_ui.settings.ChromeBaseCheckBoxPreference
+            android:key="aerium_on_exit_form_data"
+            android:title="@string/aerium_clear_on_exit_form_data"
+            android:persistent="false" />
+        <org.chromium.components.browser_ui.settings.ChromeBaseCheckBoxPreference
+            android:key="aerium_on_exit_passwords"
+            android:title="@string/aerium_clear_on_exit_passwords"
+            android:persistent="false" />
+        <org.chromium.components.browser_ui.settings.ChromeBaseCheckBoxPreference
+            android:key="aerium_on_exit_site_settings"
+            android:title="@string/aerium_clear_on_exit_site_settings"
+            android:persistent="false" />
+        <org.chromium.components.browser_ui.settings.ChromeBaseCheckBoxPreference
+            android:key="aerium_on_exit_hosted_apps_data"
+            android:title="@string/aerium_clear_on_exit_hosted_apps"
+            android:persistent="false" />
+    </PreferenceCategory>
+</PreferenceScreen>
+AERIUM_COE_XML
+
+cat > chrome/android/java/src/org/chromium/chrome/browser/browsing_data/AeriumClearOnExitFragment.java <<'AERIUM_COE_JAVA'
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+package org.chromium.chrome.browser.browsing_data;
+
+import android.os.Bundle;
+
+import androidx.preference.Preference;
+
+import org.chromium.base.supplier.MonotonicObservableSupplier;
+import org.chromium.base.supplier.ObservableSuppliers;
+import org.chromium.base.supplier.SettableMonotonicObservableSupplier;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
+import org.chromium.chrome.R;
+import org.chromium.chrome.browser.settings.ChromeBaseSettingsFragment;
+import org.chromium.chrome.browser.settings.search.ChromeBaseSearchIndexProvider;
+import org.chromium.components.browser_ui.settings.ChromeBaseCheckBoxPreference;
+import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
+import org.chromium.components.browser_ui.settings.SettingsFragment;
+import org.chromium.components.browser_ui.settings.SettingsUtils;
+import org.chromium.components.prefs.PrefService;
+import org.chromium.components.user_prefs.UserPrefs;
+
+/**
+ * Aerium: the "Delete browsing data when you close Aerium" screen. See theme.sh.
+ *
+ * <p>The prefs are written straight through PrefService rather than persisted by the preference
+ * framework, which is why every entry in the XML is android:persistent="false" - the values have to
+ * live where ChromeBrowsingDataLifetimeManager reads them, in the profile's PrefService, not in
+ * SharedPreferences.
+ */
+@NullMarked
+public class AeriumClearOnExitFragment extends ChromeBaseSettingsFragment {
+    // Must match the keys in aerium_clear_on_exit_preferences.xml.
+    private static final String PREF_SWITCH = "aerium_clear_on_exit_switch";
+    private static final String PREF_TYPES = "aerium_clear_on_exit_types";
+
+    // Must match components/browsing_data/core/pref_names.h.
+    private static final String PREF_CLEAR_ON_EXIT = "browser.clear_data.aerium_clear_on_exit";
+
+    /** Preference key paired with the profile pref it reads and writes. */
+    private static final String[][] TYPES = {
+        {"aerium_on_exit_browsing_history", "browser.clear_data.aerium_on_exit.browsing_history"},
+        {"aerium_on_exit_download_history", "browser.clear_data.aerium_on_exit.download_history"},
+        {"aerium_on_exit_cookies", "browser.clear_data.aerium_on_exit.cookies"},
+        {"aerium_on_exit_cache", "browser.clear_data.aerium_on_exit.cache"},
+        {"aerium_on_exit_form_data", "browser.clear_data.aerium_on_exit.form_data"},
+        {"aerium_on_exit_passwords", "browser.clear_data.aerium_on_exit.passwords"},
+        {"aerium_on_exit_site_settings", "browser.clear_data.aerium_on_exit.site_settings"},
+        {"aerium_on_exit_hosted_apps_data", "browser.clear_data.aerium_on_exit.hosted_apps_data"},
+    };
+
+    private final SettableMonotonicObservableSupplier<String> mPageTitle =
+            ObservableSuppliers.createMonotonic();
+
+    private @Nullable Preference mTypes;
+
+    @Override
+    public void onCreatePreferences(@Nullable Bundle savedInstanceState, @Nullable String rootKey) {
+        SettingsUtils.addPreferencesFromResource(this, R.xml.aerium_clear_on_exit_preferences);
+        mPageTitle.set(getString(R.string.aerium_clear_on_exit_title));
+
+        PrefService prefs = UserPrefs.get(getProfile());
+        mTypes = findPreference(PREF_TYPES);
+
+        ChromeSwitchPreference onExit = (ChromeSwitchPreference) findPreference(PREF_SWITCH);
+        if (onExit != null) {
+            onExit.setChecked(prefs.getBoolean(PREF_CLEAR_ON_EXIT));
+            onExit.setOnPreferenceChangeListener(
+                    (preference, newValue) -> {
+                        prefs.setBoolean(PREF_CLEAR_ON_EXIT, (boolean) newValue);
+                        updateTypesVisible((boolean) newValue);
+                        return true;
+                    });
+        }
+
+        for (String[] type : TYPES) {
+            ChromeBaseCheckBoxPreference box =
+                    (ChromeBaseCheckBoxPreference) findPreference(type[0]);
+            if (box == null) continue;
+            String prefName = type[1];
+            box.setChecked(prefs.getBoolean(prefName));
+            box.setOnPreferenceChangeListener(
+                    (preference, newValue) -> {
+                        prefs.setBoolean(prefName, (boolean) newValue);
+                        return true;
+                    });
+        }
+
+        updateTypesVisible(prefs.getBoolean(PREF_CLEAR_ON_EXIT));
+    }
+
+    /**
+     * The list of types says nothing while the switch above it is off, so it is hidden rather than
+     * left offering choices that decide nothing.
+     */
+    private void updateTypesVisible(boolean enabled) {
+        if (mTypes != null) mTypes.setVisible(enabled);
+    }
+
+    @Override
+    public MonotonicObservableSupplier<String> getPageTitle() {
+        return mPageTitle;
+    }
+
+    @Override
+    public @SettingsFragment.AnimationType int getAnimationType() {
+        return SettingsFragment.AnimationType.PROPERTY;
+    }
+
+    public static final ChromeBaseSearchIndexProvider SEARCH_INDEX_DATA_PROVIDER =
+            new ChromeBaseSearchIndexProvider(
+                    AeriumClearOnExitFragment.class.getName(),
+                    R.xml.aerium_clear_on_exit_preferences);
+}
+AERIUM_COE_JAVA
+
+sed_i 's|^  "java/src/org/chromium/chrome/browser/browsing_data/BrowsingDataCounterBridge.java",$|  "java/src/org/chromium/chrome/browser/browsing_data/AeriumClearOnExitFragment.java",\n&|' \
+    chrome/android/chrome_java_sources.gni
+
+# The layout is enumerated too - chrome_app_java_resources takes its sources
+# from this list rather than globbing the directory, so a res/xml file that is
+# not named here is simply not compiled into the APK and R.xml has no field for
+# it.
+sed_i 's|^  "java/res/xml/appearance_preferences.xml",$|  "java/res/xml/aerium_clear_on_exit_preferences.xml",\n&|' \
+    chrome/android/chrome_java_resources.gni
+
+sed_i 's|^        android:fragment="org.chromium.chrome.browser.browsing_data.ClearBrowsingDataFragment" />$|&\n    <Preference\n        android:key="aerium_clear_on_exit"\n        android:title="@string/aerium_clear_on_exit_title"\n        android:summary="@string/aerium_clear_on_exit_summary"\n        android:fragment="org.chromium.chrome.browser.browsing_data.AeriumClearOnExitFragment" />|' \
+    chrome/android/java/res/xml/privacy_preferences.xml
+# Registered in the settings-search index registry as well. That is not only
+# about search: the registry is the one place that names every settings
+# fragment in code, and a fragment reached solely through android:fragment in
+# an XML file is invisible to R8, which would strip the class and turn opening
+# the screen into a ClassNotFoundException.
+SIPR=chrome/android/java/src/org/chromium/chrome/browser/settings/search/SearchIndexProviderRegistry.java
+sed_i 's|^import org.chromium.chrome.browser.browsing_data.ClearBrowsingDataFragment;$|import org.chromium.chrome.browser.browsing_data.AeriumClearOnExitFragment;\n&|' \
+    $SIPR
+sed_i 's|^                    AboutChromeSettings.SEARCH_INDEX_DATA_PROVIDER,$|&\n                    AeriumClearOnExitFragment.SEARCH_INDEX_DATA_PROVIDER,|' \
+    $SIPR
+
+# The two triggers. The first is the clean close; the second marks the session
+# as owing a deletion so a process that is killed without ever reaching
+# onDestroy is cleaned up at the next launch instead - that flag is the one
+# Chromium's own ProfileManager already checks at startup, so the catch-up is
+# upstream code with upstream semantics and no second path.
+#
+# The mark is written after native initialisation rather than from the manager's
+# constructor, and that ordering is the whole point: ProfileManager makes its
+# check while the profile is still loading, so a flag set any earlier would be
+# consumed by the check it is meant to arm for NEXT time, and every launch would
+# re-delete data a clean close had already deleted. By the time an activity has
+# finished native initialisation, that check is behind us.
+#
+# The observer clears the flag when a close-time deletion completes, and the
+# else branch of ClearBrowsingDataForOnExitPolicy clears it once the switch is
+# turned off, so it never outlives the setting.
+sed_i 's|^import org.chromium.components.prefs.PrefChangeRegistrar;$|&\nimport org.chromium.components.prefs.PrefService;|' \
+    chrome/android/java/src/org/chromium/chrome/browser/ChromeTabbedActivity.java
+sed_i 's|^            recordFirstAppLaunchTimestampIfNeeded();$|&\n\n            // Aerium: see theme.sh. Mark this session as owing a deletion, so a\n            // process killed without an onDestroy is cleaned up at the next\n            // launch. Here rather than earlier because ProfileManager checks\n            // this flag while the profile is still loading.\n            if (ProfileManager.isInitialized()) {\n                PrefService aeriumStartPrefs =\n                        UserPrefs.get(ProfileManager.getLastUsedRegularProfile());\n                if (aeriumStartPrefs.getBoolean("browser.clear_data.aerium_clear_on_exit")) {\n                    aeriumStartPrefs.setBoolean(\n                            "browser.clear_data.clear_on_exit_pending", true);\n                }\n            }|' \
+    chrome/android/java/src/org/chromium/chrome/browser/ChromeTabbedActivity.java
+sed_i 's|^    public void onDestroyInternal() {$|&\n        // Aerium: see theme.sh. isFinishing() with no configuration change is\n        // what separates the browser being closed from the activity being\n        // recreated - onDestroy runs for a rotation too, and wiping someone'"'"'s\n        // cookies because they turned their phone sideways would be\n        // indefensible. The pref is the signal; the deletion itself is run by\n        // ChromeBrowsingDataLifetimeManager, which observes it.\n        if (isFinishing() \&\& !isChangingConfigurations() \&\& ProfileManager.isInitialized()) {\n            PrefService aeriumPrefs =\n                    UserPrefs.get(ProfileManager.getLastUsedRegularProfile());\n            if (aeriumPrefs.getBoolean("browser.clear_data.aerium_clear_on_exit")) {\n                aeriumPrefs.setBoolean("browser.clear_data.aerium_on_exit.requested", true);\n            }\n        }\n|' \
+    chrome/android/java/src/org/chromium/chrome/browser/ChromeTabbedActivity.java
+
+sed_i 's|^      <message name="IDS_AERIUM_PATCHES_TITLE" desc=|      <message name="IDS_AERIUM_CLEAR_ON_EXIT_TITLE" desc="Title of the settings screen that deletes browsing data every time the browser is closed.">\n        Delete browsing data on exit\n      </message>\n      <message name="IDS_AERIUM_CLEAR_ON_EXIT_SUMMARY" desc="Summary under that entry on the Privacy and security screen.">\n        Choose what is deleted every time you close Aerium\n      </message>\n      <message name="IDS_AERIUM_CLEAR_ON_EXIT_SWITCH_TITLE" desc="Title of the master switch on that screen.">\n        Delete on exit\n      </message>\n      <message name="IDS_AERIUM_CLEAR_ON_EXIT_SWITCH_SUMMARY" desc="Summary under the master switch, saying when the deletion happens.">\n        The types below are deleted when you close Aerium. If the browser is closed by the system before that happens, they are deleted the next time it starts.\n      </message>\n      <message name="IDS_AERIUM_CLEAR_ON_EXIT_TYPES_TITLE" desc="Header above the list of data types.">\n        What to delete\n      </message>\n      <message name="IDS_AERIUM_CLEAR_ON_EXIT_HISTORY" desc="Data type: pages visited.">\n        Browsing history\n      </message>\n      <message name="IDS_AERIUM_CLEAR_ON_EXIT_DOWNLOADS" desc="Data type: the list of downloaded files, not the files themselves.">\n        Download history\n      </message>\n      <message name="IDS_AERIUM_CLEAR_ON_EXIT_COOKIES" desc="Data type: cookies and other site storage. Signs you out of sites.">\n        Cookies and site data\n      </message>\n      <message name="IDS_AERIUM_CLEAR_ON_EXIT_CACHE" desc="Data type: the HTTP cache.">\n        Cached images and files\n      </message>\n      <message name="IDS_AERIUM_CLEAR_ON_EXIT_FORM_DATA" desc="Data type: text remembered from web forms.">\n        Autofill form data\n      </message>\n      <message name="IDS_AERIUM_CLEAR_ON_EXIT_PASSWORDS" desc="Data type: saved sign-in details.">\n        Saved passwords\n      </message>\n      <message name="IDS_AERIUM_CLEAR_ON_EXIT_SITE_SETTINGS" desc="Data type: per-site permissions such as camera or location.">\n        Site settings\n      </message>\n      <message name="IDS_AERIUM_CLEAR_ON_EXIT_HOSTED_APPS" desc="Data type: data belonging to installed web apps.">\n        Hosted app data\n      </message>\n&|' \
+    chrome/browser/ui/android/strings/android_chrome_strings.grd
+
 echo "[aerium] theme + rename pass applied"

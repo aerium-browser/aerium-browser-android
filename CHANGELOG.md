@@ -32,6 +32,33 @@ behind any of this.
   effect on a restart, and previously nothing said so, which made them look
   broken.
 
+**Deleting what you leave behind**
+
+- New: **Settings › Privacy and security › Delete browsing data on exit**. Pick
+  which of the eight data types go when you close the browser — history,
+  downloads, cookies, cache, form data, passwords, site settings, hosted app
+  data. Off by default; passwords and site settings stay unticked even once it
+  is on, because a switch that promises a clean slate should not quietly throw
+  away your sign-ins unless you asked it to.
+- If Android closes the browser without warning, the deletion happens the next
+  time it starts instead, before you do anything with it. Closing it yourself
+  deletes straight away.
+
+**Seeing what you are running**
+
+- New: **chrome://aerium** lists every change this build makes on top of
+  upstream Chromium — GrapheneOS's Vanadium patches first, then Aerium's own,
+  with the number of files each one edits. The list is generated while the
+  build runs from the patches and scripts themselves, so it describes what was
+  actually applied rather than what someone remembered to write down.
+- The About screen now links to it, and to the project's own site.
+
+**Dark mode fix**
+
+- **Blacken dark sites** is greyed out while **Darken websites** is off, with a
+  line saying which box to tick first. It only changes how darkened pages are
+  painted, so with darkening off it did nothing at all and said so nowhere.
+
 **Media keeps playing**
 
 - Video and audio no longer stop when you leave the browser or the screen turns
