@@ -255,6 +255,45 @@ if [ -f "$AFR" ]; then
     rm -f "$AFR_FRESH"
 fi
 
+# --- chrome://aerium, the same way. The page header comes from theme.sh, so a
+# resumed tree gets the same treatment as the first-run page above.
+APH=chrome/browser/ui/webui/aerium_patches.h
+if [ -f "$APH" ]; then
+    APH_FRESH=$(mktemp)
+    awk '/^cat > chrome\/browser\/ui\/webui\/aerium_patches.h <<.AERIUM_PATCHES_H.$/{f=1;next} /^AERIUM_PATCHES_H$/{f=0} f' \
+        "$SCRIPT_DIR/theme.sh" > "$APH_FRESH"
+    if ! grep -q '^inline std::string AeriumPatchesDataSource::GetSource' "$APH_FRESH"; then
+        echo "[aerium] FATAL: could not extract the patches page from theme.sh." >&2
+        echo "[aerium] The heredoc markers in theme.sh must have moved." >&2
+        rm -f "$APH_FRESH"
+        exit 1
+    fi
+    if ! cmp -s "$APH_FRESH" "$APH"; then
+        cp "$APH_FRESH" "$APH"
+        echo "[aerium] resume sync: refreshed $APH from theme.sh"
+    fi
+    rm -f "$APH_FRESH"
+fi
+
+# The manifest that page includes. Regenerated on every stage rather than only
+# during source setup: it is derived entirely from files in this repository -
+# the Vanadium patch series and the two build scripts - so it costs a second
+# and is always in step with what the tree was patched with. A resumed stage
+# that skipped this would ship a table describing a previous commit.
+#
+# Guarded on the page existing, the same way the sync above is: a tree
+# checkpointed before this landed has neither the page nor the registration in
+# chrome_web_ui_configs.cc, and generating a manifest for a page that is not
+# there would achieve nothing. Where the page IS there the generator runs under
+# set -e with no `|| true`, because a manifest that failed to regenerate would
+# leave the previous commit's table in place - which is the one thing this page
+# must not do.
+if [ -f "$APH" ]; then
+    "$SCRIPT_DIR/devutils/generate_patch_manifest.py" \
+        --version "$VERSION" \
+        --out chrome/browser/ui/webui/aerium_patch_manifest.inc
+fi
+
 # compile prerequisites must exist on every fresh runner
 ./build/install-build-deps.sh --no-prompt || true
 # ...and its .debs must not be left sitting on the small root filesystem.

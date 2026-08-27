@@ -1745,4 +1745,275 @@ sed -i '/^    case WebGLDebugRendererInfo::kUnmaskedVendorWebgl:$/{n;n;i\
 }' \
     third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
 
+# --- The About page points at Aerium rather than nowhere.
+#
+# The desktop repos do this in chrome/common/url_constants.h, where
+# kChromiumProjectURL backs the project link on chrome://settings/help. Android
+# has no such link: its About screen is a Java settings fragment with three
+# rows - application version, OS version, legal information - and no route back
+# to the project at all. So this adds the row rather than repointing one.
+#
+# Opened in a Custom Tab through CustomTabActivity.showInfoPage, which is what
+# Chromium itself uses for settings links. An <intent> element in the XML would
+# have been shorter but hands the URL to the system, which can put a chooser in
+# front of it or send it to a different browser entirely - a link to this
+# build's own project should open in this build.
+ACS=chrome/android/java/src/org/chromium/chrome/browser/about_settings/AboutChromeSettings.java
+sed_i 's|^import org.chromium.chrome.browser.settings.ChromeBaseSettingsFragment;$|import org.chromium.chrome.browser.customtabs.CustomTabActivity;\n&|' \
+    $ACS
+sed_i 's|^    private static final String PREF_LEGAL_INFORMATION = "legal_information";$|&\n\n    // Aerium: see theme.sh.\n    private static final String PREF_AERIUM_PROJECT = "aerium_project";\n    private static final String AERIUM_PROJECT_URL = "https://aerium-browser.github.io";|' \
+    $ACS
+sed_i 's|^        p.setSummary(getString(R.string.legal_information_summary, currentYear));$|&\n\n        // Aerium: see theme.sh. Opened in a Custom Tab so a link to this\n        // build'"'"'s own project cannot be answered by a different browser.\n        Preference project = findPreference(PREF_AERIUM_PROJECT);\n        if (project != null) {\n            project.setOnPreferenceClickListener(\n                    preference -> {\n                        CustomTabActivity.showInfoPage(getActivity(), AERIUM_PROJECT_URL);\n                        return true;\n                    });\n        }|' \
+    $ACS
+
+sed_i 's|^</PreferenceScreen>$|    <Preference\n        android:key="aerium_project"\n        android:title="@string/aerium_project_title"\n        android:summary="@string/aerium_project_summary" />\n&|' \
+    chrome/android/java/res/xml/about_chrome_preferences.xml
+
+sed_i 's|^      <message name="IDS_AERIUM_PURE_BLACK_TITLE" desc=|      <message name="IDS_AERIUM_PROJECT_TITLE" desc="Title of the About-page row that opens the browser project'"'"'s own website.">\n        Aerium project\n      </message>\n      <message name="IDS_AERIUM_PROJECT_SUMMARY" desc="Summary under that row: the address it opens.">\n        aerium-browser.github.io\n      </message>\n&|' \
+    chrome/browser/ui/android/strings/android_chrome_strings.grd
+
+# --- chrome://aerium - every change this build makes to upstream Chromium.
+#
+# A one-person fork asks people to trust a binary nobody has audited. This is
+# the smallest honest answer to that: the browser can show its own distance
+# from upstream Chromium, grouped by where each change came from, with the
+# number of files each one edits.
+#
+# The desktop repos generate their table from the patch series files. Android
+# has no series: Vanadium arrives as 309 .patch files that build.sh filters and
+# rebrands before git am, and Aerium's own changes are substitutions inside
+# patch.sh and theme.sh rather than diffs. So the manifest is generated from
+# both - devutils/generate_patch_manifest.py reads the patch files as they
+# stand after the filtering, and reads the scripts through
+# devutils/collect-targets.sh, which sources them with sed and perl stubbed out
+# and records what each call would have written to.
+#
+# Deriving the counts that way rather than writing them down is the entire
+# point. A hand-maintained list would be worth nothing here, because the
+# failure it exists to rule out is precisely a change nobody mentioned - and a
+# heading with no substitutions under it is dropped, while substitutions under
+# no heading are listed as unsectioned rather than disappearing.
+#
+# Header-only, like aerium_first_run.h next to it: a DefaultWebUIConfig plus an
+# inline URLDataSource needs no BUILD.gn entry, no .cc and no TypeScript. The
+# virtual methods are defined below the class for the reason that file records
+# - the chromium-style plugin rejects a virtual method with a non-empty body
+# written inside the class.
+#
+# The generated .inc is included with no fallback on purpose. If the generator
+# did not run, this fails to compile. The alternative - an empty list - would
+# render a page claiming this build changes nothing about Chromium, which is
+# the one statement it must never make.
+cat > chrome/browser/ui/webui/aerium_patches.h <<'AERIUM_PATCHES_H'
+#ifndef CHROME_BROWSER_UI_WEBUI_AERIUM_PATCHES_H_
+#define CHROME_BROWSER_UI_WEBUI_AERIUM_PATCHES_H_
+
+#include <iterator>
+#include <string>
+#include <string_view>
+#include <vector>
+
+#include "base/memory/ref_counted_memory.h"
+#include "base/strings/escape.h"
+#include "base/strings/strcat.h"
+#include "base/strings/string_number_conversions.h"
+#include "chrome/browser/profiles/profile.h"
+#include "content/public/browser/url_data_source.h"
+#include "content/public/browser/web_ui.h"
+#include "content/public/browser/web_ui_controller.h"
+#include "content/public/browser/webui_config.h"
+
+// One row of the generated manifest. Declared before the include below, which
+// is a plain initialiser list referring to this type.
+struct AeriumPatchEntry {
+  const char* group;
+  const char* name;
+  const char* summary;
+  int files;
+};
+
+// Generated during the build by devutils/generate_patch_manifest.py. A missing
+// file here is a hard compile error by design.
+#include "chrome/browser/ui/webui/aerium_patch_manifest.inc"
+
+class AeriumPatchesDataSource : public content::URLDataSource {
+ public:
+  AeriumPatchesDataSource() = default;
+  AeriumPatchesDataSource(const AeriumPatchesDataSource&) = delete;
+  AeriumPatchesDataSource& operator=(const AeriumPatchesDataSource&) = delete;
+  ~AeriumPatchesDataSource() override = default;
+
+  std::string GetSource() override;
+  std::string GetMimeType(const GURL& url) override;
+
+  void StartDataRequest(const GURL& url,
+                        const content::WebContents::Getter& wc_getter,
+                        GotDataCallback callback) override;
+
+ private:
+  static std::vector<std::string_view> GroupsInOrder();
+  static std::string BuildPage();
+};
+
+inline std::string AeriumPatchesDataSource::GetSource() {
+  return "aerium";
+}
+
+inline std::string AeriumPatchesDataSource::GetMimeType(const GURL& url) {
+  return "text/html";
+}
+
+inline void AeriumPatchesDataSource::StartDataRequest(
+    const GURL& url,
+    const content::WebContents::Getter& wc_getter,
+    content::URLDataSource::GotDataCallback callback) {
+  std::move(callback).Run(
+      base::MakeRefCounted<base::RefCountedString>(BuildPage()));
+}
+
+// Group names in order of first appearance, so the page follows the order the
+// changes are actually applied in rather than an alphabetical one that would
+// imply the stacking does not matter. It does: theme.sh routinely edits what a
+// Vanadium patch produced.
+inline std::vector<std::string_view> AeriumPatchesDataSource::GroupsInOrder() {
+  std::vector<std::string_view> groups;
+  for (const AeriumPatchEntry& entry : kAeriumPatches) {
+    bool seen = false;
+    for (std::string_view group : groups) {
+      if (group == entry.group) {
+        seen = true;
+        break;
+      }
+    }
+    if (!seen) {
+      groups.emplace_back(entry.group);
+    }
+  }
+  return groups;
+}
+
+inline std::string AeriumPatchesDataSource::BuildPage() {
+  // Everything interpolated below comes from our own patch files and scripts
+  // rather than from anything the page can be navigated with, but it is
+  // escaped anyway: a patch description is prose, and prose acquires angle
+  // brackets.
+  std::string html = base::StrCat({
+      R"(<!doctype html>
+<title>What this build changes</title>
+<meta name="color-scheme" content="light dark">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="utf-8">
+<style>
+ @import url(chrome://resources/css/text_defaults_md.css);
+ html{color:#202124; background:white; line-height:1.35}
+ a{color:#1967d2}
+ h1{margin:0; padding:.6em 0 .2em; font-size:1.5em}
+ h2{margin:0; padding:1.2em 0 .4em; font-size:1.05em}
+ section{width:min(60em,92vw); margin:2em auto}
+ .lede{color:#5f6368}
+ .count{color:#5f6368; font-variant-numeric:tabular-nums}
+ table{border-collapse:collapse; width:100%}
+ td{padding:.5em .4em; border-top:.063em solid #f0f0f0; vertical-align:top}
+ td.n{font-family:monospace; font-size:.85em; word-break:break-all;
+      max-width:11em}
+ td.f{text-align:right; white-space:nowrap; color:#5f6368;
+      font-variant-numeric:tabular-nums; width:1%}
+ @media(prefers-color-scheme:dark){
+  html{color:#e8eaed; background:#202124}
+  a{color:#8ab4f8}
+  .lede,.count,td.f{color:#9aa0a6}
+  td{border-top:.063em solid #3f4042}
+ }
+</style>
+<section>
+ <h1>What this build changes</h1>
+ <p class="lede">Aerium for Android is Chromium )",
+      base::EscapeForHTML(std::string(kAeriumChromiumVersion)),
+      R"( with the changes below
+ applied, in this order: GrapheneOS's Vanadium patches first, then Aerium's own
+ build scripts on top. The list is generated during the build from the patch
+ files and from the scripts themselves, so it is what was actually applied
+ rather than a description maintained by hand.</p>
+ <p class="lede">The right-hand column counts the files each entry edits. A
+ dash means the set is decided while the build runs and cannot be counted
+ ahead of it.</p>
+ <p class="count">)",
+      base::NumberToString(std::size(kAeriumPatches)),
+      R"( entries.</p>
+</section>
+)"});
+
+  for (std::string_view group : GroupsInOrder()) {
+    int in_group = 0;
+    for (const AeriumPatchEntry& entry : kAeriumPatches) {
+      if (group == entry.group) {
+        ++in_group;
+      }
+    }
+    base::StrAppend(&html, {"<section>\n <h2>",
+                            base::EscapeForHTML(std::string(group)),
+                            "</h2>\n <p class=\"count\">",
+                            base::NumberToString(in_group),
+                            "</p>\n <table>\n"});
+    for (const AeriumPatchEntry& entry : kAeriumPatches) {
+      if (group != entry.group) {
+        continue;
+      }
+      base::StrAppend(
+          &html,
+          {"  <tr><td class=\"n\">",
+           base::EscapeForHTML(std::string(entry.name)), "</td><td>",
+           base::EscapeForHTML(std::string(entry.summary)),
+           "</td><td class=\"f\">",
+           entry.files ? base::NumberToString(entry.files)
+                       : std::string("&mdash;"),
+           "</td></tr>\n"});
+    }
+    base::StrAppend(&html, {" </table>\n</section>\n"});
+  }
+  return html;
+}
+
+class AeriumPatches;
+
+class AeriumPatchesUIConfig : public content::DefaultWebUIConfig<AeriumPatches> {
+ public:
+  AeriumPatchesUIConfig() : DefaultWebUIConfig("chrome", "aerium") {}
+};
+
+class AeriumPatches : public content::WebUIController {
+ public:
+  explicit AeriumPatches(content::WebUI* web_ui)
+      : content::WebUIController(web_ui) {
+    content::URLDataSource::Add(Profile::FromWebUI(web_ui),
+                                std::make_unique<AeriumPatchesDataSource>());
+  }
+  AeriumPatches(const AeriumPatches&) = delete;
+  AeriumPatches& operator=(const AeriumPatches&) = delete;
+};
+
+#endif  // CHROME_BROWSER_UI_WEBUI_AERIUM_PATCHES_H_
+AERIUM_PATCHES_H
+
+sed_i 's|#include "chrome/browser/ui/webui/webapks/webapks_ui.h"|&\n#include "chrome/browser/ui/webui/aerium_patches.h"|' \
+    chrome/browser/ui/webui/chrome_web_ui_configs.cc
+sed_i 's|  map.AddWebUIConfig(std::make_unique<WebApksUIConfig>());|&\n  map.AddWebUIConfig(std::make_unique<AeriumPatchesUIConfig>());|' \
+    chrome/browser/ui/webui/chrome_web_ui_configs.cc
+
+# The About screen is where someone goes to find out what they are running, so
+# it is where the answer belongs. Opened through CustomTabActivity.showInfoPage
+# like the project link above it: that path marks the intent trusted and starts
+# CustomTabActivity directly, rather than handing a chrome:// URL to the
+# system dispatcher, which patch.sh deliberately limits to network URLs.
+sed_i 's|^    private static final String AERIUM_PROJECT_URL = "https://aerium-browser.github.io";$|&\n    private static final String PREF_AERIUM_PATCHES = "aerium_patches";\n    private static final String AERIUM_PATCHES_URL = "chrome://aerium";|' \
+    $ACS
+sed_i 's|^        Preference project = findPreference(PREF_AERIUM_PROJECT);$|        Preference patches = findPreference(PREF_AERIUM_PATCHES);\n        if (patches != null) {\n            patches.setOnPreferenceClickListener(\n                    preference -> {\n                        CustomTabActivity.showInfoPage(getActivity(), AERIUM_PATCHES_URL);\n                        return true;\n                    });\n        }\n\n&|' \
+    $ACS
+
+sed_i 's|^    <Preference$|    <Preference\n        android:key="aerium_patches"\n        android:title="@string/aerium_patches_title"\n        android:summary="@string/aerium_patches_summary" />\n&|' \
+    chrome/android/java/res/xml/about_chrome_preferences.xml
+
+sed_i 's|^      <message name="IDS_AERIUM_PROJECT_TITLE" desc=|      <message name="IDS_AERIUM_PATCHES_TITLE" desc="Title of the About-page row that opens the list of changes this build makes to Chromium.">\n        What this build changes\n      </message>\n      <message name="IDS_AERIUM_PATCHES_SUMMARY" desc="Summary under that row.">\n        Every patch applied on top of upstream Chromium\n      </message>\n&|' \
+    chrome/browser/ui/android/strings/android_chrome_strings.grd
+
 echo "[aerium] theme + rename pass applied"
