@@ -720,10 +720,27 @@ sed_i 's|            FontPreloader.getInstance().load(getApplication());|&\n\n  
 sed_i 's|^</PreferenceScreen>$|    <org.chromium.components.browser_ui.settings.ChromeSwitchPreference\n        android:key="aerium_blacken_dark_sites"\n        android:title="@string/aerium_blacken_dark_sites_title"\n        android:summary="@string/aerium_blacken_dark_sites_summary" />\n&|' \
     chrome/browser/ui/android/night_mode/java/res/xml/theme_preferences.xml
 
-sed_i 's|^        // TODO(crbug.com/40198953): Notify feature engagement system that settings were opened.$|        ChromeSwitchPreference blackenDarkSites =\n                (ChromeSwitchPreference) findPreference("aerium_blacken_dark_sites");\n        if (blackenDarkSites != null) {\n            blackenDarkSites.setChecked(\n                    sharedPreferencesManager.readBoolean(\n                            ChromePreferenceKeys.AERIUM_BLACKEN_DARK_SITES, false));\n            blackenDarkSites.setOnPreferenceChangeListener(\n                    (preference, newValue) -> {\n                        sharedPreferencesManager.writeBoolean(\n                                ChromePreferenceKeys.AERIUM_BLACKEN_DARK_SITES,\n                                (boolean) newValue);\n                        showRestartSnackbar();\n                        return true;\n                    });\n        }\n\n&|' \
+# --- Say that blackening dark sites depends on darkening websites at all.
+#
+# "Blacken dark sites" only changes how force dark paints, so with "Darken
+# websites" unchecked - which is how Aerium ships, see the auto dark block
+# above - it does precisely nothing, and the switch gives no hint of that. The
+# report that prompted this was three sites, none of them black, with the
+# switch on: the setting was doing exactly what it was built to do and there
+# was nothing on screen to say why that was nothing.
+#
+# So it is greyed out while auto dark is off, and its summary says which
+# checkbox turns it back on. The state is refreshed from the theme preference's
+# change listener, which is where the checkbox is committed, so ticking
+# "Darken websites" enables this switch without leaving the screen.
+sed_i 's|^    private boolean mWebContentsDarkModeEnabled;$|&\n\n    // Aerium: see theme.sh. Held as a field so the darken-websites checkbox\n    // can re-enable it from the theme preference'"'"'s change listener.\n    private @Nullable ChromeSwitchPreference mBlackenDarkSites;\n\n    private void updateBlackenDarkSitesEnabled() {\n        if (mBlackenDarkSites == null) return;\n        mBlackenDarkSites.setEnabled(mWebContentsDarkModeEnabled);\n        mBlackenDarkSites.setSummary(\n                mWebContentsDarkModeEnabled\n                        ? R.string.aerium_blacken_dark_sites_summary\n                        : R.string.aerium_blacken_dark_sites_needs_auto_dark);\n    }|' \
+    $TSF
+sed_i 's|^                    int theme = (int) newValue;$|                    updateBlackenDarkSitesEnabled();\n&|' $TSF
+
+sed_i 's|^        // TODO(crbug.com/40198953): Notify feature engagement system that settings were opened.$|        mBlackenDarkSites = (ChromeSwitchPreference) findPreference("aerium_blacken_dark_sites");\n        if (mBlackenDarkSites != null) {\n            mBlackenDarkSites.setChecked(\n                    sharedPreferencesManager.readBoolean(\n                            ChromePreferenceKeys.AERIUM_BLACKEN_DARK_SITES, false));\n            mBlackenDarkSites.setOnPreferenceChangeListener(\n                    (preference, newValue) -> {\n                        sharedPreferencesManager.writeBoolean(\n                                ChromePreferenceKeys.AERIUM_BLACKEN_DARK_SITES,\n                                (boolean) newValue);\n                        showRestartSnackbar();\n                        return true;\n                    });\n            updateBlackenDarkSitesEnabled();\n        }\n\n&|' \
     $TSF
 
-sed_i 's|^      <message name="IDS_AERIUM_PURE_BLACK_TITLE" desc=|      <message name="IDS_AERIUM_BLACKEN_DARK_SITES_TITLE" desc="Title of the switch that also blackens websites which already have their own dark theme.">\n        Blacken dark sites\n      </message>\n      <message name="IDS_AERIUM_BLACKEN_DARK_SITES_SUMMARY" desc="Summary under the Blacken dark sites switch. Mentions that a restart is needed.">\n        Extend darkening to sites that ship their own dark theme, so their dark grey becomes true black too. Restart Aerium to apply.\n      </message>\n&|' \
+sed_i 's|^      <message name="IDS_AERIUM_PURE_BLACK_TITLE" desc=|      <message name="IDS_AERIUM_BLACKEN_DARK_SITES_TITLE" desc="Title of the switch that also blackens websites which already have their own dark theme.">\n        Blacken dark sites\n      </message>\n      <message name="IDS_AERIUM_BLACKEN_DARK_SITES_SUMMARY" desc="Summary under the Blacken dark sites switch. Mentions that a restart is needed.">\n        Extend darkening to sites that ship their own dark theme, so their dark grey becomes true black too. Restart Aerium to apply.\n      </message>\n      <message name="IDS_AERIUM_BLACKEN_DARK_SITES_NEEDS_AUTO_DARK" desc="Summary shown in place of the usual one when the Blacken dark sites switch is greyed out, naming the checkbox that has to be ticked first.">\n        Turn on Darken websites above to use this.\n      </message>\n&|' \
     chrome/browser/ui/android/strings/android_chrome_strings.grd
 
 # --- Make the blacken switch reach sites that ship their own dark theme.
