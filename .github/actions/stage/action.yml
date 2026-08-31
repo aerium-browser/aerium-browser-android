@@ -60,20 +60,37 @@ runs:
         remove-docker-images: 'true'
         build-mount-path: '${{ github.workspace }}/chromium'
 
+    # The checkpoint alternates between two slots - see "Pick a checkpoint
+    # slot" below for why - so which name holds the current one depends on how
+    # many stages have run. Artifact ids increase monotonically, so the largest
+    # id is the most recent upload; a run written before the two-slot scheme
+    # has only the base name and resolves to it unchanged.
+    - name: Resolve the checkpoint slot to restore
+      id: restore-slot
+      if: inputs.finished != 'true' && inputs.from_artifact != 'never'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        BASE: build-artifact-android
+        RESTORE_RUN_ID: ${{ inputs.restore_run_id }}
+      run: bash ./.github/scripts/checkpoint-slot.sh restore
+
     - name: Restore build tree (best effort)
       if: inputs.finished != 'true' && inputs.from_artifact != 'never' && inputs.restore_run_id == ''
+            && steps.restore-slot.outputs.name != ''
       uses: actions/download-artifact@v8
       continue-on-error: true
       with:
-        name: build-artifact-android
+        name: ${{ steps.restore-slot.outputs.name }}
         path: ${{ github.workspace }}/chromium
 
     - name: Restore build tree from another run (best effort)
       if: inputs.finished != 'true' && inputs.from_artifact != 'never' && inputs.restore_run_id != ''
+            && steps.restore-slot.outputs.name != ''
       uses: actions/download-artifact@v8
       continue-on-error: true
       with:
-        name: build-artifact-android
+        name: ${{ steps.restore-slot.outputs.name }}
         path: ${{ github.workspace }}/chromium
         run-id: ${{ inputs.restore_run_id }}
         github-token: ${{ github.token }}
@@ -260,15 +277,48 @@ runs:
           echo "packed=none" >> "$GITHUB_OUTPUT"
         fi
 
+    # overwrite: true deletes the existing artifact and then uploads the new
+    # one, so anything that interrupts the job in between leaves the run with
+    # no checkpoint at all. That is what killed the Windows repo's run
+    # 33089940410: it was cancelled eight seconds into the upload, moments
+    # after the delete, and five stages of compiling were unrecoverable. This
+    # tree is the one that takes nineteen hours to rebuild.
+    #
+    # So the checkpoint alternates between build-artifact-android and
+    # build-artifact-android-b. Each stage writes to whichever slot is not
+    # current and retires the other only once the upload has actually
+    # succeeded, so there is always one complete checkpoint on the run.
+    - name: Pick a checkpoint slot
+      id: save-slot
+      if: inputs.finished != 'true' && steps.pack.outputs.packed == 'intermediate'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        BASE: build-artifact-android
+      run: bash ./.github/scripts/checkpoint-slot.sh save
+
     - name: Upload build tree
       if: inputs.finished != 'true' && steps.pack.outputs.packed == 'intermediate'
       uses: actions/upload-artifact@v7
       with:
-        name: build-artifact-android
+        name: ${{ steps.save-slot.outputs.target }}
         path: ${{ github.workspace }}/chromium/artifacts.tar.zst
         retention-days: 10
         compression-level: 0
-        overwrite: true
+
+    # Only now, with the replacement stored. A failure here costs one
+    # checkpoint of storage for its retention period and nothing else - the
+    # next restore picks the newer of the two by id either way.
+    - name: Retire the previous checkpoint
+      if: inputs.finished != 'true' && steps.save-slot.outputs.previous_id != ''
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        PREVIOUS_ID: ${{ steps.save-slot.outputs.previous_id }}
+      run: |
+        gh api -X DELETE \
+          "repos/$GITHUB_REPOSITORY/actions/artifacts/$PREVIOUS_ID" \
+          || echo "could not retire artifact $PREVIOUS_ID (non-fatal)"
 
     - name: Record that this failure is deterministic
       # build.sh has already turned the ordinary "ran out of time budget" case

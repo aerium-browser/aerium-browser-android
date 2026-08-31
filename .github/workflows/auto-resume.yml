@@ -213,7 +213,7 @@ jobs:
                                     | sort_by(.run_number) | reverse | .[].id' <<<"$runs_json"); do
             if gh api "repos/$REPO/actions/runs/$candidate/artifacts" \
                  --jq '.artifacts[] | select(.expired == false) | .name' 2>/dev/null \
-               | grep -qx 'build-artifact-android'; then
+               | grep -qxE 'build-artifact-android(-b)?'; then
               RUN_ID="$candidate"
               break
             fi

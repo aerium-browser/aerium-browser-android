@@ -22,6 +22,11 @@ on:
 
 permissions:
   contents: write
+  # The stage action retires the previous checkpoint artifact once the
+  # replacement is stored - see .github/scripts/checkpoint-slot.sh - and both
+  # listing and deleting artifacts need this. Without it the delete fails
+  # harmlessly and the run simply keeps two checkpoints until they expire.
+  actions: write
 
 # cancel-in-progress deliberately false: a routine push must QUEUE behind a
 # multi-day build, not kill it. To supersede a doomed run, cancel it manually
