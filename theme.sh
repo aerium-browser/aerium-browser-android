@@ -3116,5 +3116,461 @@ sed_i 's|^BASE_FEATURE(kChromeNativeUrlOverriding, base::FEATURE_DISABLED_BY_DEF
     chrome/browser/flags/android/chrome_feature_list.cc
 sed_i 's|^            newCachedFlag(CHROME_NATIVE_URL_OVERRIDING, BuildConfig.IS_DESKTOP_ANDROID);$|            newCachedFlag(CHROME_NATIVE_URL_OVERRIDING, /* defaultValue= */ true);|' \
     chrome/browser/flags/android/java/src/org/chromium/chrome/browser/flags/ChromeFeatureList.java
+# --- "Is there a newer build of this?", asked once a day.
+#
+# Aerium has no update infrastructure and cannot have Chrome's: Omaha, Keystone
+# and a distro package all assume a vendor with an update server, and an APK
+# people sideload from a GitHub release has none of that. So someone who
+# installed once has no way to learn that a security fix shipped except by
+# remembering their own version number and going to look, which in practice
+# means running an old browser indefinitely. That is the problem this solves,
+# and it is a security problem before it is a convenience one.
+#
+# The C++ is byte-identical on all three platforms - only the repository it
+# asks about changes, and that is chosen by BUILDFLAG inside the header. Written
+# once and delivered three ways: a heredoc here, a patch on each desktop repo.
+#
+# Header-only again, and this time it buys more than tidiness. A KeyedService
+# plus its factory in one header, included by exactly one translation unit, is a
+# new service with no BUILD.gn edit, no .cc, and no entry in browser_prefs.cc -
+# the factory's own RegisterProfilePrefs() carries the four prefs. The whole
+# delta outside this file is two lines in
+# chrome_browser_main_extra_parts_profiles.cc.
+#
+# What it deliberately does not do is install anything. Replacing a running
+# binary is a different feature with a different risk profile - signature
+# checking, an unknown-sources prompt, a download nobody asked for on mobile
+# data - and shipping half of it would be worse than shipping none of it. This
+# tells you and points at the release.
+mkdir -p chrome/browser/aerium
+cat > chrome/browser/aerium/aerium_update_checker.h <<'AERIUM_UPDATE_CHECKER_H'
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#ifndef CHROME_BROWSER_AERIUM_AERIUM_UPDATE_CHECKER_H_
+#define CHROME_BROWSER_AERIUM_AERIUM_UPDATE_CHECKER_H_
+
+#include <algorithm>
+#include <memory>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <utility>
+
+#include "base/functional/bind.h"
+#include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
+#include "base/no_destructor.h"
+#include "base/strings/string_util.h"
+#include "base/time/time.h"
+#include "base/timer/timer.h"
+#include "base/types/expected.h"
+#include "base/values.h"
+#include "base/version.h"
+#include "build/build_config.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_keyed_service_factory.h"
+#include "components/keyed_service/core/keyed_service.h"
+#include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_service.h"
+#include "base/version_info/version_info.h"
+#include "content/public/browser/browser_context.h"
+#include "content/public/browser/storage_partition.h"
+#include "net/base/load_flags.h"
+#include "net/http/http_request_headers.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
+#include "services/data_decoder/public/cpp/data_decoder.h"
+#include "services/network/public/cpp/resource_request.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/network/public/cpp/simple_url_loader.h"
+#include "services/network/public/mojom/url_response_head.mojom.h"
+#include "url/gurl.h"
+
+// Aerium: "is there a newer build of this?", asked once a day, of the one place
+// that can answer it - the GitHub repository this binary is released from.
+//
+// Aerium has no update infrastructure. Chrome has Omaha on Windows, Keystone on
+// Mac and a distro package on Linux; ungoogled-chromium and Vanadium have none
+// of those, and neither does an AppImage or a sideloaded APK. So a user who
+// installed once has no way to learn that a security fix shipped except by
+// visiting the releases page and remembering their own version number, and in
+// practice that means running an old browser indefinitely.
+//
+// What this deliberately does NOT do is download or install anything. Replacing
+// a running binary is a different feature with a different risk profile -
+// signature verification, an AppImage that has to rewrite itself, an elevated
+// installer on Windows, an unknown-sources prompt on Android - and shipping
+// half of it would be worse than shipping none. This tells you, and points at
+// the release; the install is yours.
+//
+// The privacy cost is stated plainly on the switch that turns it off: one
+// request a day to api.github.com, which sees an IP address and which platform
+// repository was asked about. That is a real cost and it is why the switch
+// exists. It is on by default because a browser that silently goes stale is a
+// worse privacy outcome than a daily connection to a host the user is already
+// trusting to distribute the binary.
+namespace aerium_update {
+
+// Whether to check at all. The one thing on this screen a user decides.
+inline constexpr char kCheckEnabled[] = "aerium.update.check_enabled";
+
+// When the last check completed, as microseconds since the Windows epoch, the
+// representation base::Time serialises to. Stored rather than kept in memory so
+// that restarting the browser five times in an hour does not check five times.
+inline constexpr char kLastCheckTime[] = "aerium.update.last_check_time";
+
+// The newest release found, and where to get it. Empty when this build is the
+// newest one - so "is there an update" is "is this string non-empty", and a
+// check that finds nothing clears a result that has been superseded.
+inline constexpr char kLatestVersion[] = "aerium.update.latest_version";
+inline constexpr char kLatestUrl[] = "aerium.update.latest_url";
+
+inline constexpr base::TimeDelta kCheckInterval = base::Hours(24);
+
+// Not at startup. The first two minutes belong to the page the user opened the
+// browser for, and an update that has been available for a day can wait.
+inline constexpr base::TimeDelta kStartupDelay = base::Minutes(2);
+
+// A release body is a few kilobytes of JSON; a megabyte is far past anything
+// legitimate and stops a compromised or confused endpoint from handing us an
+// unbounded string to parse.
+inline constexpr size_t kMaxResponseBytes = 1024 * 1024;
+
+// Each platform asks about its own repository, because each publishes its own
+// releases on its own cadence - a Linux AppImage and a Windows build of the
+// same Chromium are different artifacts with different build numbers.
+#if BUILDFLAG(IS_ANDROID)
+inline constexpr char kLatestReleaseUrl[] =
+    "https://api.github.com/repos/aerium-browser/aerium-browser-android/releases/latest";
+#elif BUILDFLAG(IS_WIN)
+inline constexpr char kLatestReleaseUrl[] =
+    "https://api.github.com/repos/aerium-browser/aerium-browser-windows/releases/latest";
+#else
+inline constexpr char kLatestReleaseUrl[] =
+    "https://api.github.com/repos/aerium-browser/aerium-browser-linux/releases/latest";
+#endif
+
+// Releases are tagged v<chromium version>, sometimes with a build suffix -
+// "v152.0.7977.64" on Linux and Android, "v152.0.7977.64-b120" on Windows,
+// where the suffix distinguishes two builds of the same Chromium. Only the
+// dotted part is a version base::Version can compare, so the rest is cut off
+// rather than guessed at. Returns an invalid Version for anything else, which
+// the caller treats as "no answer" rather than as "no update".
+//
+// Which means a Windows rebuild of a Chromium version already installed is not
+// reported, and that is not a gap that can be closed here: the binary knows the
+// Chromium version it was built from and nothing about the run number that
+// produced it, so -b118 has no way to recognise itself as older than -b120.
+// Reporting it would mean telling every user on that Chromium that an update
+// exists, every day, whether or not they already had it. A rebuild of the same
+// Chromium is also not the case this feature is for - the reason to know your
+// browser is stale is that a security fix shipped, and a security fix moves the
+// version.
+inline base::Version ParseReleaseTag(std::string_view tag) {
+  std::string_view body = tag;
+  if (!body.empty() && (body.front() == 'v' || body.front() == 'V')) {
+    body.remove_prefix(1);
+  }
+  const size_t dash = body.find('-');
+  if (dash != std::string_view::npos) {
+    body = body.substr(0, dash);
+  }
+  return base::Version(std::string(body));
+}
+
+class AeriumUpdateChecker : public KeyedService {
+ public:
+  explicit AeriumUpdateChecker(Profile* profile) : profile_(profile) {
+    ScheduleNextCheck();
+  }
+  AeriumUpdateChecker(const AeriumUpdateChecker&) = delete;
+  AeriumUpdateChecker& operator=(const AeriumUpdateChecker&) = delete;
+  ~AeriumUpdateChecker() override = default;
+
+  // KeyedService:
+  void Shutdown() override;
+
+ private:
+  void ScheduleNextCheck();
+  void Check();
+  void OnResponse(std::unique_ptr<std::string> body);
+  void OnParsed(base::expected<base::Value, std::string> result);
+  void Finish(const std::string& version, const std::string& url);
+
+  const raw_ptr<Profile> profile_;
+  std::unique_ptr<network::SimpleURLLoader> loader_;
+  base::OneShotTimer timer_;
+  base::WeakPtrFactory<AeriumUpdateChecker> weak_factory_{this};
+};
+
+inline void AeriumUpdateChecker::Shutdown() {
+  timer_.Stop();
+  loader_.reset();
+  weak_factory_.InvalidateWeakPtrs();
+}
+
+// Armed from the stored timestamp rather than from a fixed interval, so the
+// answer to "when is the next check" survives a restart. A clock that has moved
+// backwards - a timezone fix, a user setting the date - would otherwise park
+// the next check arbitrarily far in the future, so a due time further away than
+// the interval itself is treated as the interval.
+inline void AeriumUpdateChecker::ScheduleNextCheck() {
+  const base::Time last = base::Time::FromDeltaSinceWindowsEpoch(
+      base::Microseconds(profile_->GetPrefs()->GetInt64(kLastCheckTime)));
+  base::TimeDelta due = last + kCheckInterval - base::Time::Now();
+  if (due > kCheckInterval) {
+    due = kCheckInterval;
+  }
+  timer_.Start(FROM_HERE, std::max(due, kStartupDelay),
+               base::BindOnce(&AeriumUpdateChecker::Check,
+                              weak_factory_.GetWeakPtr()));
+}
+
+inline void AeriumUpdateChecker::Check() {
+  // Read every time rather than cached at construction: turning the switch off
+  // has to stop the next check, not the one after the browser is restarted.
+  if (!profile_->GetPrefs()->GetBoolean(kCheckEnabled)) {
+    // Still re-armed, so turning it back on does not require a restart.
+    timer_.Start(FROM_HERE, kCheckInterval,
+                 base::BindOnce(&AeriumUpdateChecker::Check,
+                                weak_factory_.GetWeakPtr()));
+    return;
+  }
+
+  constexpr net::NetworkTrafficAnnotationTag kAnnotation =
+      net::DefineNetworkTrafficAnnotation("aerium_update_check", R"(
+        semantics {
+          sender: "Aerium update check"
+          description:
+            "Asks the GitHub repository this build of Aerium is released from "
+            "whether a newer release exists, so the browser can tell the user "
+            "that they are running an old version. Nothing is downloaded or "
+            "installed; the result is a version number and a link."
+          trigger:
+            "Once every 24 hours while the browser is running, starting two "
+            "minutes after startup."
+          data:
+            "None beyond the request itself. The server sees the requesting IP "
+            "address and which platform repository was asked about."
+          destination: WEBSITE
+        }
+        policy {
+          cookies_allowed: NO
+          setting:
+            "Turned off with 'Check for updates' in Settings > About Aerium."
+          policy_exception_justification: "Not implemented."
+        })");
+
+  auto request = std::make_unique<network::ResourceRequest>();
+  request->url = GURL(kLatestReleaseUrl);
+  request->method = "GET";
+  request->credentials_mode = network::mojom::CredentialsMode::kOmit;
+  request->load_flags = net::LOAD_DISABLE_CACHE | net::LOAD_BYPASS_CACHE;
+  request->headers.SetHeader(net::HttpRequestHeaders::kAccept,
+                             "application/vnd.github+json");
+  // GitHub rejects API requests with no User-Agent. Deliberately just the
+  // product name: this request already tells the server which platform is
+  // asking, and the exact build number would tell it more than it needs.
+  request->headers.SetHeader(net::HttpRequestHeaders::kUserAgent, "Aerium");
+
+  loader_ = network::SimpleURLLoader::Create(std::move(request), kAnnotation);
+  loader_->SetRetryOptions(
+      1, network::SimpleURLLoader::RETRY_ON_NETWORK_CHANGE);
+  loader_->DownloadToString(
+      profile_->GetDefaultStoragePartition()
+          ->GetURLLoaderFactoryForBrowserProcess()
+          .get(),
+      base::BindOnce(
+          [](base::WeakPtr<AeriumUpdateChecker> self,
+             std::optional<std::string> body) {
+            if (!self) {
+              return;
+            }
+            self->OnResponse(body ? std::make_unique<std::string>(*body)
+                                  : nullptr);
+          },
+          weak_factory_.GetWeakPtr()),
+      kMaxResponseBytes);
+}
+
+inline void AeriumUpdateChecker::OnResponse(std::unique_ptr<std::string> body) {
+  loader_.reset();
+  if (!body) {
+    // A failed check is still a check. Re-arming without recording the time
+    // would retry every two minutes for as long as the network is down, which
+    // is both useless and the most conspicuous thing this feature could do.
+    Finish(profile_->GetPrefs()->GetString(kLatestVersion),
+           profile_->GetPrefs()->GetString(kLatestUrl));
+    return;
+  }
+  // Out of process. This is untrusted network data, and the isolated decoder is
+  // what Chromium uses for exactly that; parsing it in the browser process
+  // would put a JSON parser between an unauthenticated response and everything
+  // the browser process can reach.
+  data_decoder::DataDecoder::ParseJsonIsolated(
+      *body, base::BindOnce(&AeriumUpdateChecker::OnParsed,
+                            weak_factory_.GetWeakPtr()));
+}
+
+inline void AeriumUpdateChecker::OnParsed(
+    base::expected<base::Value, std::string> result) {
+  const std::string previous_version =
+      profile_->GetPrefs()->GetString(kLatestVersion);
+  const std::string previous_url = profile_->GetPrefs()->GetString(kLatestUrl);
+
+  if (!result.has_value() || !result->is_dict()) {
+    Finish(previous_version, previous_url);
+    return;
+  }
+  const base::DictValue& release = result->GetDict();
+  const std::string* tag = release.FindString("tag_name");
+  if (!tag) {
+    Finish(previous_version, previous_url);
+    return;
+  }
+  // A draft or prerelease is not something to send a user to.
+  if (release.FindBool("draft").value_or(false) ||
+      release.FindBool("prerelease").value_or(false)) {
+    Finish(std::string(), std::string());
+    return;
+  }
+
+  const base::Version latest = ParseReleaseTag(*tag);
+  // GetVersion() rather than parsing GetVersionNumber() ourselves: it is the
+  // same string already turned into a Version, and it cannot come back invalid.
+  const base::Version& current = version_info::GetVersion();
+  if (!latest.IsValid() || !current.IsValid()) {
+    Finish(previous_version, previous_url);
+    return;
+  }
+  if (latest.CompareTo(current) <= 0) {
+    // Up to date, and saying so is the point: this is what clears a result
+    // that was true yesterday and is not true now that the user has updated.
+    Finish(std::string(), std::string());
+    return;
+  }
+
+  const std::string* html_url = release.FindString("html_url");
+  Finish(*tag, html_url ? *html_url : std::string());
+}
+
+inline void AeriumUpdateChecker::Finish(const std::string& version,
+                                        const std::string& url) {
+  PrefService* const prefs = profile_->GetPrefs();
+  prefs->SetString(kLatestVersion, version);
+  prefs->SetString(kLatestUrl, url);
+  prefs->SetInt64(
+      kLastCheckTime,
+      base::Time::Now().ToDeltaSinceWindowsEpoch().InMicroseconds());
+  ScheduleNextCheck();
+}
+
+class AeriumUpdateCheckerFactory : public ProfileKeyedServiceFactory {
+ public:
+  static AeriumUpdateCheckerFactory* GetInstance();
+
+  AeriumUpdateCheckerFactory(const AeriumUpdateCheckerFactory&) = delete;
+  AeriumUpdateCheckerFactory& operator=(const AeriumUpdateCheckerFactory&) =
+      delete;
+
+ private:
+  friend base::NoDestructor<AeriumUpdateCheckerFactory>;
+
+  // Regular profiles only. An incognito window is not a different install, and
+  // giving it its own checker would double the requests for no answer that the
+  // regular profile does not already have.
+  AeriumUpdateCheckerFactory()
+      : ProfileKeyedServiceFactory(
+            "AeriumUpdateChecker",
+            ProfileSelections::Builder()
+                .WithRegular(ProfileSelection::kOwnInstance)
+                .WithGuest(ProfileSelection::kNone)
+                .WithSystem(ProfileSelection::kNone)
+                .WithAshInternals(ProfileSelection::kNone)
+                .Build()) {}
+  ~AeriumUpdateCheckerFactory() override = default;
+
+  // Definitions are out of line because the chromium-style plugin rejects a
+  // virtual method whose non-empty body is written inside the class - the same
+  // reason aerium_first_run.h keeps its bodies below its declaration.
+  std::unique_ptr<KeyedService> BuildServiceInstanceForBrowserContext(
+      content::BrowserContext* context) const override;
+  bool ServiceIsCreatedWithBrowserContext() const override;
+  void RegisterProfilePrefs(
+      user_prefs::PrefRegistrySyncable* registry) override;
+};
+
+inline AeriumUpdateCheckerFactory* AeriumUpdateCheckerFactory::GetInstance() {
+  static base::NoDestructor<AeriumUpdateCheckerFactory> instance;
+  return instance.get();
+}
+
+inline std::unique_ptr<KeyedService>
+AeriumUpdateCheckerFactory::BuildServiceInstanceForBrowserContext(
+    content::BrowserContext* context) const {
+  return std::make_unique<AeriumUpdateChecker>(
+      Profile::FromBrowserContext(context));
+}
+
+// Created with the profile rather than on first use, because nothing would ever
+// ask for it: there is no call site, only a timer that has to be running.
+inline bool AeriumUpdateCheckerFactory::ServiceIsCreatedWithBrowserContext()
+    const {
+  return true;
+}
+
+inline void AeriumUpdateCheckerFactory::RegisterProfilePrefs(
+    user_prefs::PrefRegistrySyncable* registry) {
+  registry->RegisterBooleanPref(kCheckEnabled, true);
+  registry->RegisterInt64Pref(kLastCheckTime, 0);
+  registry->RegisterStringPref(kLatestVersion, std::string());
+  registry->RegisterStringPref(kLatestUrl, std::string());
+}
+
+}  // namespace aerium_update
+
+#endif  // CHROME_BROWSER_AERIUM_AERIUM_UPDATE_CHECKER_H_
+AERIUM_UPDATE_CHECKER_H
+
+# Registered beside the browsing-data lifetime manager, which is the closest
+# thing already here: another profile-scoped service that exists to run on a
+# timer rather than to answer a call. ServiceIsCreatedWithBrowserContext() is
+# what makes that work - nothing ever asks for this service, so if it were
+# built lazily it would never be built at all.
+CBMEPP=chrome/browser/profiles/chrome_browser_main_extra_parts_profiles.cc
+sed_i 's|^#include "chrome/browser/browsing_data/chrome_browsing_data_lifetime_manager_factory.h"$|#include "chrome/browser/aerium/aerium_update_checker.h"\n&|' \
+    $CBMEPP
+sed_i 's|^  ChromeBrowsingDataLifetimeManagerFactory::GetInstance();$|  aerium_update::AeriumUpdateCheckerFactory::GetInstance();\n&|' \
+    $CBMEPP
+
+# --- and the switch, on the About screen, where the version it is checking is.
+#
+# Two rows. The switch says what the check costs before it says what it does,
+# because "contacts GitHub once a day" is the part someone turning it off cares
+# about. The result row exists only when there is a result: a permanent "you are
+# up to date" is a line of furniture, while a row that appears when it has
+# something to say is a message.
+sed_i 's|^    private static final String PREF_AERIUM_PROJECT = "aerium_project";$|&\n    private static final String PREF_AERIUM_UPDATE_CHECK = "aerium_update_check";\n    private static final String PREF_AERIUM_UPDATE_AVAILABLE = "aerium_update_available";\n\n    // Must match chrome/browser/aerium/aerium_update_checker.h.\n    private static final String PREF_UPDATE_CHECK_ENABLED = "aerium.update.check_enabled";\n    private static final String PREF_UPDATE_LATEST_VERSION = "aerium.update.latest_version";\n    private static final String PREF_UPDATE_LATEST_URL = "aerium.update.latest_url";|' \
+    $ACS
+# Three imports, in the two places that keep the block sorted. Chromium checks
+# import order in presubmit rather than in the build, so getting this wrong
+# would compile - and then read as sloppy in every diff of this file forever.
+sed_i 's|^import org.chromium.components.browser_ui.settings.EmbeddableSettingsPage;$|import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;\n&|' \
+    $ACS
+sed_i 's|^import org.chromium.ui.widget.Toast;$|import org.chromium.components.prefs.PrefService;\nimport org.chromium.components.user_prefs.UserPrefs;\n&|' \
+    $ACS
+sed_i 's|^        Preference project = findPreference(PREF_AERIUM_PROJECT);$|        // Aerium: the update check. See theme.sh. The prefs are the profile'"'"'s,\n        // written by the checker in C++, so the switch is read and written\n        // through PrefService rather than persisted by the preference\n        // framework - which is why the XML entry is android:persistent="false".\n        PrefService updatePrefs = UserPrefs.get(getProfile());\n        ChromeSwitchPreference updateCheck =\n                (ChromeSwitchPreference) findPreference(PREF_AERIUM_UPDATE_CHECK);\n        if (updateCheck != null) {\n            updateCheck.setChecked(updatePrefs.getBoolean(PREF_UPDATE_CHECK_ENABLED));\n            updateCheck.setOnPreferenceChangeListener(\n                    (preference, newValue) -> {\n                        updatePrefs.setBoolean(PREF_UPDATE_CHECK_ENABLED, (boolean) newValue);\n                        return true;\n                    });\n        }\n\n        // Present only when there is something to say. An empty version is how\n        // the checker records "this build is the newest one", so it is also how\n        // a result that has been superseded disappears.\n        Preference updateAvailable = findPreference(PREF_AERIUM_UPDATE_AVAILABLE);\n        if (updateAvailable != null) {\n            String latest = updatePrefs.getString(PREF_UPDATE_LATEST_VERSION);\n            String latestUrl = updatePrefs.getString(PREF_UPDATE_LATEST_URL);\n            boolean haveUpdate = !latest.isEmpty() \&\& !latestUrl.isEmpty();\n            updateAvailable.setVisible(haveUpdate);\n            if (haveUpdate) {\n                updateAvailable.setSummary(latest);\n                updateAvailable.setOnPreferenceClickListener(\n                        preference -> {\n                            CustomTabActivity.showInfoPage(getActivity(), latestUrl);\n                            return true;\n                        });\n            }\n        }\n\n&|' \
+    $ACS
+
+# Inserted the same way the project row above was, before the closing tag, so
+# the two land after it. Anchoring on "<Preference" would have matched every
+# entry on the screen - sed replaces all of them - and put a copy of the switch
+# above each one.
+sed_i 's|^</PreferenceScreen>$|    <org.chromium.components.browser_ui.settings.ChromeSwitchPreference\n        android:key="aerium_update_check"\n        android:title="@string/aerium_update_check_title"\n        android:summary="@string/aerium_update_check_summary"\n        android:persistent="false" />\n    <Preference\n        android:key="aerium_update_available"\n        android:title="@string/aerium_update_available_title"\n        android:persistent="false" />\n&|' \
+    chrome/android/java/res/xml/about_chrome_preferences.xml
+
+sed_i 's|^      <message name="IDS_AERIUM_PROJECT_TITLE" desc=|      <message name="IDS_AERIUM_UPDATE_CHECK_TITLE" desc="Title of the About-screen switch that turns the daily update check on and off.">\n        Check for updates\n      </message>\n      <message name="IDS_AERIUM_UPDATE_CHECK_SUMMARY" desc="Summary under that switch. States the privacy cost first, then what the check is for.">\n        Asks GitHub once a day whether a newer Aerium has been released. Nothing is downloaded or installed. Turning this off means you will not be told when a security fix ships.\n      </message>\n      <message name="IDS_AERIUM_UPDATE_AVAILABLE_TITLE" desc="Title of the About-screen row that appears when a newer release exists. Tapping it opens that release.">\n        Update available\n      </message>\n&|' \
+    chrome/browser/ui/android/strings/android_chrome_strings.grd
 
 echo "[aerium] theme + rename pass applied"
