@@ -132,6 +132,18 @@ silently no-ops or `git am` (Vanadium patches) rejects.
   the three strings the settings screen shows; do not leave a checkbox
   offering something the remover will crash on. Adding a type is the
   same check in reverse - only what is in that set may go in `kTypes`.
+- **`aerium://` block in `theme.sh`**: the rewrite handler deliberately
+  returns `false` after rewriting, so that `RewriteURLIfNecessary` carries
+  on down the chain and `chrome://newtab` still reaches
+  `HandleAndroidNativePageURL`. If someone "fixes" it to return `true`,
+  every aliased host resolves the scheme and then skips the handler that
+  gave it meaning, and the failure looks like `aerium://newtab` showing a
+  blank page rather than like a bug in the alias. The registration sed
+  anchors on `BrowserURLHandler* handler) {`, which is one line in
+  `chrome_content_browser_client.cc` and one in the header - if upstream
+  reflows that signature the sed will match nothing and the alias will
+  quietly stop existing while everything still builds, so check it at
+  every bump.
 - **Fingerprint-protection block in `theme.sh`**: touches
   `runtime_enabled_features.json5` (new `status: "stable"` entries -
   no flag or command-line switch needed, unlike Windows's

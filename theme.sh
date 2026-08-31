@@ -3629,3 +3629,44 @@ sed_i 's|^      pref_service->GetBoolean(autofill::prefs::kAutofillUsingPlatform
     $RPU
 
 echo "[aerium] theme + rename pass applied"
+
+# --- aerium:// - the browser's own pages under the browser's own name.
+#
+# aerium://settings, aerium://flags, aerium://version and every other chrome:
+# host work. chrome:// is unchanged. The alias runs one way only: aerium: is
+# rewritten to chrome: on the way into a navigation, and nothing rewrites
+# chrome: back into aerium:.
+#
+# Four edits, the same four the desktop repositories carry as
+# aerium-scheme.patch, so the behaviour does not differ by platform.
+#
+# The scheme is registered as standard. The comment above that list says a
+# scheme only needs to be there to take part in the web platform, and that
+# non-special URLs now parse a host on their own - true today, and a parser
+# behaviour that has changed more than once. This scheme has exactly one job:
+# aerium://settings has to split into a host and a path on every Chromium this
+# ships on, because the rewrite replaces the scheme and keeps the rest. What the
+# entry costs is an origin no document is ever committed in, since every aerium:
+# URL has become a chrome: URL before anything loads it.
+#
+# ProfileIOData::IsHandledProtocol is what makes the omnibox go to
+# aerium://settings rather than search for it: the scheme classifier asks that
+# function first, and a scheme it does not know falls through to the
+# external-protocol check, which answers "search" on Android.
+#
+# Nothing here lets a web page reach an internal page. A page navigating to
+# aerium://settings is rewritten to chrome://settings and then blocked by
+# exactly the check that blocks chrome://settings today, because the rewrite
+# happens before the navigation is authorised, not after.
+sed_i 's|^// "Learn more" URL for when profile settings are automatically reset.$|// Aerium: a second spelling of the chrome: scheme, so that the browser'"'"'s own\n// pages can be reached under the browser'"'"'s own name. See theme.sh - it is an\n// alias in one direction only, and no document ever commits under it.\ninline constexpr char kAeriumScheme[] = "aerium";\n\n&|' \
+    chrome/common/url_constants.h
+sed_i 's|^    chrome::kChromeNativeScheme,        chrome::kChromeSearchScheme,$|    chrome::kAeriumScheme,\n&|' \
+    chrome/common/chrome_content_client.cc
+sed_i 's|^      content::kChromeUIScheme,$|      chrome::kAeriumScheme,\n&|' \
+    chrome/browser/profiles/profile_io_data.cc
+sed_i 's|^// Handles the rewriting of the new tab page URL based on group policy.$|// Aerium: rewrite aerium://<rest> to chrome://<rest> and then get out of the\n// way. See theme.sh.\n//\n// The return value is false on purpose, including when the URL was rewritten.\n// RewriteURLIfNecessary stops at the first handler that returns true, so\n// claiming the URL here would mean chrome://settings never reaching\n// HandleWebUI and chrome://newtab never reaching HandleAndroidNativePageURL -\n// the alias would resolve the scheme and then skip everything that gives those\n// hosts their meaning. Mutating through the pointer and declining to claim the\n// URL is how a handler joins the chain rather than ending it; HandleViewSource\n// does the same on its error path.\n//\n// The displayed URL is not affected and does not need to be. The navigation\n// entry keeps the URL as it was typed as its virtual URL, copied before the\n// rewrite, so aerium://settings stays aerium://settings in the omnibox while\n// chrome:// stays chrome://, and neither spelling is rewritten into the other\n// behind the user'"'"'s back.\nbool HandleAeriumScheme(GURL* url, content::BrowserContext* browser_context) {\n  if (url->SchemeIs(chrome::kAeriumScheme)) {\n    GURL::Replacements replacements;\n    replacements.SetSchemeStr(content::kChromeUIScheme);\n    *url = url->ReplaceComponents(replacements);\n  }\n  return false;\n}\n\n&|' \
+    chrome/browser/chrome_content_browser_client.cc
+sed_i 's|^    BrowserURLHandler\* handler) {$|&\n  // Aerium: aerium://<host> is another spelling of chrome://<host>. First,\n  // ahead of every handler below, so that aerium://newtab and aerium://about\n  // reach the handlers that know what those mean.\n  handler->AddHandlerPair(\&HandleAeriumScheme,\n                          BrowserURLHandler::null_handler());\n|' \
+    chrome/browser/chrome_content_browser_client.cc
+
+echo "[aerium] aerium:// scheme applied"
