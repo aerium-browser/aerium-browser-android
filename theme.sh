@@ -3572,5 +3572,60 @@ sed_i 's|^</PreferenceScreen>$|    <org.chromium.components.browser_ui.settings.
 
 sed_i 's|^      <message name="IDS_AERIUM_PROJECT_TITLE" desc=|      <message name="IDS_AERIUM_UPDATE_CHECK_TITLE" desc="Title of the About-screen switch that turns the daily update check on and off.">\n        Check for updates\n      </message>\n      <message name="IDS_AERIUM_UPDATE_CHECK_SUMMARY" desc="Summary under that switch. States the privacy cost first, then what the check is for.">\n        Asks GitHub once a day whether a newer Aerium has been released. Nothing is downloaded or installed. Turning this off means you will not be told when a security fix ships.\n      </message>\n      <message name="IDS_AERIUM_UPDATE_AVAILABLE_TITLE" desc="Title of the About-screen row that appears when a newer release exists. Tapping it opens that release.">\n        Update available\n      </message>\n&|' \
     chrome/browser/ui/android/strings/android_chrome_strings.grd
+# --- Autofill that sometimes offers nothing: the renderer and the browser
+# disagreeing about who is doing the autofilling.
+#
+# Reported as "on some websites autofill does not appear, neither as a popup nor
+# inline in the keyboard". Both surfaces missing at once is the tell: that is not
+# a UI problem, it is no autofill session being usable at all.
+#
+# Chromium decides once per profile, in AutofillClientProvider's constructor,
+# whether to delegate to the Android Autofill framework. That single boolean has
+# to reach two places:
+#
+#   * the browser, which uses it to build either AndroidAutofillClient or
+#     ChromeAutofillClient for every WebContents; and
+#   * the renderer, where AutofillAgent's constructor calls CreateConfig() on
+#     RendererPreferences::uses_platform_autofill and gets one of two quite
+#     different configurations - the delegating one turns off the keyboard
+#     accessory, routes password suggestions through AutofillDriver instead of
+#     letting PasswordAutofillAgent answer them, stops requiring a scroll before
+#     focus is reported, and stops requiring a user gesture for value changes.
+#
+# Upstream keeps those two in step by force-writing the pref the renderer reads
+# to whatever the browser decided, on every startup. Aerium stopped doing that,
+# for a good reason: getAndroidAutofillFrameworkAvailability() treats the pref as
+# one of its two routes to AVAILABLE, so writing false after a probe that failed
+# once latched third-party autofill off permanently, and this build has no
+# autofill settings screen to turn it back on again.
+#
+# The reason was right and the consequence was not. The probe has transient
+# failure modes - UNKNOWN_ANDROID_AUTOFILL_SERVICE when the framework has not
+# resolved the selected service yet, ANDROID_AUTOFILL_MANAGER_NOT_AVAILABLE if
+# the system service is not up - and when one of those fires at profile
+# construction the browser falls back to ChromeAutofillClient while the pref,
+# now left alone, still says true. The renderer then configures itself for
+# delegation that is not happening: no keyboard accessory, and password fields
+# handed to a driver whose client is not expecting them. No popup, no inline
+# row, and only on the launches where the probe happened to be slow - which from
+# the outside looks like "some websites, sometimes".
+#
+# So the renderer is pointed at the decision instead of at the pref. Both halves
+# now come from the same boolean by construction rather than by being written to
+# the same place, the anti-latch fix above keeps working, and a launch where the
+# probe fails degrades to Chrome's own autofill working properly rather than to
+# neither autofill working at all.
+#
+# //chrome/browser/ui and //chrome/browser are the same target as far as
+# includes go - chrome/browser/BUILD.gn says so in as many words where it sets
+# up allow_circular_includes_from - so reaching for the factory here is not a
+# layering violation.
+RPU=chrome/browser/renderer_preferences_util.cc
+sed_i 's|^#include "chrome/browser/profiles/profile.h"$|&\n#include "chrome/browser/ui/autofill/autofill_client_provider.h"\n#include "chrome/browser/ui/autofill/autofill_client_provider_factory.h"|' \
+    $RPU
+sed_i 's|^  prefs->uses_platform_autofill =$|  // Aerium: see theme.sh. This has to be the same boolean the browser used to\n  // pick the AutofillClient for this profile, not the pref that usually\n  // happens to equal it - the two diverge here, and a renderer configured for\n  // a delegation the browser is not performing offers no suggestions at all.\n&|' \
+    $RPU
+sed_i 's|^      pref_service->GetBoolean(autofill::prefs::kAutofillUsingPlatformAutofill);$|      autofill::AutofillClientProviderFactory::GetForProfile(profile)\n          .uses_platform_autofill();|' \
+    $RPU
 
 echo "[aerium] theme + rename pass applied"
