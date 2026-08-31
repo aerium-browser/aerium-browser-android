@@ -2447,5 +2447,42 @@ if [ -e $PAYMENT_PREFS ] && grep -q 'kCanMakePaymentEnabled, true,' $PAYMENT_PRE
 fi
 sed_i -E '/^ +(AndroidPaymentAppsFragment|AutofillAndPasswordsFragment|AutofillBuyNowPayLaterFragment|AutofillCardBenefitsFragment|AutofillIdentityDocsFragment|AutofillOptionsFragment|AutofillPaymentMethodsFragment|AutofillPersonalContextFragment|AutofillProfilesFragment|AutofillShoppingFragment|AutofillTravelFragment|FinancialAccountsManagementFragment|NonCardPaymentMethodsManagementFragment)\.SEARCH_INDEX_DATA_PROVIDER,$/d' \
     $SIPR
+# --- Put the SurfaceControl switch back in chrome://flags.
+#
+# Reported against this repo: on a Vivo X100 Ultra running Android 16, whose
+# panel runs 1-120 Hz for other apps, the browser scrolls at 60. Two things are
+# worth separating there.
+#
+# The browser is not asking for 60. WindowAndroid's only lever on the display
+# is WindowManager.LayoutParams.preferredDisplayModeId, and it is left at 0 -
+# no preference - unless a video wants a particular rate. What decides whether
+# an LTPO panel ramps up is the system, from how the app's surface votes its
+# frame rate, and OEM shells differ wildly in how they read that vote. That is
+# why the reporter sees Edge and Opera behave differently on the same phone.
+#
+# Chromium 152 has the beginning of a real answer -
+# UseFrameIntervalDeciderAdaptiveFrameRate implements Android 16's adaptive
+# refresh rate API, mapping scroll velocity to a requested frame rate. It is
+# off by default upstream, it is already exposed as #android-adaptive-frame-rate,
+# and the reporter says turning it on changed nothing on their device. So its
+# default is left alone: flipping an unfinished viz feature on for everyone, on
+# the strength of one report where it demonstrably did not help, would be a
+# change with no evidence behind it.
+#
+# What is worth doing is giving back the workaround that did work for them.
+# AndroidSurfaceControl is still a feature and still enabled by default in
+# gpu_finch_features.cc; what 152 removed is only its chrome://flags entry and
+# its two description strings. So the toggle exists and nothing in the browser
+# can reach it. Restoring the entry costs a few lines, changes no default, and
+# hands anyone on a panel that behaves this way a switch they can try - which
+# is precisely what an experiments page is for.
+#
+# gpu::features rather than plain features: about_flags.cc has its own
+# `features` in scope, and gpu_finch_features.h is already included for the
+# switches beside it.
+sed_i 's|^inline constexpr char kAndroidAdaptiveFrameRateName\[\] =$|inline constexpr char kAeriumAndroidSurfaceControlName[] =\n    "Android SurfaceControl";\ninline constexpr char kAeriumAndroidSurfaceControlDescription[] =\n    "Use SurfaceControl to composite the browser'"'"'s output, which lets the "\n    "system put it in a hardware overlay. Chromium enables this by default. "\n    "Turning it off changes how the browser presents frames, which on some "\n    "phones is what decides whether the panel runs above 60 Hz while "\n    "scrolling. Off costs power on most devices - only worth trying if this "\n    "one is capping the refresh rate.";\n\n&|' \
+    chrome/browser/flag_descriptions.h
+sed_i 's|^    {"android-adaptive-frame-rate",$|    {"android-surface-control",\n     flag_descriptions::kAeriumAndroidSurfaceControlName,\n     flag_descriptions::kAeriumAndroidSurfaceControlDescription, kOsAndroid,\n     FEATURE_VALUE_TYPE(::gpu::features::kAndroidSurfaceControl)},\n\n&|' \
+    chrome/browser/about_flags.cc
 
 echo "[aerium] theme + rename pass applied"
