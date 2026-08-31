@@ -2309,5 +2309,143 @@ sed_i 's|^    public void onDestroyInternal() {$|&\n        // Aerium: see theme
 
 sed_i 's|^      <message name="IDS_AERIUM_PATCHES_TITLE" desc=|      <message name="IDS_AERIUM_CLEAR_ON_EXIT_TITLE" desc="Title of the settings screen that deletes browsing data every time the browser is closed.">\n        Delete browsing data on exit\n      </message>\n      <message name="IDS_AERIUM_CLEAR_ON_EXIT_SUMMARY" desc="Summary under that entry on the Privacy and security screen.">\n        Choose what is deleted every time you close Aerium\n      </message>\n      <message name="IDS_AERIUM_CLEAR_ON_EXIT_SWITCH_TITLE" desc="Title of the master switch on that screen.">\n        Delete on exit\n      </message>\n      <message name="IDS_AERIUM_CLEAR_ON_EXIT_SWITCH_SUMMARY" desc="Summary under the master switch, saying when the deletion happens.">\n        The types below are deleted when you close Aerium. If the browser is closed by the system before that happens, they are deleted the next time it starts.\n      </message>\n      <message name="IDS_AERIUM_CLEAR_ON_EXIT_TYPES_TITLE" desc="Header above the list of data types.">\n        What to delete\n      </message>\n      <message name="IDS_AERIUM_CLEAR_ON_EXIT_HISTORY" desc="Data type: pages visited.">\n        Browsing history\n      </message>\n      <message name="IDS_AERIUM_CLEAR_ON_EXIT_DOWNLOADS" desc="Data type: the list of downloaded files, not the files themselves.">\n        Download history\n      </message>\n      <message name="IDS_AERIUM_CLEAR_ON_EXIT_COOKIES" desc="Data type: cookies and other site storage. Signs you out of sites.">\n        Cookies and site data\n      </message>\n      <message name="IDS_AERIUM_CLEAR_ON_EXIT_CACHE" desc="Data type: the HTTP cache.">\n        Cached images and files\n      </message>\n      <message name="IDS_AERIUM_CLEAR_ON_EXIT_FORM_DATA" desc="Data type: text remembered from web forms.">\n        Autofill form data\n      </message>\n      <message name="IDS_AERIUM_CLEAR_ON_EXIT_PASSWORDS" desc="Data type: saved sign-in details.">\n        Saved passwords\n      </message>\n      <message name="IDS_AERIUM_CLEAR_ON_EXIT_SITE_SETTINGS" desc="Data type: per-site permissions such as camera or location.">\n        Site settings\n      </message>\n      <message name="IDS_AERIUM_CLEAR_ON_EXIT_HOSTED_APPS" desc="Data type: data belonging to installed web apps.">\n        Hosted app data\n      </message>\n&|' \
     chrome/browser/ui/android/strings/android_chrome_strings.grd
+# --- Never sit on the launch screen forever.
+#
+# Chromium blocks ChromeTabbedActivity's first draw on purpose, so a cold start
+# does not flash an empty toolbar before the initial tab is ready.
+# AppLaunchDrawBlocker installs an OnPreDrawListener that returns false until
+# one of two conditions fires - onActiveTabAvailable() for the initial-tab
+# case, and IncognitoRestoreAppLaunchDrawBlocker's unblock runnable for the
+# incognito-restore case - and returning false from onPreDraw cancels the draw
+# pass.
+#
+# Neither condition has a deadline. If either never arrives - a restored NTP
+# tab whose onContentChanged never fires, an initial tab creation that does not
+# happen because PartnerBrowserCustomizations never calls back, an observer
+# that throws on the way - the process is alive and healthy and simply never
+# paints, so Android keeps showing the launcher icon on the splash screen.
+# That is the "stuck on the Aerium logo" report: not a crash, since there is no
+# dialog and no restart, and not a frozen UI thread, since input still reaches
+# it - just a first frame that never comes.
+#
+# Chromium can afford an unbounded wait because Finch can turn the blocker off
+# in the field within hours; a self-built browser cannot. So the wait gets an
+# upper bound. Five seconds is far beyond the normal path - the blocker's own
+# Android.AppLaunchDrawBlocker.ActiveTabAvailable histogram is measured in
+# hundreds of milliseconds - so a launch that is merely slow still gets the
+# flicker-free start the blocker exists to provide, while a launch that is
+# broken shows the browser instead of the logo. The worst case this can cause
+# is the flash of empty toolbar the feature was written to avoid, which is a
+# far better failure than never starting.
+#
+# invalidate() matters as much as the flags. onPreDraw is only consulted when
+# something asks for a draw, and the reason nothing is on screen is precisely
+# that nothing is asking; flipping the booleans alone would leave the deadline
+# waiting for a draw pass that may never be scheduled.
+ALDB=chrome/android/java/src/org/chromium/chrome/browser/ui/AppLaunchDrawBlocker.java
+sed_i 's|^import org.chromium.base.supplier.MonotonicObservableSupplier;$|&\nimport org.chromium.base.task.PostTask;\nimport org.chromium.base.task.TaskTraits;|' \
+    $ALDB
+sed_i 's|^    private final long mStartTime;$|&\n\n    /**\n     * Aerium: upper bound on how long the launch draw may stay blocked. See\n     * theme.sh - without it a condition that never fires means a browser that\n     * never paints.\n     */\n    private static final long AERIUM_DRAW_BLOCK_TIMEOUT_MS = 5000;\n\n    /** Aerium: whether the deadline above has been armed for this launch. */\n    private boolean mAeriumDrawUnblockScheduled;|' \
+    $ALDB
+sed_i 's|^        mBlockDrawForIncognitoRestore = true;$|&\n        aeriumScheduleDrawUnblock();|' \
+    $ALDB
+sed_i 's|^            mBlockDrawForInitialTab = true;$|&\n            aeriumScheduleDrawUnblock();|' \
+    $ALDB
+sed_i 's|^    /\*\* Should be called when the initial tab is available. \*/$|    /**\n     * Aerium: arms the deadline described in theme.sh. Armed once, the first\n     * time either client blocks the draw, and never cancelled - the whole\n     * point is that it fires even when the condition it covers for does not.\n     */\n    private void aeriumScheduleDrawUnblock() {\n        if (mAeriumDrawUnblockScheduled) return;\n        mAeriumDrawUnblockScheduled = true;\n        PostTask.postDelayedTask(\n                TaskTraits.UI_DEFAULT,\n                () -> {\n                    if (!mBlockDrawForInitialTab \&\& !mBlockDrawForIncognitoRestore) return;\n                    // Recorded before the flags are flipped, and split so\n                    // that chrome://histograms says WHICH condition failed to\n                    // arrive. There is no logcat on a shipped build, and this\n                    // is the only evidence a user can read back.\n                    RecordHistogram.recordBooleanHistogram(\n                            "Android.AppLaunchDrawBlocker.AeriumTimedOut.InitialTab",\n                            mBlockDrawForInitialTab);\n                    RecordHistogram.recordBooleanHistogram(\n                            "Android.AppLaunchDrawBlocker.AeriumTimedOut.IncognitoRestore",\n                            mBlockDrawForIncognitoRestore);\n                    mBlockDrawForInitialTab = false;\n                    mBlockDrawForIncognitoRestore = false;\n                    // onPreDraw is only consulted when something asks for a\n                    // draw, and nothing is asking - that is why the screen is\n                    // still empty. Ask for one.\n                    mViewSupplier.get().invalidate();\n                },\n                AERIUM_DRAW_BLOCK_TIMEOUT_MS);\n    }\n\n&|' \
+    $ALDB
+
+# --- The incognito overflow menu, black like every other surface.
+#
+# ChromeTabbedActivity.applyThemeOverlays() ends with:
+#
+#     if (isIncognitoWindow()) {
+#         // This overlay is for incognito windowing. Any overlay that attempts
+#         // to change color roles should be placed before this call in order to
+#         // not alter incognito coloring.
+#         applySingleThemeOverlay(R.style.ThemeOverlay_BrowserUI_TabbedMode_Incognito);
+#     }
+#
+# and that overlay is color_palette_dark_attributes() - the whole Material
+# baseline dark palette, colorSurface through colorSurfaceContainerHighest.
+# The pure black overlay is applied inside super.applyThemeOverlays(), so in an
+# incognito window it is applied first and then overwritten, exactly as the
+# comment above warns.
+#
+# Most incognito surfaces still came out black anyway, because the pure black
+# section further up patches ChromeColors to read aeriumIncognitoBgColor - an
+# attribute the incognito overlay does not define, so it survives. Anything
+# that resolves a stock Material role instead does not: the overflow menu
+# background is popupBgShape -> popup_bg_shape_24dp -> @macro/menu_bg_color ->
+# ?attr/colorSurfaceBright, which the incognito overlay has just put back to
+# Material's dark grey. Hence a black browser with a grey three-dot menu.
+#
+# Re-applying afterwards is what the upstream comment actually asks for, and it
+# fixes every role at once rather than adding a second one-off attribute for
+# the menu - dialogs, bottom sheets and cards in incognito were grey for the
+# same reason and are covered by the same two lines.
+#
+# Gated identically to the copy in ChromeBaseAppCompatActivity, so the switch
+# still turns it off; incognito is always dark, so the night mode half of the
+# gate is always true here.
+sed_i 's|^            applySingleThemeOverlay(R.style.ThemeOverlay_BrowserUI_TabbedMode_Incognito);$|&\n            // Aerium: see theme.sh. The overlay above is the full Material\n            // baseline dark palette and it has just overwritten every colour\n            // role the pure black overlay set in super.applyThemeOverlays(),\n            // which is what left the overflow menu grey inside a black\n            // browser. Re-applied here, which is where the comment above says\n            // a colour overlay belongs.\n            if (getNightModeStateProvider().isInNightMode()\n                    \&\& ChromeSharedPreferences.getInstance()\n                            .readBoolean(ChromePreferenceKeys.AERIUM_PURE_BLACK, true)) {\n                applySingleThemeOverlay(R.style.ThemeOverlay_BrowserUI_AeriumPureBlack);\n            }|' \
+    chrome/android/java/src/org/chromium/chrome/browser/ChromeTabbedActivity.java
+
+# --- Payment methods, off and out of reach.
+#
+# The screens were already unreachable by navigation: patch.sh drops the six
+# autofill and payment entries from main_preferences.xml, MainSettings removes
+# whatever survives, and shouldShowPasswordsAndAutofillParentItem() returns
+# false so the three-dot menu never builds the submenu that held Payment
+# methods. What none of that touched is the storage itself or the settings
+# search index.
+#
+# Storage first. kAutofillCreditCardEnabled defaults to true, so with no UI
+# left to turn it off the browser was still offering to save cards and filling
+# them into checkout forms - the behaviour the missing screen implies is gone.
+# kAutofillPaymentCardBenefits follows it, and kCanMakePaymentEnabled is the
+# "let sites check whether you have a payment method saved" switch, which is
+# the one piece of this a web page can observe directly.
+#
+# Then the index. SearchIndexProviderRegistry.ALL_PROVIDERS is a list of every
+# searchable fragment, and it still named the whole autofill cluster, so typing
+# "payment" into Settings search found Payment methods and opened it - a screen
+# with no entry point anywhere else in the browser. The payments rows go, and
+# so do their siblings, for two reasons: the same argument applies to each of
+# them (they are all screens patch.sh already removed), and leaving the
+# "Autofill and passwords" parent behind would keep a searchable route to its
+# children whether or not their own rows were gone.
+#
+# Removing rows here is also what keeps R8 honest - this registry is the only
+# place naming these fragments in code, so once they are out of it the classes
+# themselves can be dropped from the APK. That is safe precisely because every
+# entry point is gone; a fragment nothing can start is a fragment nothing can
+# fail to load.
+sed_i 's|^      kAutofillCreditCardEnabled, true,$|      kAutofillCreditCardEnabled, false,|' \
+    components/autofill/core/common/autofill_prefs.cc
+sed_i 's|^      kAutofillPaymentCardBenefits, true,$|      kAutofillPaymentCardBenefits, false,|' \
+    components/autofill/core/common/autofill_prefs.cc
+# kCanMakePaymentEnabled is already false by the time this runs - Vanadium
+# patch 0079 flips it - so there is nothing here to substitute, and a sed that
+# tried would fail the build on its own no-op guard. What is worth keeping is
+# the assertion: if Vanadium ever drops 0079, the switch comes back on with no
+# settings UI in this build to turn it off, and a web page regains the ability
+# to ask whether a payment method is saved. That is a behaviour regression no
+# compiler would catch, so check the outcome rather than redo the work.
+#
+# Written as "is the pristine line still here" rather than "is the patched line
+# missing", for the same reason patch.sh's autofill check is: devutils/verify-seds.sh
+# sources this over a sparse tree where the file may not have been fetched at
+# all, and a check phrased the other way round would fire on the absence of the
+# file and stop the rest of this script from being verified.
+PAYMENT_PREFS=components/payments/core/payment_prefs.cc
+if [ -e $PAYMENT_PREFS ] && grep -q 'kCanMakePaymentEnabled, true,' $PAYMENT_PREFS; then
+    echo "[aerium] FATAL: kCanMakePaymentEnabled is back to defaulting true in" \
+         "$PAYMENT_PREFS - Vanadium patch 0079 no longer flips it. Sites can" \
+         "now ask whether a payment method is saved, and Aerium ships no" \
+         "settings screen to turn that off. Flip it here instead." >&2
+    return 1
+fi
+sed_i -E '/^ +(AndroidPaymentAppsFragment|AutofillAndPasswordsFragment|AutofillBuyNowPayLaterFragment|AutofillCardBenefitsFragment|AutofillIdentityDocsFragment|AutofillOptionsFragment|AutofillPaymentMethodsFragment|AutofillPersonalContextFragment|AutofillProfilesFragment|AutofillShoppingFragment|AutofillTravelFragment|FinancialAccountsManagementFragment|NonCardPaymentMethodsManagementFragment)\.SEARCH_INDEX_DATA_PROVIDER,$/d' \
+    $SIPR
 
 echo "[aerium] theme + rename pass applied"
