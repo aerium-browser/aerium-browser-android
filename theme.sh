@@ -3076,5 +3076,45 @@ sed_i 's|^import org.chromium.chrome.browser.browsing_data.AeriumClearOnExitFrag
 
 sed_i 's|^      <message name="IDS_AERIUM_CLEAR_ON_EXIT_TITLE" desc=|      <message name="IDS_AERIUM_SITE_RULES_TITLE" desc="Title of the screen listing sites whose data is not deleted when the browser closes.">\n        Sites to keep\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_SUMMARY" desc="Summary under the entry that opens that screen.">\n        Sites whose data survives the deletion\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_LIST_TITLE" desc="Header above the list of kept sites.">\n        Kept sites\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_ADD" desc="Row that opens a dialog for adding a site, and the title of that dialog.">\n        Add a site\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_EDIT" desc="Title of the dialog shown when an existing site in the list is tapped.">\n        Edit site\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_EMPTY" desc="Shown in place of the list when no sites have been added.">\n        No sites yet. Everything selected above is deleted when you close Aerium.\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_HINT" desc="Hint text in the site field, telling the user what to type.">\n        example.com - covers the whole site, subdomains included\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_INVALID" desc="Error shown under the site field when what was typed cannot be read as a site.">\n        Enter a site, such as example.com\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_SAVE" desc="Button that stores the site being added or edited.">\n        Save\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_REMOVE" desc="Button that deletes the site being edited from the list.">\n        Remove\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_KEEP_SITE_DATA" desc="Data type a kept site can hold on to: cookies and other site storage.">\n        Cookies and site data\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_KEEP_CACHE" desc="Data type a kept site can hold on to: cached files.">\n        Cached images and files\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_KEEP_DOWNLOADS" desc="Data type a kept site can hold on to: its entries in the download list.">\n        Download history\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_KEEP_NOTHING" desc="Summary on a row where every data type was unticked, so the row keeps nothing.">\n        Nothing kept\n      </message>\n&|' \
     chrome/browser/ui/android/strings/android_chrome_strings.grd
+# --- Let an extension own the New Tab page on a phone.
+#
+# Chromium 152 has the whole mechanism for this and switches it off here.
+# UrlConstantResolver.getNtpUrl() normally returns chrome-native://newtab/,
+# which is intercepted early and drawn as a native Android View that no
+# extension can reach. When an extension registers a chrome_url_overrides.newtab
+# it instead returns chrome://newtab/, which goes through the C++ handler chain
+# in ChromeContentBrowserClient::BrowserURLHandlerCreated() - policy first,
+# then ExtensionUrlOverrides::HandleChromeURLOverride(), then Android's native
+# page handler - so the extension wins and the native page is never built.
+#
+# All of that is gated on ChromeNativeUrlOverriding, which is
+# FEATURE_DISABLED_BY_DEFAULT in chrome_feature_list.cc and defaults to
+# BuildConfig.IS_DESKTOP_ANDROID on the Java side. That gate is upstream saying
+# "extensions only exist on desktop Android" - which is the exact assumption
+# this build is here to break. Aerium ships extensions on phones, so the
+# feature they are gated behind should be on for phones too.
+#
+# Both halves have to move together. sChromeNativeUrlOverriding is a CachedFlag:
+# it is read from SharedPreferences before native is up, seeded from the Java
+# default on the very first launch and refreshed from the native value at the
+# end of each one. Flipping only the native default would leave the first launch
+# after install disagreeing with every launch after it; flipping only the Java
+# default would leave every launch after the first disagreeing with the first.
+#
+# With it on, all three surfaces follow the extension without any further work,
+# because each already asks the resolver rather than the constant:
+# ChromeTabbedActivity.createInitialTab() for a cold start with no tabs to
+# restore, HomepageManager.getNtpUrl() for the home button and for a homepage
+# that is set to the New Tab page, and the new-tab action itself.
+#
+# Incognito is deliberately not included, and that is Chromium's rule rather
+# than ours: GetOverridesForChromeURL() refuses new-tab overrides off the record
+# outright - `url.host() != chrome::kChromeUINewTabHost` in its
+# incognito_override_allowed test - so that the incognito explainer is always
+# what an incognito new tab shows. Nothing here can or should change that.
+sed_i 's|^BASE_FEATURE(kChromeNativeUrlOverriding, base::FEATURE_DISABLED_BY_DEFAULT);$|BASE_FEATURE(kChromeNativeUrlOverriding, base::FEATURE_ENABLED_BY_DEFAULT);|' \
+    chrome/browser/flags/android/chrome_feature_list.cc
+sed_i 's|^            newCachedFlag(CHROME_NATIVE_URL_OVERRIDING, BuildConfig.IS_DESKTOP_ANDROID);$|            newCachedFlag(CHROME_NATIVE_URL_OVERRIDING, /* defaultValue= */ true);|' \
+    chrome/browser/flags/android/java/src/org/chromium/chrome/browser/flags/ChromeFeatureList.java
 
 echo "[aerium] theme + rename pass applied"
