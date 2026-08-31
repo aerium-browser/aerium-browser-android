@@ -2138,6 +2138,11 @@ cat > chrome/android/java/res/xml/aerium_clear_on_exit_preferences.xml <<'AERIUM
             android:title="@string/aerium_clear_on_exit_hosted_apps"
             android:persistent="false" />
     </PreferenceCategory>
+    <Preference
+        android:key="aerium_site_rules"
+        android:title="@string/aerium_site_rules_title"
+        android:summary="@string/aerium_site_rules_summary"
+        android:fragment="org.chromium.chrome.browser.browsing_data.AeriumSiteRulesFragment" />
 </PreferenceScreen>
 AERIUM_COE_XML
 
@@ -2180,6 +2185,7 @@ public class AeriumClearOnExitFragment extends ChromeBaseSettingsFragment {
     // Must match the keys in aerium_clear_on_exit_preferences.xml.
     private static final String PREF_SWITCH = "aerium_clear_on_exit_switch";
     private static final String PREF_TYPES = "aerium_clear_on_exit_types";
+    private static final String PREF_SITE_RULES = "aerium_site_rules";
 
     // Must match components/browsing_data/core/pref_names.h.
     private static final String PREF_CLEAR_ON_EXIT = "browser.clear_data.aerium_clear_on_exit";
@@ -2200,6 +2206,7 @@ public class AeriumClearOnExitFragment extends ChromeBaseSettingsFragment {
             ObservableSuppliers.createMonotonic();
 
     private @Nullable Preference mTypes;
+    private @Nullable Preference mSiteRules;
 
     @Override
     public void onCreatePreferences(@Nullable Bundle savedInstanceState, @Nullable String rootKey) {
@@ -2208,6 +2215,7 @@ public class AeriumClearOnExitFragment extends ChromeBaseSettingsFragment {
 
         PrefService prefs = UserPrefs.get(getProfile());
         mTypes = findPreference(PREF_TYPES);
+        mSiteRules = findPreference(PREF_SITE_RULES);
 
         ChromeSwitchPreference onExit = (ChromeSwitchPreference) findPreference(PREF_SWITCH);
         if (onExit != null) {
@@ -2238,10 +2246,12 @@ public class AeriumClearOnExitFragment extends ChromeBaseSettingsFragment {
 
     /**
      * The list of types says nothing while the switch above it is off, so it is hidden rather than
-     * left offering choices that decide nothing.
+     * left offering choices that decide nothing. The exceptions screen goes with it for the same
+     * reason - there is nothing to make an exception to.
      */
     private void updateTypesVisible(boolean enabled) {
         if (mTypes != null) mTypes.setVisible(enabled);
+        if (mSiteRules != null) mSiteRules.setVisible(enabled);
     }
 
     @Override
@@ -2484,5 +2494,587 @@ sed_i 's|^inline constexpr char kAndroidAdaptiveFrameRateName\[\] =$|inline cons
     chrome/browser/flag_descriptions.h
 sed_i 's|^    {"android-adaptive-frame-rate",$|    {"android-surface-control",\n     flag_descriptions::kAeriumAndroidSurfaceControlName,\n     flag_descriptions::kAeriumAndroidSurfaceControlDescription, kOsAndroid,\n     FEATURE_VALUE_TYPE(::gpu::features::kAndroidSurfaceControl)},\n\n&|' \
     chrome/browser/about_flags.cc
+# --- The site rules table: sites whose data survives the on-exit deletion.
+#
+# The desktop repos have this as Cookie AutoDelete's table - an expression per
+# row, a list type, and a Keep checkbox per data type - backed by a list-of-
+# dictionaries pref and a WebUI page. Two things about that do not port.
+#
+# The pref. Android's PrefService is exposed to Java as scalars only: getString,
+# getBoolean, getInteger and their setters, and nothing that can read or write a
+# list of dictionaries. Adding a JNI bridge for one settings screen is a lot of
+# build surface for a table, so the rules live in a string pref holding the same
+# JSON objects desktop stores natively. Java reads and writes the string; the
+# C++ parses it with base::JSONReader. The object shape is deliberately
+# identical to desktop's, so the two can be brought together later without a
+# migration on either side.
+#
+# What a rule can protect. content::BrowsingDataRemover can only exclude sites
+# from the types in FILTERABLE_DATA_TYPES, and browsing history, form data,
+# passwords and site settings are not among them - there is no filtered history
+# removal in this API at all. So a rule protects the three that are: cookies and
+# site data, cached files, and download history. The screen says exactly that
+# rather than offering eight checkboxes of which five would quietly do nothing.
+#
+# Regular expressions are not offered here either, and that is the same
+# constraint seen from the other side. A kPreserve filter is a list of
+# registrable domains; a regular expression cannot be turned into one without
+# enumerating every origin holding data, which desktop can do from its own site
+# data model and this has no equivalent for. A pattern is a site.
+#
+# Which also settles the subdomain question. AddRegisterableDomain() takes an
+# eTLD+1 - it DCHECKs anything else that is not an IP literal or a single-label
+# host - so a rule for mail.example.com protects example.com and everything
+# under it. Widening rather than narrowing is the safe direction for a rule
+# whose job is to stop a deletion, and the screen says so in as many words.
+#
+# Header-only, and the same reasoning as aerium_first_run.h and
+# aerium_patches.h: one translation unit includes this, so inline definitions
+# need no .cc and no BUILD.gn entry, which keeps a hundred lines of parsing out
+# of the resource and build pipeline entirely.
+cat > chrome/browser/browsing_data/aerium_site_rules.h <<'AERIUM_SITE_RULES_H'
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#ifndef CHROME_BROWSER_BROWSING_DATA_AERIUM_SITE_RULES_H_
+#define CHROME_BROWSER_BROWSING_DATA_AERIUM_SITE_RULES_H_
+
+#include <stdint.h>
+
+#include <map>
+#include <optional>
+#include <set>
+#include <string>
+#include <string_view>
+
+#include "base/json/json_reader.h"
+#include "base/strings/string_util.h"
+#include "base/values.h"
+#include "chrome/browser/browsing_data/chrome_browsing_data_remover_constants.h"
+#include "components/browsing_data/core/pref_names.h"
+#include "components/prefs/pref_service.h"
+#include "content/public/browser/browsing_data_remover.h"
+#include "net/base/registry_controlled_domains/registry_controlled_domain.h"
+#include "url/gurl.h"
+
+// Aerium: the site rules table. See theme.sh for why this is a string pref
+// holding JSON rather than the list-of-dictionaries pref the desktop repos
+// use - Android's Java PrefService can only carry scalars, and the settings
+// screen is written in Java.
+namespace aerium_site_rules {
+
+// The data types a rule can protect, and the keys the settings screen writes
+// for them.
+//
+// Every one is in chrome_browsing_data_remover::FILTERABLE_DATA_TYPES, which is
+// not a detail: handing an unfilterable type to a filtered removal trips a
+// CHECK in ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData() and takes
+// release builds down with it. That is also why browsing history is absent -
+// there is no filtered history removal in this API, so a rule cannot promise
+// one.
+struct TypeEntry {
+  const char* key;
+  uint64_t type;
+};
+
+inline constexpr TypeEntry kTypes[] = {
+    {"site_data", chrome_browsing_data_remover::DATA_TYPE_SITE_DATA},
+    {"cache", content::BrowsingDataRemover::DATA_TYPE_CACHE},
+    {"downloads", content::BrowsingDataRemover::DATA_TYPE_DOWNLOADS},
+};
+
+// Strips the sugar people paste in - a leading "*." or "[*.]", a scheme, a
+// trailing path - and returns the registrable domain of what is left, which is
+// the only thing BrowsingDataFilterBuilder::AddRegisterableDomain() accepts.
+// Empty when the pattern cannot be read as a site at all, in which case the
+// rule is dropped: a rule that matches nothing is a smaller mistake than one
+// that matches everything.
+inline std::string RegistrableDomainFor(std::string_view pattern) {
+  std::string host =
+      base::ToLowerASCII(base::TrimWhitespaceASCII(pattern, base::TRIM_ALL));
+  if (base::StartsWith(host, "[*.]")) {
+    host = host.substr(4);
+  } else if (base::StartsWith(host, "*.")) {
+    host = host.substr(2);
+  }
+  const size_t scheme_end = host.find("://");
+  if (scheme_end != std::string::npos) {
+    host = host.substr(scheme_end + 3);
+  }
+  const size_t slash = host.find('/');
+  if (slash != std::string::npos) {
+    host = host.substr(0, slash);
+  }
+  while (!host.empty() && host.back() == '.') {
+    host.pop_back();
+  }
+  if (host.empty()) {
+    return std::string();
+  }
+  const GURL url("http://" + host + "/");
+  if (!url.is_valid() || !url.has_host()) {
+    return std::string();
+  }
+  const std::string domain = net::registry_controlled_domains::GetDomainAndRegistry(
+      url, net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
+  // An IP literal or a single-label host has no registrable domain, and
+  // AddRegisterableDomain() takes both as themselves.
+  return domain.empty() ? url.GetHost() : domain;
+}
+
+// The sites to spare, grouped by the set of data types that spares them.
+//
+// Grouped because the remover takes one mask per call while a rule names its
+// own types, so the alternative is one removal per type. In practice people
+// tick the same boxes on every row and this collapses to a single group; the
+// grouping exists so that it degrades to at most three when they do not.
+//
+// `remove_mask` is what the deletion was going to remove anyway - a rule
+// protecting a type nobody was deleting is not worth a removal call, and
+// asking for one would delete that type from every OTHER site as a side
+// effect, which is the opposite of what the row says.
+inline std::map<uint64_t, std::set<std::string>> KeepGroups(
+    PrefService* prefs,
+    uint64_t remove_mask) {
+  std::map<uint64_t, std::set<std::string>> groups;
+  if (!prefs) {
+    return groups;
+  }
+  const std::string raw =
+      prefs->GetString(browsing_data::prefs::kAeriumOnExitSiteRules);
+  if (raw.empty()) {
+    return groups;
+  }
+  const std::optional<base::Value> parsed = base::JSONReader::Read(raw);
+  if (!parsed || !parsed->is_list()) {
+    return groups;
+  }
+
+  std::map<uint64_t, std::set<std::string>> by_type;
+  for (const base::Value& entry : parsed->GetList()) {
+    const base::DictValue* const dict = entry.GetIfDict();
+    if (!dict) {
+      continue;
+    }
+    const std::string* const pattern = dict->FindString("pattern");
+    if (!pattern) {
+      continue;
+    }
+    const std::string domain = RegistrableDomainFor(*pattern);
+    if (domain.empty()) {
+      continue;
+    }
+    const base::DictValue* const keep = dict->FindDict("keep");
+    if (!keep) {
+      continue;
+    }
+    for (const TypeEntry& type : kTypes) {
+      if ((remove_mask & type.type) == 0) {
+        continue;
+      }
+      if (keep->FindBool(type.key).value_or(false)) {
+        by_type[type.type].insert(domain);
+      }
+    }
+  }
+
+  // Fold the types that spare exactly the same sites into one mask. Keyed on
+  // the set rather than compared pairwise so this stays linear in the number of
+  // types, which is three.
+  std::map<std::set<std::string>, uint64_t> by_domains;
+  for (const auto& entry : by_type) {
+    if (entry.second.empty()) {
+      continue;
+    }
+    by_domains[entry.second] |= entry.first;
+  }
+  for (const auto& entry : by_domains) {
+    groups[entry.second] = entry.first;
+  }
+  return groups;
+}
+
+}  // namespace aerium_site_rules
+
+#endif  // CHROME_BROWSER_BROWSING_DATA_AERIUM_SITE_RULES_H_
+AERIUM_SITE_RULES_H
+
+# The pref itself, beside the rest of the on-exit set it belongs to. A string
+# rather than a list because the settings screen that writes it is Java - see
+# the note above. "[]" rather than "" as the default so a reader that does not
+# guard the empty case still sees a well-formed empty table.
+sed_i 's|^inline constexpr char kAeriumClearOnExitHostedAppData\[\] =$|// Aerium: the site rules table, as a JSON array of\n// {"pattern": ..., "keep": {"site_data": bool, "cache": bool, "downloads": bool}}.\n// Same object shape as the desktop repos'"'"' native list pref, so the two can be\n// brought together later without migrating either.\ninline constexpr char kAeriumOnExitSiteRules[] =\n    "browser.clear_data.aerium_on_exit.site_rules";\n\n&|' \
+    components/browsing_data/core/pref_names.h
+sed_i 's|^  registry->RegisterBooleanPref(kAeriumClearOnExitHostedAppData, false);$|&\n  registry->RegisterStringPref(kAeriumOnExitSiteRules, "[]");|' \
+    components/browsing_data/core/pref_names.cc
+
+# The deletion honours them. Everything the rules do NOT protect still goes
+# through the single unfiltered removal above; what they do protect is taken
+# out of that mask and re-issued as one filtered removal per group, with the
+# spared sites expressed as a kPreserve filter.
+#
+# Only the Aerium half of the mask is narrowed. GetRemoveMask(data_types) is the
+# enterprise ClearBrowsingDataOnExitList policy and is left whole - a rule a
+# user typed into Settings must not be able to opt a managed device out of its
+# policy.
+sed_i 's|#include "chrome/browser/browsing_data/chrome_browsing_data_remover_constants.h"|#include "chrome/browser/browsing_data/aerium_site_rules.h"\n&|' \
+    $CBDLM
+# aerium_site_rules.h pulls <map> in anyway, but a translation unit that uses
+# std::map should say so rather than inherit it from whatever it included.
+sed_i 's|^#include <limits>$|&\n#include <map>|' $CBDLM
+sed_i 's|^  const bool aerium_on_exit = aerium_remove_mask != 0;$|&\n\n  // Aerium: the site rules table. Read once here because the mask handed to the\n  // unfiltered removal below has to have the protected types taken out of it\n  // before that call is made.\n  const std::map<uint64_t, std::set<std::string>> aerium_keep_groups =\n      aerium_on_exit ? aerium_site_rules::KeepGroups(aerium_prefs,\n                                                     aerium_remove_mask)\n                     : std::map<uint64_t, std::set<std::string>>();\n  uint64_t aerium_protected_mask = 0;\n  for (const auto\& aerium_group : aerium_keep_groups) {\n    aerium_protected_mask \|= aerium_group.first;\n  }|' \
+    $CBDLM
+sed_i 's|^                            GetRemoveMask(data_types) \| aerium_remove_mask,$|                            GetRemoveMask(data_types) \|\n                                (aerium_remove_mask \& ~aerium_protected_mask),|' \
+    $CBDLM
+sed_i 's|^                                keep_browser_alive));$|&\n\n    // Aerium: and the protected types, once per group, sparing the sites the\n    // rules name. base::Time() to base::Time::Max() and the same origin type\n    // mask as above, so a spared site is the only difference between these\n    // removals and the one before them.\n    for (const auto\& aerium_group : aerium_keep_groups) {\n      auto aerium_filter = content::BrowsingDataFilterBuilder::Create(\n          content::BrowsingDataFilterBuilder::Mode::kPreserve);\n      for (const std::string\& aerium_domain : aerium_group.second) {\n        aerium_filter->AddRegisterableDomain(aerium_domain);\n      }\n      remover->RemoveWithFilterAndReply(\n          base::Time(), base::Time::Max(), aerium_group.first,\n          GetOriginTypeMask(data_types) \|\n              AeriumOnExitOriginTypeMask(aerium_prefs),\n          std::move(aerium_filter),\n          BrowsingDataRemoverObserver::Create(\n              remover, /*filterable_deletion=*/true, profile_,\n              keep_browser_alive));\n    }|' \
+    $CBDLM
+# --- The table itself.
+#
+# A screen rather than a dialog list, because a rule has four fields and a
+# preference row can only carry two. The rows are built at runtime instead of
+# being declared in XML - the whole point is that there is one per rule - so the
+# XML holds only the "Add a site" row and the empty category the rules go into.
+#
+# The dialog is assembled in code rather than inflated, for the same reason the
+# WebUI page is not being ported: a layout resource would have to be listed in
+# chrome_java_resources.gni, compiled, and kept in step with a screen that is
+# four widgets. AddExceptionPreference in components/browser_ui does inflate
+# one, and it is worth more there - it has error colouring, a vibrator and a
+# keyboard delegate. This has a text field and three checkboxes.
+cat > chrome/android/java/res/xml/aerium_site_rules_preferences.xml <<'AERIUM_SR_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Aerium: see theme.sh. The rule rows are added at runtime; only the two
+     fixed entries are declared here. -->
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+    <Preference
+        android:key="aerium_site_rules_add"
+        android:title="@string/aerium_site_rules_add"
+        android:persistent="false" />
+    <PreferenceCategory
+        android:key="aerium_site_rules_list"
+        android:title="@string/aerium_site_rules_list_title" />
+</PreferenceScreen>
+AERIUM_SR_XML
+
+cat > chrome/android/java/src/org/chromium/chrome/browser/browsing_data/AeriumSiteRulesFragment.java <<'AERIUM_SR_JAVA'
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+package org.chromium.chrome.browser.browsing_data;
+
+import android.content.Context;
+import android.os.Bundle;
+import android.text.InputType;
+import android.text.TextUtils;
+import android.view.ViewGroup;
+import android.widget.Button;
+import android.widget.CheckBox;
+import android.widget.EditText;
+import android.widget.LinearLayout;
+
+import androidx.appcompat.app.AlertDialog;
+import androidx.preference.Preference;
+import androidx.preference.PreferenceCategory;
+
+import org.chromium.base.supplier.MonotonicObservableSupplier;
+import org.chromium.base.supplier.ObservableSuppliers;
+import org.chromium.base.supplier.SettableMonotonicObservableSupplier;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
+import org.chromium.chrome.R;
+import org.chromium.chrome.browser.settings.ChromeBaseSettingsFragment;
+import org.chromium.chrome.browser.settings.search.ChromeBaseSearchIndexProvider;
+import org.chromium.components.browser_ui.settings.SettingsFragment;
+import org.chromium.components.browser_ui.settings.SettingsUtils;
+import org.chromium.components.prefs.PrefService;
+import org.chromium.components.user_prefs.UserPrefs;
+
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+/**
+ * Aerium: the site rules table - sites whose data survives the on-exit deletion. See theme.sh.
+ *
+ * <p>The rules live in a single string pref holding a JSON array, because Android's PrefService is
+ * exposed to Java as scalars only and there is no way from here to write the list-of-dictionaries
+ * pref the desktop repos use. The object shape is the same on both, so the two can be brought
+ * together later without migrating either.
+ */
+@NullMarked
+public class AeriumSiteRulesFragment extends ChromeBaseSettingsFragment {
+    // Must match the keys in aerium_site_rules_preferences.xml.
+    private static final String PREF_ADD = "aerium_site_rules_add";
+    private static final String PREF_LIST = "aerium_site_rules_list";
+
+    // Must match components/browsing_data/core/pref_names.h.
+    private static final String PREF_SITE_RULES = "browser.clear_data.aerium_on_exit.site_rules";
+
+    // Must match aerium_site_rules::kTypes in
+    // chrome/browser/browsing_data/aerium_site_rules.h. Only three, because those are the only
+    // types content::BrowsingDataRemover can exclude a site from - see theme.sh.
+    private static final String[] KEEP_KEYS = {"site_data", "cache", "downloads"};
+    private static final int[] KEEP_LABELS = {
+        R.string.aerium_site_rules_keep_site_data,
+        R.string.aerium_site_rules_keep_cache,
+        R.string.aerium_site_rules_keep_downloads,
+    };
+
+    private static final String KEY_PATTERN = "pattern";
+    private static final String KEY_KEEP = "keep";
+
+    private final SettableMonotonicObservableSupplier<String> mPageTitle =
+            ObservableSuppliers.createMonotonic();
+
+    private @Nullable PreferenceCategory mList;
+
+    @Override
+    public void onCreatePreferences(@Nullable Bundle savedInstanceState, @Nullable String rootKey) {
+        SettingsUtils.addPreferencesFromResource(this, R.xml.aerium_site_rules_preferences);
+        mPageTitle.set(getString(R.string.aerium_site_rules_title));
+
+        mList = findPreference(PREF_LIST);
+
+        Preference add = findPreference(PREF_ADD);
+        if (add != null) {
+            add.setOnPreferenceClickListener(
+                    preference -> {
+                        showRuleDialog(-1);
+                        return true;
+                    });
+        }
+
+        rebuildList();
+    }
+
+    /**
+     * Reads the pref back into rows. Called after every edit rather than mutating the rows in
+     * place: the pref is the state, and rebuilding from it is what keeps the screen from drifting
+     * away from what the deletion will actually read.
+     */
+    private void rebuildList() {
+        if (mList == null) return;
+        mList.removeAll();
+
+        JSONArray rules = readRules();
+        if (rules.length() == 0) {
+            Preference empty = new Preference(getStyledContext());
+            empty.setTitle(R.string.aerium_site_rules_empty);
+            empty.setSelectable(false);
+            mList.addPreference(empty);
+            return;
+        }
+
+        for (int i = 0; i < rules.length(); i++) {
+            JSONObject rule = rules.optJSONObject(i);
+            if (rule == null) continue;
+            final int index = i;
+            Preference row = new Preference(getStyledContext());
+            row.setTitle(rule.optString(KEY_PATTERN));
+            row.setSummary(describeKeep(rule));
+            row.setOnPreferenceClickListener(
+                    preference -> {
+                        showRuleDialog(index);
+                        return true;
+                    });
+            mList.addPreference(row);
+        }
+    }
+
+    /** "Cookies and site data, Cached images and files" - what this row actually protects. */
+    private String describeKeep(JSONObject rule) {
+        JSONObject keep = rule.optJSONObject(KEY_KEEP);
+        StringBuilder summary = new StringBuilder();
+        for (int i = 0; i < KEEP_KEYS.length; i++) {
+            if (keep == null || !keep.optBoolean(KEEP_KEYS[i], false)) continue;
+            if (summary.length() > 0) summary.append(", ");
+            summary.append(getString(KEEP_LABELS[i]));
+        }
+        return summary.length() == 0 ? getString(R.string.aerium_site_rules_keep_nothing)
+                                     : summary.toString();
+    }
+
+    /**
+     * The add and edit dialog, which are the same dialog - editing starts from the row's values and
+     * offers Remove as well.
+     *
+     * @param index the rule being edited, or -1 to add one.
+     */
+    private void showRuleDialog(int index) {
+        Context context = getStyledContext();
+        JSONArray rules = readRules();
+        JSONObject existing = index >= 0 ? rules.optJSONObject(index) : null;
+
+        int padding =
+                Math.round(24 * context.getResources().getDisplayMetrics().density);
+        LinearLayout layout = new LinearLayout(context);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(padding, padding, padding, 0);
+
+        EditText input = new EditText(context);
+        input.setSingleLine(true);
+        input.setHint(R.string.aerium_site_rules_hint);
+        input.setInputType(
+                InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
+        input.setLayoutParams(
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT));
+        if (existing != null) input.setText(existing.optString(KEY_PATTERN));
+        layout.addView(input);
+
+        JSONObject existingKeep = existing == null ? null : existing.optJSONObject(KEY_KEEP);
+        CheckBox[] boxes = new CheckBox[KEEP_KEYS.length];
+        for (int i = 0; i < KEEP_KEYS.length; i++) {
+            CheckBox box = new CheckBox(context);
+            box.setText(KEEP_LABELS[i]);
+            // A new rule keeps everything it can. Someone adding a site to a screen called
+            // "Sites to keep" means keep it; the boxes are there to take things away again.
+            box.setChecked(
+                    existingKeep == null || existingKeep.optBoolean(KEEP_KEYS[i], false));
+            boxes[i] = box;
+            layout.addView(box);
+        }
+
+        AlertDialog.Builder builder =
+                new AlertDialog.Builder(context, R.style.ThemeOverlay_BrowserUI_AlertDialog)
+                        .setTitle(
+                                existing == null
+                                        ? R.string.aerium_site_rules_add
+                                        : R.string.aerium_site_rules_edit)
+                        .setView(layout)
+                        .setPositiveButton(R.string.aerium_site_rules_save, null)
+                        .setNegativeButton(android.R.string.cancel, null);
+        if (existing != null) {
+            builder.setNeutralButton(
+                    R.string.aerium_site_rules_remove,
+                    (dialog, which) -> {
+                        removeRule(index);
+                    });
+        }
+
+        AlertDialog dialog = builder.create();
+        dialog.show();
+        // Bound after show() so an unusable entry can be rejected without the dialog closing -
+        // setPositiveButton's own listener always dismisses. The button exists from show()
+        // onwards; the check is there because getButton() is free to say otherwise.
+        Button positive = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+        if (positive == null) return;
+        positive.setOnClickListener(
+                        view -> {
+                            String pattern = normalize(input.getText().toString());
+                            if (pattern == null) {
+                                input.setError(getString(R.string.aerium_site_rules_invalid));
+                                return;
+                            }
+                            saveRule(index, pattern, boxes);
+                            dialog.dismiss();
+                        });
+    }
+
+    /**
+     * Whether this can be read as a site at all. Deliberately loose: the real normalisation is
+     * RegistrableDomainFor() in aerium_site_rules.h, which has a URL parser and the public suffix
+     * list and this does not. All that matters here is refusing input the C++ would silently drop,
+     * so that a rule the user typed cannot sit in the table doing nothing.
+     */
+    private @Nullable String normalize(String raw) {
+        String host = raw.trim().toLowerCase(java.util.Locale.US);
+        if (host.startsWith("[*.]")) {
+            host = host.substring(4);
+        } else if (host.startsWith("*.")) {
+            host = host.substring(2);
+        }
+        int schemeEnd = host.indexOf("://");
+        if (schemeEnd >= 0) host = host.substring(schemeEnd + 3);
+        int slash = host.indexOf('/');
+        if (slash >= 0) host = host.substring(0, slash);
+        while (host.endsWith(".")) host = host.substring(0, host.length() - 1);
+        if (TextUtils.isEmpty(host)) return null;
+        if (host.contains(" ") || host.contains("*") || host.contains("/")) return null;
+        return host;
+    }
+
+    private void saveRule(int index, String pattern, CheckBox[] boxes) {
+        try {
+            JSONObject keep = new JSONObject();
+            for (int i = 0; i < KEEP_KEYS.length; i++) {
+                keep.put(KEEP_KEYS[i], boxes[i].isChecked());
+            }
+            JSONObject rule = new JSONObject();
+            rule.put(KEY_PATTERN, pattern);
+            rule.put(KEY_KEEP, keep);
+
+            JSONArray rules = readRules();
+            if (index >= 0 && index < rules.length()) {
+                rules.put(index, rule);
+            } else {
+                rules.put(rule);
+            }
+            writeRules(rules);
+        } catch (JSONException e) {
+            // put() only throws on a NaN or infinite value, neither of which can appear here.
+            return;
+        }
+        rebuildList();
+    }
+
+    private void removeRule(int index) {
+        JSONArray rules = readRules();
+        if (index < 0 || index >= rules.length()) return;
+        rules.remove(index);
+        writeRules(rules);
+        rebuildList();
+    }
+
+    private JSONArray readRules() {
+        PrefService prefs = UserPrefs.get(getProfile());
+        try {
+            return new JSONArray(prefs.getString(PREF_SITE_RULES));
+        } catch (JSONException e) {
+            // A pref that will not parse is one someone hand-edited. Showing an empty table is
+            // better than showing nothing at all, and the next save replaces it.
+            return new JSONArray();
+        }
+    }
+
+    private void writeRules(JSONArray rules) {
+        UserPrefs.get(getProfile()).setString(PREF_SITE_RULES, rules.toString());
+    }
+
+    private Context getStyledContext() {
+        return getPreferenceManager().getContext();
+    }
+
+    @Override
+    public MonotonicObservableSupplier<String> getPageTitle() {
+        return mPageTitle;
+    }
+
+    @Override
+    public @SettingsFragment.AnimationType int getAnimationType() {
+        return SettingsFragment.AnimationType.PROPERTY;
+    }
+
+    public static final ChromeBaseSearchIndexProvider SEARCH_INDEX_DATA_PROVIDER =
+            new ChromeBaseSearchIndexProvider(
+                    AeriumSiteRulesFragment.class.getName(),
+                    R.xml.aerium_site_rules_preferences);
+}
+AERIUM_SR_JAVA
+
+sed_i 's|^  "java/src/org/chromium/chrome/browser/browsing_data/AeriumClearOnExitFragment.java",$|&\n  "java/src/org/chromium/chrome/browser/browsing_data/AeriumSiteRulesFragment.java",|' \
+    chrome/android/chrome_java_sources.gni
+sed_i 's|^  "java/res/xml/aerium_clear_on_exit_preferences.xml",$|&\n  "java/res/xml/aerium_site_rules_preferences.xml",|' \
+    chrome/android/chrome_java_resources.gni
+sed_i 's|^                    AeriumClearOnExitFragment.SEARCH_INDEX_DATA_PROVIDER,$|&\n                    AeriumSiteRulesFragment.SEARCH_INDEX_DATA_PROVIDER,|' \
+    $SIPR
+sed_i 's|^import org.chromium.chrome.browser.browsing_data.AeriumClearOnExitFragment;$|&\nimport org.chromium.chrome.browser.browsing_data.AeriumSiteRulesFragment;|' \
+    $SIPR
+
+sed_i 's|^      <message name="IDS_AERIUM_CLEAR_ON_EXIT_TITLE" desc=|      <message name="IDS_AERIUM_SITE_RULES_TITLE" desc="Title of the screen listing sites whose data is not deleted when the browser closes.">\n        Sites to keep\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_SUMMARY" desc="Summary under the entry that opens that screen.">\n        Sites whose data survives the deletion\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_LIST_TITLE" desc="Header above the list of kept sites.">\n        Kept sites\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_ADD" desc="Row that opens a dialog for adding a site, and the title of that dialog.">\n        Add a site\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_EDIT" desc="Title of the dialog shown when an existing site in the list is tapped.">\n        Edit site\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_EMPTY" desc="Shown in place of the list when no sites have been added.">\n        No sites yet. Everything selected above is deleted when you close Aerium.\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_HINT" desc="Hint text in the site field, telling the user what to type.">\n        example.com - covers the whole site, subdomains included\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_INVALID" desc="Error shown under the site field when what was typed cannot be read as a site.">\n        Enter a site, such as example.com\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_SAVE" desc="Button that stores the site being added or edited.">\n        Save\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_REMOVE" desc="Button that deletes the site being edited from the list.">\n        Remove\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_KEEP_SITE_DATA" desc="Data type a kept site can hold on to: cookies and other site storage.">\n        Cookies and site data\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_KEEP_CACHE" desc="Data type a kept site can hold on to: cached files.">\n        Cached images and files\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_KEEP_DOWNLOADS" desc="Data type a kept site can hold on to: its entries in the download list.">\n        Download history\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_KEEP_NOTHING" desc="Summary on a row where every data type was unticked, so the row keeps nothing.">\n        Nothing kept\n      </message>\n&|' \
+    chrome/browser/ui/android/strings/android_chrome_strings.grd
 
 echo "[aerium] theme + rename pass applied"

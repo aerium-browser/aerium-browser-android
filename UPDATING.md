@@ -118,6 +118,20 @@ silently no-ops or `git am` (Vanadium patches) rejects.
   nothing downstream would catch it). If that guard fires, renumber the
   engines above upstream's range, move both constants with them, and
   treat it as a profile migration.
+- **Site rules block in `theme.sh`** (`aerium_site_rules.h`): the three
+  types a rule can protect are asserted to be in
+  `chrome_browsing_data_remover::FILTERABLE_DATA_TYPES` only by comment,
+  not by the compiler. Handing an unfilterable type to
+  `RemoveWithFilterAndReply()` trips a `CHECK` in
+  `ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData()` and takes a
+  release build down at shutdown - the one moment nobody is watching. So
+  at every bump, re-read `FILTERABLE_DATA_TYPES` in
+  `chrome_browsing_data_remover_constants.h` and confirm it still
+  contains `DATA_TYPE_SITE_DATA`, `DATA_TYPE_CACHE` and
+  `DATA_TYPE_DOWNLOADS`. If one leaves, drop it from `kTypes` and from
+  the three strings the settings screen shows; do not leave a checkbox
+  offering something the remover will crash on. Adding a type is the
+  same check in reverse - only what is in that set may go in `kTypes`.
 - **Fingerprint-protection block in `theme.sh`**: touches
   `runtime_enabled_features.json5` (new `status: "stable"` entries -
   no flag or command-line switch needed, unlike Windows's
