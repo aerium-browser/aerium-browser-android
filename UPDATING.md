@@ -132,6 +132,20 @@ silently no-ops or `git am` (Vanadium patches) rejects.
   the three strings the settings screen shows; do not leave a checkbox
   offering something the remover will crash on. Adding a type is the
   same check in reverse - only what is in that set may go in `kTypes`.
+- **Update-notification block in `theme.sh`**: it borrows two upstream
+  things rather than defining its own - `ChannelId.UPDATES` and
+  `NotificationUmaTracker.SystemNotificationType.UPDATES`. Both exist for
+  Chrome's own Android updater, which this build does not have, so nothing
+  else posts to them. If a bump deletes either, the failure is a compile
+  error naming the symbol, and the fix is to add a predefined channel in
+  `ChromeChannelDefinitions` and a new enumerator - the latter meaning an
+  `enums.xml` edit in a repository that does not carry `tools/metrics`, so
+  prefer keeping the borrow working. The other half is the SharedPreferences
+  key: `ChromePreferenceKeys` needs the constant *and* an entry in
+  `getKeysInUse()`, and only the pair is correct. Missing the second builds
+  fine and then trips `StrictPreferenceKeyChecker` in asserts-on builds
+  only - never in a release - which is why `verify-seds.sh` covering both
+  substitutions is what actually guards it.
 - **`aerium://` block in `theme.sh`**: the rewrite handler deliberately
   returns `false` after rewriting, so that `RewriteURLIfNecessary` carries
   on down the chain and `chrome://newtab` still reaches

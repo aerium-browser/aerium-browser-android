@@ -3670,3 +3670,224 @@ sed_i 's|^    BrowserURLHandler\* handler) {$|&\n  // Aerium: aerium://<host> is
     chrome/browser/chrome_content_browser_client.cc
 
 echo "[aerium] aerium:// scheme applied"
+
+# --- "A new Aerium is out" - as a notification, not only as a row you have to
+# go and look at.
+#
+# The daily check and the About-screen switch already exist above; this is the
+# telling. The checker writes three profile prefs in C++ and never touches the
+# UI, so everything here is a reader of those prefs: a notification when they
+# name a release the user has not been shown, and nothing at all when they do
+# not.
+#
+# Chromium already has the right category for this. ChannelId.UPDATES is a
+# predefined high-importance channel in the GENERAL group, and
+# SystemNotificationType.UPDATES is an existing histogram enumerator; both exist
+# for Chrome'"'"'s own updater and are dead in this build, which has none. Reusing
+# them means Android can describe the notification to the user in its own
+# settings - it can be silenced by itself, without silencing the browser - and
+# it costs no new channel definition and no new histogram enumerator, which
+# would otherwise mean editing enums.xml in a repository that does not have it.
+#
+# Once per release, not once per launch. That needs a record of what the user
+# has already been shown, and it lives in SharedPreferences rather than in a
+# fourth profile pref on purpose: "have I shown this notification" is Android UI
+# state, not browser data, and keeping it out of the shared header is what lets
+# aerium_update_checker.h stay byte-identical across the three platforms.
+#
+# What this deliberately does not do is wake the device. The checker is a
+# KeyedService on a timer, so it only runs while the browser process is alive -
+# in practice, two minutes after a launch. Someone who opens Aerium daily hears
+# about a release the same day; someone who does not, hears about it when they
+# next open it. Doing better means a BackgroundTaskScheduler job waking the
+# device on a schedule to ask GitHub a question, which is a different feature
+# with a different battery and privacy cost, and not obviously a better one for
+# a browser that is not running.
+mkdir -p chrome/android/java/src/org/chromium/chrome/browser/aerium
+cat > chrome/android/java/src/org/chromium/chrome/browser/aerium/AeriumUpdateNotifier.java <<'AERIUM_UPDATE_NOTIFIER_JAVA'
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+package org.chromium.chrome.browser.aerium;
+
+import android.app.PendingIntent;
+import android.content.Context;
+import android.content.Intent;
+import android.net.Uri;
+
+import org.chromium.base.ContextUtils;
+import org.chromium.base.shared_preferences.SharedPreferencesManager;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
+import org.chromium.chrome.R;
+import org.chromium.chrome.browser.notifications.NotificationUmaTracker;
+import org.chromium.chrome.browser.notifications.NotificationWrapperBuilderFactory;
+import org.chromium.chrome.browser.notifications.channels.ChromeChannelDefinitions;
+import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
+import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
+import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.components.browser_ui.notifications.BaseNotificationManagerProxy;
+import org.chromium.components.browser_ui.notifications.BaseNotificationManagerProxyFactory;
+import org.chromium.components.browser_ui.notifications.NotificationMetadata;
+import org.chromium.components.browser_ui.notifications.NotificationProxyUtils;
+import org.chromium.components.browser_ui.notifications.NotificationWrapper;
+import org.chromium.components.browser_ui.notifications.PendingIntentProvider;
+import org.chromium.components.prefs.PrefChangeRegistrar;
+import org.chromium.components.prefs.PrefService;
+import org.chromium.components.user_prefs.UserPrefs;
+
+/**
+ * Aerium: tells the user, once per release, that a newer Aerium exists.
+ *
+ * <p>The finding is done in C++ - see chrome/browser/aerium/aerium_update_checker.h, which asks
+ * GitHub once a day and writes the answer to three profile prefs. This class is only the telling.
+ * It reads those prefs, posts a notification when they name a release the user has not been shown,
+ * and opens that release when the notification is tapped.
+ *
+ * <p>Nothing is downloaded or installed, here or anywhere else in this feature.
+ *
+ * <p>The channel and the metrics type are Chromium's own ChannelId.UPDATES and
+ * SystemNotificationType.UPDATES, which exist upstream for exactly this and are unused in this
+ * build because it has no other update system. Reusing them means the notification arrives in a
+ * category Android already knows how to describe to the user - it can be silenced on its own,
+ * without silencing the rest of the browser - and it costs no new histogram enumerator.
+ */
+@NullMarked
+public class AeriumUpdateNotifier implements PrefChangeRegistrar.PrefObserver {
+    // Must match chrome/browser/aerium/aerium_update_checker.h.
+    private static final String PREF_CHECK_ENABLED = "aerium.update.check_enabled";
+    private static final String PREF_LATEST_VERSION = "aerium.update.latest_version";
+    private static final String PREF_LATEST_URL = "aerium.update.latest_url";
+
+    private static final String NOTIFICATION_TAG = "aerium_update";
+    private static final int NOTIFICATION_ID = 1;
+
+    private static @Nullable AeriumUpdateNotifier sInstance;
+
+    private final Profile mProfile;
+
+    // Held for the life of the process rather than for the life of an activity. The point of the
+    // observer is to catch the check completing while the browser is open - it runs two minutes
+    // after startup - and an activity-scoped observer would miss exactly the case where the user
+    // launched the browser and left it alone.
+    private final PrefChangeRegistrar mRegistrar;
+
+    /**
+     * Starts watching, and says anything there is to say about the state already on disk.
+     *
+     * <p>Called from deferred startup, so a release announcement never competes with the page the
+     * user actually opened the browser for. Idempotent: later activities find the instance already
+     * built and only re-check.
+     */
+    public static void initialize(Profile profile) {
+        if (sInstance == null) {
+            sInstance = new AeriumUpdateNotifier(profile);
+        }
+        sInstance.onPreferenceChange();
+    }
+
+    private AeriumUpdateNotifier(Profile profile) {
+        mProfile = profile;
+        mRegistrar = new PrefChangeRegistrar(UserPrefs.get(profile));
+        mRegistrar.addObserver(PREF_LATEST_VERSION, this);
+    }
+
+    @Override
+    public void onPreferenceChange() {
+        PrefService prefs = UserPrefs.get(mProfile);
+        BaseNotificationManagerProxy manager = BaseNotificationManagerProxyFactory.create();
+        SharedPreferencesManager shared = ChromeSharedPreferences.getInstance();
+
+        // Turning the switch off means stop telling me, including about whatever was already
+        // found. An empty version is how the checker records "this build is the newest one", so it
+        // is also how a notification for a release that has since been superseded is taken back.
+        String version = prefs.getString(PREF_LATEST_VERSION);
+        String url = prefs.getString(PREF_LATEST_URL);
+        if (!prefs.getBoolean(PREF_CHECK_ENABLED) || version.isEmpty() || url.isEmpty()) {
+            manager.cancel(NOTIFICATION_TAG, NOTIFICATION_ID);
+            shared.removeKey(ChromePreferenceKeys.AERIUM_UPDATE_NOTIFIED_VERSION);
+            return;
+        }
+
+        if (version.equals(
+                shared.readString(ChromePreferenceKeys.AERIUM_UPDATE_NOTIFIED_VERSION, ""))) {
+            return;
+        }
+
+        // Posting to a channel the user has blocked, or without the runtime notification
+        // permission, silently does nothing. Recording the version as told-about in that case
+        // would mean the user is never told, so the record is written only after the notification
+        // has actually gone out - and the About screen keeps its own row either way.
+        if (!NotificationProxyUtils.areNotificationsEnabled()) return;
+
+        Context context = ContextUtils.getApplicationContext();
+        Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+        // Kept inside this browser rather than handed to the system, which can put a chooser in
+        // front of it or send it to a different browser entirely - the same reason the About row
+        // opens the project link in a Custom Tab.
+        intent.setPackage(context.getPackageName());
+
+        NotificationWrapper notification =
+                NotificationWrapperBuilderFactory.createNotificationWrapperBuilder(
+                                ChromeChannelDefinitions.ChannelId.UPDATES,
+                                new NotificationMetadata(
+                                        NotificationUmaTracker.SystemNotificationType.UPDATES,
+                                        NOTIFICATION_TAG,
+                                        NOTIFICATION_ID))
+                        .setContentTitle(
+                                context.getString(R.string.aerium_update_notification_title))
+                        .setContentText(
+                                context.getString(
+                                        R.string.aerium_update_notification_text, version))
+                        .setContentIntent(
+                                PendingIntentProvider.getActivity(
+                                        context,
+                                        /* requestCode= */ 0,
+                                        intent,
+                                        PendingIntent.FLAG_UPDATE_CURRENT))
+                        .setSmallIcon(R.drawable.ic_chrome)
+                        .setAutoCancel(true)
+                        .setLocalOnly(true)
+                        .buildNotificationWrapper();
+
+        manager.notify(notification);
+        NotificationUmaTracker.getInstance()
+                .onNotificationShown(
+                        NotificationUmaTracker.SystemNotificationType.UPDATES,
+                        notification.getNotification());
+        shared.writeString(ChromePreferenceKeys.AERIUM_UPDATE_NOTIFIED_VERSION, version);
+    }
+}
+AERIUM_UPDATE_NOTIFIER_JAVA
+
+# aerium/ sorts between about_settings/ and accessibility/, which is where the
+# list keeps it.
+sed_i 's|^  "java/src/org/chromium/chrome/browser/accessibility/AccessibilityTabHelper.java",$|  "java/src/org/chromium/chrome/browser/aerium/AeriumUpdateNotifier.java",\n&|' \
+    chrome/android/chrome_java_sources.gni
+
+# The SharedPreferences key, declared and registered the two ways
+# ChromePreferenceKeys documents at the top of itself. Skipping the second step
+# builds fine and then trips StrictPreferenceKeyChecker in any build with
+# asserts on, which is every developer build and no release - the worst place
+# for a mistake to wait.
+sed_i 's|^    /\*\* Timestamp of last time ai feature availability was checked. \*/$|    /** The release the update notification has already told the user about. */\n    public static final String AERIUM_UPDATE_NOTIFIED_VERSION =\n            "Chrome.Aerium.UpdateNotifiedVersion";\n\n&|' \
+    chrome/browser/preferences/android/java/src/org/chromium/chrome/browser/preferences/ChromePreferenceKeys.java
+sed_i 's|^                AI_ASSISTANT_ANALYZE_ATTACHMENT_AVAILABILITY,$|                AERIUM_UPDATE_NOTIFIED_VERSION,\n&|' \
+    chrome/browser/preferences/android/java/src/org/chromium/chrome/browser/preferences/ChromePreferenceKeys.java
+
+# Started from deferred startup: the browser is up, the profile is loaded, and
+# nothing the user is waiting for is still in flight. getOriginalProfile()
+# rather than the supplier'"'"'s current profile, because the checker registers
+# for regular profiles only and an incognito window must not be a second
+# listener.
+CTA=chrome/android/java/src/org/chromium/chrome/browser/ChromeTabbedActivity.java
+sed_i 's|^import org.chromium.chrome.browser.app.ChromeActivity;$|import org.chromium.chrome.browser.aerium.AeriumUpdateNotifier;\n&|' \
+    $CTA
+sed_i 's|^        LauncherShortcutActivity.updateIncognitoShortcut(profile);$|&\n\n        // Aerium: see theme.sh. Tells the user about a newer release, if the\n        // daily check has found one and they have not been told yet.\n        AeriumUpdateNotifier.initialize(\n                getProfileProviderSupplier().get().getOriginalProfile());|' \
+    $CTA
+
+sed_i 's|^      <message name="IDS_AERIUM_UPDATE_AVAILABLE_TITLE" desc=|      <message name="IDS_AERIUM_UPDATE_NOTIFICATION_TITLE" desc="Title of the notification shown when a newer Aerium has been released.">\n        Update available\n      </message>\n      <message name="IDS_AERIUM_UPDATE_NOTIFICATION_TEXT" desc="Body of that notification. The placeholder is the release tag, and tapping the notification opens that release on GitHub.">\n        Aerium <ph name="VERSION">%1$s<ex>v152.0.7977.64</ex></ph> has been released. Tap to open the release on GitHub.\n      </message>\n&|' \
+    chrome/browser/ui/android/strings/android_chrome_strings.grd
+
+echo "[aerium] update notification applied"
