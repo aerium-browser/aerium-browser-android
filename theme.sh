@@ -2124,7 +2124,7 @@ sed_i 's|^                            GetOriginTypeMask(data_types),$|          
 # The two triggers described above. Both live in the constructor: the observer
 # that answers a clean close, and the mark that covers a process that never
 # gets one.
-sed_i 's%^  // When the service is instantiated, wait a few minutes after Chrome startup$%  // Aerium: see theme.sh. Android has no window-close call site, so the Java\n  // side asks for the deletion through a pref and this answers it. Written\n  // back to false first so a second close asks again rather than finding the\n  // request already set.\n  pref_change_registrar_.Add(\n      browsing_data::prefs::kAeriumClearOnExitRequested,\n      base::BindRepeating(\n          [](ChromeBrowsingDataLifetimeManager* manager) {\n            PrefService* prefs = manager->profile_->GetPrefs();\n            if (!prefs->GetBoolean(\n                    browsing_data::prefs::kAeriumClearOnExitRequested)) {\n              return;\n            }\n            prefs->SetBoolean(\n                browsing_data::prefs::kAeriumClearOnExitRequested, false);\n            // keep_browser_alive is what makes the observer clear the\n            // pending-deletion flag when the removal finishes, which is\n            // exactly what a clean close should do. The ScopedKeepAlive it\n            // also controls on desktop is compiled out on Android, so this\n            // is the only thing it does here.\n            manager->ClearBrowsingDataForOnExitPolicy(\n                /*keep_browser_alive=*/true);\n          },\n          base::Unretained(this)));\n\n&%' \
+sed_i 's%^  // When the service is instantiated, wait a few minutes after Chrome startup$%  // Aerium: see theme.sh. Android has no window-close call site, so the Java\n  // side asks for the deletion through a pref and this answers it. Written\n  // back to false first so a second close asks again rather than finding the\n  // request already set.\n  pref_change_registrar_.Add(\n      browsing_data::prefs::kAeriumClearOnExitRequested,\n      base::BindRepeating(\n          [](ChromeBrowsingDataLifetimeManager* manager) {\n            PrefService* prefs = manager->profile_->GetPrefs();\n            if (!prefs->GetBoolean(\n                    browsing_data::prefs::kAeriumClearOnExitRequested)) {\n              return;\n            }\n            prefs->SetBoolean(\n                browsing_data::prefs::kAeriumClearOnExitRequested, false);\n            // Aerium: the greylist goes first and goes unconditionally.\n            // Session-only is a promise made per site, so it must not depend\n            // on the delete-on-exit switch being on - see theme.sh.\n            manager->AeriumClearSessionOnlySites();\n            // keep_browser_alive is what makes the observer clear the\n            // pending-deletion flag when the removal finishes, which is\n            // exactly what a clean close should do. The ScopedKeepAlive it\n            // also controls on desktop is compiled out on Android, so this\n            // is the only thing it does here.\n            manager->ClearBrowsingDataForOnExitPolicy(\n                /*keep_browser_alive=*/true);\n          },\n          base::Unretained(this)));\n\n&%' \
     $CBDLM
 
 # --- The screen itself.
@@ -2700,6 +2700,14 @@ inline std::map<uint64_t, std::set<std::string>> KeepGroups(
     if (domain.empty()) {
       continue;
     }
+    // Aerium: only a keep rule spares a site from the on-exit sweep. An
+    // ephemeral rule is the opposite instruction, and a session-only rule
+    // explicitly wants the site gone at shutdown - sparing either here would
+    // contradict the row.
+    const std::string* const mode = dict->FindString("mode");
+    if (mode && *mode != "keep") {
+      continue;
+    }
     const base::DictValue* const keep = dict->FindDict("keep");
     if (!keep) {
       continue;
@@ -2730,6 +2738,80 @@ inline std::map<uint64_t, std::set<std::string>> KeepGroups(
   return groups;
 }
 
+// The registrable domains of every rule in one mode.
+//
+// Same list and same folding as KeepGroups() above, deliberately: one table,
+// three modes, one idea of what a site is. A row is exactly one mode, which is
+// why KeepGroups() takes only "keep" and this takes only what it is asked for,
+// and why a domain can never end up both kept and deleted.
+//
+// The modes:
+//   keep       spared from the deletion when the browser closes. The default,
+//              and what a row with no mode at all is.
+//   session    kept while the browser runs and cleared at shutdown, whether or
+//              not the delete-on-exit switch is on. Cookie AutoDelete's middle
+//              tier: signed in while you work, not tomorrow.
+//   ephemeral  cleared as soon as its last tab closes.
+inline std::set<std::string> DomainsForMode(PrefService* prefs,
+                                            std::string_view mode) {
+  std::set<std::string> domains;
+  if (!prefs) {
+    return domains;
+  }
+  const std::string raw =
+      prefs->GetString(browsing_data::prefs::kAeriumOnExitSiteRules);
+  if (raw.empty()) {
+    return domains;
+  }
+  const std::optional<base::Value> parsed = base::JSONReader::Read(raw);
+  if (!parsed || !parsed->is_list()) {
+    return domains;
+  }
+  for (const base::Value& entry : parsed->GetList()) {
+    const base::DictValue* const dict = entry.GetIfDict();
+    if (!dict) {
+      continue;
+    }
+    const std::string* const entry_mode = dict->FindString("mode");
+    // A row written before modes existed has no key and is a keep rule.
+    const std::string_view resolved = entry_mode ? std::string_view(*entry_mode)
+                                                 : std::string_view("keep");
+    if (resolved != mode) {
+      continue;
+    }
+    const std::string* const pattern = dict->FindString("pattern");
+    if (!pattern) {
+      continue;
+    }
+    const std::string domain = RegistrableDomainFor(*pattern);
+    if (!domain.empty()) {
+      domains.insert(domain);
+    }
+  }
+  return domains;
+}
+
+// What an ephemeral rule removes.
+//
+// Cookies and site data always; the HTTP cache only if asked for. Both are in
+// FILTERABLE_DATA_TYPES, which is the whole constraint - handing an unfilterable
+// type to a filtered removal trips a CHECK in
+// ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData() and takes release
+// builds down with it. That rules out history, form data and passwords here for
+// exactly the reason it rules them out of the keep rules.
+//
+// Cache is off by default because clearing it every time a tab closes means
+// re-fetching that site's images, fonts and scripts on the next visit - a speed
+// and data cost that should be asked for rather than arrive in an update.
+inline uint64_t EphemeralRemoveMask(PrefService* prefs) {
+  uint64_t mask = chrome_browsing_data_remover::DATA_TYPE_SITE_DATA;
+  if (prefs && prefs->GetBoolean(
+                   browsing_data::prefs::kAeriumEphemeralClearCache)) {
+    mask |= content::BrowsingDataRemover::DATA_TYPE_CACHE;
+  }
+  return mask;
+}
+
 }  // namespace aerium_site_rules
 
 #endif  // CHROME_BROWSER_BROWSING_DATA_AERIUM_SITE_RULES_H_
@@ -2739,9 +2821,9 @@ AERIUM_SITE_RULES_H
 # rather than a list because the settings screen that writes it is Java - see
 # the note above. "[]" rather than "" as the default so a reader that does not
 # guard the empty case still sees a well-formed empty table.
-sed_i 's|^inline constexpr char kAeriumClearOnExitHostedAppData\[\] =$|// Aerium: the site rules table, as a JSON array of\n// {"pattern": ..., "keep": {"site_data": bool, "cache": bool, "downloads": bool}}.\n// Same object shape as the desktop repos'"'"' native list pref, so the two can be\n// brought together later without migrating either.\ninline constexpr char kAeriumOnExitSiteRules[] =\n    "browser.clear_data.aerium_on_exit.site_rules";\n\n&|' \
+sed_i 's|^inline constexpr char kAeriumClearOnExitHostedAppData\[\] =$|// Aerium: the site rules table, as a JSON array of\n// {"pattern": ..., "mode": "keep", "session" or "ephemeral",\n//  "keep": {"site_data": bool, "cache": bool, "downloads": bool}}.\n// Same object shape as the desktop repos'"'"' native list pref, so the two can be\n// brought together later without migrating either. "mode" is absent on every\n// rule written before it existed and reads as "keep", which is what those rules\n// were, so there is nothing to migrate here either.\ninline constexpr char kAeriumOnExitSiteRules[] =\n    "browser.clear_data.aerium_on_exit.site_rules";\n\n// Aerium: whether clearing a site when its last tab closes takes the HTTP cache\n// with it. Off by default - see EphemeralRemoveMask() in\n// chrome/browser/browsing_data/aerium_site_rules.h.\ninline constexpr char kAeriumEphemeralClearCache[] =\n    "browser.clear_data.aerium_ephemeral_clear_cache";\n\n// Aerium: turns the table inside out. Every site is cleared when its last tab\n// closes, and the keep and session-only rows become the list of exceptions.\n// This is the model Cookie AutoDelete actually uses. Off by default, because\n// turning it on signs the user out of every site not named in the table - a\n// thing to opt into, never to receive in an update.\ninline constexpr char kAeriumEphemeralAllSites[] =\n    "browser.clear_data.aerium_ephemeral_all_sites";\n\n// Aerium: how long after a site loses its last tab before it is cleared.\n// Sign-in flows bounce through a provider in a tab that closes itself, and\n// OAuth popups close the moment they hand back a token, so clearing the instant\n// the count reaches zero can delete the cookie the redirect is about to need.\n// It also forgives closing a tab by accident. Clamped to 0-3600 where it is\n// read, so a hand-edited Preferences file cannot disable the feature with a\n// negative or enormous value.\ninline constexpr char kAeriumEphemeralDelaySeconds[] =\n    "browser.clear_data.aerium_ephemeral_delay_seconds";\n\n&|' \
     components/browsing_data/core/pref_names.h
-sed_i 's|^  registry->RegisterBooleanPref(kAeriumClearOnExitHostedAppData, false);$|&\n  registry->RegisterStringPref(kAeriumOnExitSiteRules, "[]");|' \
+sed_i 's|^  registry->RegisterBooleanPref(kAeriumClearOnExitHostedAppData, false);$|&\n  registry->RegisterStringPref(kAeriumOnExitSiteRules, "[]");\n  registry->RegisterBooleanPref(kAeriumEphemeralClearCache, false);\n  registry->RegisterBooleanPref(kAeriumEphemeralAllSites, false);\n  registry->RegisterIntegerPref(kAeriumEphemeralDelaySeconds, 10);|' \
     components/browsing_data/core/pref_names.cc
 
 # The deletion honours them. Everything the rules do NOT protect still goes
@@ -2764,6 +2846,89 @@ sed_i 's|^                            GetRemoveMask(data_types) \| aerium_remove
     $CBDLM
 sed_i 's|^                                keep_browser_alive));$|&\n\n    // Aerium: and the protected types, once per group, sparing the sites the\n    // rules name. base::Time() to base::Time::Max() and the same origin type\n    // mask as above, so a spared site is the only difference between these\n    // removals and the one before them.\n    for (const auto\& aerium_group : aerium_keep_groups) {\n      auto aerium_filter = content::BrowsingDataFilterBuilder::Create(\n          content::BrowsingDataFilterBuilder::Mode::kPreserve);\n      for (const std::string\& aerium_domain : aerium_group.second) {\n        aerium_filter->AddRegisterableDomain(aerium_domain);\n      }\n      remover->RemoveWithFilterAndReply(\n          base::Time(), base::Time::Max(), aerium_group.first,\n          GetOriginTypeMask(data_types) \|\n              AeriumOnExitOriginTypeMask(aerium_prefs),\n          std::move(aerium_filter),\n          BrowsingDataRemoverObserver::Create(\n              remover, /*filterable_deletion=*/true, profile_,\n              keep_browser_alive));\n    }|' \
     $CBDLM
+# --- Reset a site as soon as its last tab closes.
+#
+# The site rules table answers "keep these when I quit". This is the opposite
+# instruction for the same table - "never let this one persist at all" - for the
+# account you do not want following you around but do not want to give up every
+# other login to avoid. It is independent of the delete-on-exit switch, because
+# it is a property of the site rather than of shutdown.
+#
+# One table, two modes, rather than a second screen. A row is a keep rule or an
+# ephemeral rule, never both - KeepGroups() skips ephemeral rows and
+# EphemeralDomains() skips everything else - and both fold their pattern through
+# the same RegistrableDomainFor(), so the two modes cannot disagree about what
+# counts as one site. Rules written before "mode" existed have no such key and
+# read as "keep", which is what they were, so nothing needs migrating.
+#
+# Scope is cookies and storage, plus the cache if asked. Nothing else can be
+# honestly offered: ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData()
+# CHECKs - not DCHECKs, so it aborts release builds too - that a filtered
+# removal's mask is a subset of FILTERABLE_DATA_TYPES, and history, autofill,
+# passwords and site settings are all outside it because their backends ignore
+# the origin filter entirely.
+#
+# Where the desktop repos differ
+# ------------------------------
+# The desktop patch implements this half under #if !BUILDFLAG(IS_ANDROID),
+# because it hangs off BrowserCollectionObserver and TabStripModelObserver and
+# Android has neither. Android has the exact counterparts - TabModelListObserver
+# for models coming and going, TabModelObserver for what happens inside one -
+# so this is the same design against the other pair of interfaces, in the same
+# class, for the same reason: ChromeBrowsingDataLifetimeManager already owns
+# on-exit clearing for the profile, already holds the BrowsingDataRemover
+# plumbing, and - most usefully - GetOpenedUrlsAndOngoingDownloads() already has
+# an Android arm that walks TabModelList. Keeping both behaviours in one place
+# is also what stops the on-exit and on-tab-close paths drifting apart.
+#
+# Which closure signal
+# --------------------
+# TabClosureCommitted() and AllTabsClosureCommitted(), not OnFinishingTabClosure().
+# Android tab closes are undoable: closing a tab shows a snackbar and the tab
+# comes back if it is tapped. Clearing on "finishing" would empty a site's
+# cookies and then hand the user back a tab that is suddenly signed out, which
+# is a worse outcome than clearing a few seconds later. The committed callbacks
+# are documented as firing when the closure "can't be undone anymore", which is
+# the moment the site really has no tab.
+#
+# The work is always posted rather than done inline, because at the point these
+# fire the closing tab can still be reachable from the model and would count
+# itself as open.
+sed_i 's|^  "+chrome/browser/ui/android/tab_model/tab_model_list.h",$|\&\n  // Aerium: the ephemeral half of the site rules table watches tab models\n  // appearing and disappearing, and closures inside them, to notice when a\n  // marked site has no tab left. The two headers above are already allowed;\n  // these are their observer interfaces.\n  "+chrome/browser/ui/android/tab_model/tab_model_list_observer.h",\n  "+chrome/browser/ui/android/tab_model/tab_model_observer.h",|' \
+    chrome/browser/browsing_data/DEPS
+
+BDLM_H=chrome/browser/browsing_data/chrome_browsing_data_lifetime_manager.h
+sed_i 's|#include "components/keyed_service/core/keyed_service.h"|#include <set>\n\n\&\n#include "chrome/browser/ui/android/tab_model/tab_model_list_observer.h"\n#include "chrome/browser/ui/android/tab_model/tab_model_observer.h"|' \
+    $BDLM_H
+sed_i 's|^class ChromeBrowsingDataLifetimeManager : public KeyedService {$|// Aerium: this class also drives the ephemeral half of the site rules table,\n// clearing a marked site the moment its last tab closes. See theme.sh.\nclass ChromeBrowsingDataLifetimeManager : public KeyedService,\n                                          public TabModelListObserver,\n                                          public TabModelObserver {|' \
+    $BDLM_H
+sed_i 's|^  // KeyedService:$|  // Aerium: TabModelListObserver. Both are pure virtual, so both are here even\n  // though only the removal matters - a model going away takes its tabs with\n  // it, which can be the event that leaves a site with none.\n  void OnTabModelAdded(TabModel* tab_model) override;\n  void OnTabModelRemoved(TabModel* tab_model) override;\n\n  // Aerium: TabModelObserver. Only the committed callbacks, because an\n  // uncommitted close can still be undone - see theme.sh.\n  void TabClosureCommitted(TabAndroid* tab) override;\n  void AllTabsClosureCommitted() override;\n  void OnTabModelDestroyed(TabModel\& tab_model) override;\n\n\&|' \
+    $BDLM_H
+sed_i 's|^  // Deletes data that needs to be deleted, and schedules the next deletion.$|  // Aerium: starts observing every tab model that already exists for this\n  // profile. Called from the constructor - the service is created lazily, so\n  // models can and do exist before it does.\n  void AeriumObserveExistingTabModels();\n\n  // Aerium: observes one model, at most once.\n  void AeriumObserveTabModel(TabModel* tab_model);\n\n  // Aerium: clears cookies and storage for every ephemeral site that no longer\n  // has a tab open. Always posted rather than called straight from a tab-model\n  // notification, because at the point those fire the closing tab can still be\n  // reachable from the model and would count itself as open.\n  void AeriumClearClosedEphemeralSites();\n\n  // Aerium: posts the above after kAeriumEphemeralDelaySeconds. Every tab-model\n  // callback goes through this rather than posting for itself, so the delay and\n  // the cancellation are decided in one place.\n  void AeriumScheduleEphemeralClear();\n\n  // Aerium: the greylist - sites kept while the browser runs and dropped at\n  // shutdown. Called from the on-exit hook, outside every condition on the\n  // delete-on-exit switch.\n  void AeriumClearSessionOnlySites();\n\n  // Aerium: which models this service has called AddObserver() on, purely to\n  // keep that call idempotent. Entries are removed in OnTabModelRemoved() and\n  // OnTabModelDestroyed() so this never holds a dangling model.\n  std::set<raw_ptr<TabModel>> aerium_observed_models_;\n\n\&|' \
+    $BDLM_H
+
+BDLM_CC=chrome/browser/browsing_data/chrome_browsing_data_lifetime_manager.cc
+sed_i 's|#include "chrome/browser/ui/android/tab_model/tab_model_list.h"|\&\n#include "chrome/browser/ui/android/tab_model/tab_model_list_observer.h"\n#include "chrome/browser/ui/android/tab_model/tab_model_observer.h"|' \
+    $BDLM_CC
+# <algorithm> for std::clamp is already at the top of this file, so only the
+# site-rules header is added here.
+sed_i 's|#include "chrome/browser/browsing_data/chrome_browsing_data_remover_constants.h"|#include "chrome/browser/browsing_data/aerium_site_rules.h"\n&|' \
+    $BDLM_CC
+
+# Subscribe from the constructor, unsubscribe from Shutdown(). Shutdown() rather
+# than the destructor because a KeyedService is told to let go of its
+# dependencies there, and TabModelList outlives neither reliably.
+sed_i 's|^  // When the service is instantiated, wait a few minutes after Chrome startup$|  // Aerium: see theme.sh. Watch for tab models appearing, and for closures in\n  // the ones already here.\n  TabModelList::AddObserver(this);\n  AeriumObserveExistingTabModels();\n\n\&|' \
+    $BDLM_CC
+sed_i 's|^void ChromeBrowsingDataLifetimeManager::Shutdown() {$|\&\n  // Aerium: see theme.sh.\n  TabModelList::RemoveObserver(this);\n  for (TabModel* aerium_model : aerium_observed_models_) {\n    aerium_model->RemoveObserver(this);\n  }\n  aerium_observed_models_.clear();\n|' \
+    $BDLM_CC
+
+sed_i 's%^void ChromeBrowsingDataLifetimeManager::UpdateScheduledRemovalSettings() {$%// Aerium: the ephemeral half of the site rules table. See theme.sh.\nvoid ChromeBrowsingDataLifetimeManager::AeriumObserveExistingTabModels() {\n  for (TabModel* model : TabModelList::models()) {\n    AeriumObserveTabModel(model);\n  }\n}\n\nvoid ChromeBrowsingDataLifetimeManager::AeriumObserveTabModel(\n    TabModel* tab_model) {\n  if (!tab_model || tab_model->GetProfile() != profile_) {\n    return;\n  }\n  if (aerium_observed_models_.insert(tab_model).second) {\n    tab_model->AddObserver(this);\n  }\n}\n\nvoid ChromeBrowsingDataLifetimeManager::OnTabModelAdded(TabModel* tab_model) {\n  AeriumObserveTabModel(tab_model);\n}\n\nvoid ChromeBrowsingDataLifetimeManager::OnTabModelRemoved(TabModel* tab_model) {\n  if (aerium_observed_models_.erase(tab_model) > 0) {\n    tab_model->RemoveObserver(this);\n  }\n  // A model leaving takes its tabs with it, which can be what leaves a site\n  // with none.\n  AeriumScheduleEphemeralClear();\n}\n\nvoid ChromeBrowsingDataLifetimeManager::OnTabModelDestroyed(\n    TabModel\& tab_model) {\n  // No RemoveObserver here: the model is being destroyed and is saying so to\n  // its observers. Dropping the entry is all that is needed, and all that is\n  // safe.\n  aerium_observed_models_.erase(\&tab_model);\n}\n\nvoid ChromeBrowsingDataLifetimeManager::TabClosureCommitted(TabAndroid* tab) {\n  AeriumScheduleEphemeralClear();\n}\n\nvoid ChromeBrowsingDataLifetimeManager::AllTabsClosureCommitted() {\n  AeriumScheduleEphemeralClear();\n}\n\n// Aerium: posted, and delayed - see kAeriumEphemeralDelaySeconds. Sign-in flows\n// bounce through a provider in a tab that closes itself, and OAuth popups close\n// the moment they hand back a token, so clearing the instant the tab count\n// reaches zero can delete the cookie the redirect is about to need.\n//\n// The weak pointer is the cancellation mechanism: Shutdown() invalidates the\n// factory, so a pending clear never runs against a half-destroyed profile.\n// Posting rather than clearing inline matters even at zero delay, because at\n// the point the tab-model callbacks fire the closing tab can still be reachable\n// from the model and would count itself as open.\nvoid ChromeBrowsingDataLifetimeManager::AeriumScheduleEphemeralClear() {\n  const int configured = profile_->GetPrefs()->GetInteger(\n      browsing_data::prefs::kAeriumEphemeralDelaySeconds);\n  content::GetUIThreadTaskRunner({})->PostDelayedTask(\n      FROM_HERE,\n      base::BindOnce(\n          \&ChromeBrowsingDataLifetimeManager::AeriumClearClosedEphemeralSites,\n          weak_ptr_factory_.GetWeakPtr()),\n      base::Seconds(std::clamp(configured, 0, 3600)));\n}\n\nvoid ChromeBrowsingDataLifetimeManager::AeriumClearClosedEphemeralSites() {\n  PrefService* const prefs = profile_->GetPrefs();\n  const bool all_sites =\n      prefs->GetBoolean(browsing_data::prefs::kAeriumEphemeralAllSites);\n  const std::set<std::string> ephemeral =\n      aerium_site_rules::DomainsForMode(prefs, "ephemeral");\n  if (!all_sites \&\& ephemeral.empty()) {\n    return;\n  }\n\n  // Folded exactly as the on-exit path folds its own, including the fallback to\n  // the bare host for an IP literal or a single-label name, so a rule means the\n  // same thing to both.\n  std::set<std::string> still_open;\n  for (const auto\& url : GetOpenedUrlsAndOngoingDownloads(profile_)) {\n    std::string domain = GetDomainAndRegistry(\n        url, net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);\n    if (domain.empty()) {\n      domain = url.GetHost();\n    }\n    if (!domain.empty()) {\n      still_open.insert(domain);\n    }\n  }\n\n  content::BrowsingDataRemover* const remover =\n      profile_->GetBrowsingDataRemover();\n  const uint64_t mask = aerium_site_rules::EphemeralRemoveMask(prefs);\n\n  if (all_sites) {\n    // Expressed as what to spare rather than what to delete, because the set of\n    // domains holding data is not knowable from here - and listing it would be\n    // far larger than listing the handful being kept.\n    //\n    // Three things are spared. The keep rows, because the user said so. The\n    // session-only rows, because they survive until shutdown and this is not\n    // shutdown. And whatever still has a tab, because clearing a site out from\n    // under a tab displaying it signs the user out mid-session - the explicit\n    // list always protected open sites, and this path needs it more, since\n    // every site is now a candidate.\n    auto filter = content::BrowsingDataFilterBuilder::Create(\n        content::BrowsingDataFilterBuilder::Mode::kPreserve);\n    for (const std::string\& domain :\n         aerium_site_rules::DomainsForMode(prefs, "keep")) {\n      filter->AddRegisterableDomain(domain);\n    }\n    for (const std::string\& domain :\n         aerium_site_rules::DomainsForMode(prefs, "session")) {\n      filter->AddRegisterableDomain(domain);\n    }\n    for (const std::string\& domain : still_open) {\n      filter->AddRegisterableDomain(domain);\n    }\n    remover->RemoveWithFilterAndReply(\n        base::Time(), base::Time::Max(), mask,\n        content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB,\n        std::move(filter),\n        BrowsingDataRemoverObserver::Create(\n            remover, /*filterable_deletion=*/true, profile_,\n            /*keep_browser_alive=*/false));\n    return;\n  }\n\n  auto filter = content::BrowsingDataFilterBuilder::Create(\n      content::BrowsingDataFilterBuilder::Mode::kDelete);\n  bool any = false;\n  for (const std::string\& domain : ephemeral) {\n    if (still_open.contains(domain)) {\n      continue;\n    }\n    filter->AddRegisterableDomain(domain);\n    any = true;\n  }\n  if (!any) {\n    return;\n  }\n\n  remover->RemoveWithFilterAndReply(\n      base::Time(), base::Time::Max(), mask,\n      content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB,\n      std::move(filter),\n      BrowsingDataRemoverObserver::Create(remover, /*filterable_deletion=*/true,\n                                          profile_,\n                                          /*keep_browser_alive=*/false));\n}\n\n// Aerium: the greylist. Cleared at shutdown, before every condition in\n// ClearBrowsingDataForOnExitPolicy() and outside all of them - session-only is\n// a promise made per site, not a mode, so it should not require asking for a\n// general clean-out, and turning that clean-out off should not cancel it.\nvoid ChromeBrowsingDataLifetimeManager::AeriumClearSessionOnlySites() {\n  const std::set<std::string> session =\n      aerium_site_rules::DomainsForMode(profile_->GetPrefs(), "session");\n  if (session.empty()) {\n    return;\n  }\n  auto filter = content::BrowsingDataFilterBuilder::Create(\n      content::BrowsingDataFilterBuilder::Mode::kDelete);\n  for (const std::string\& domain : session) {\n    filter->AddRegisterableDomain(domain);\n  }\n  content::BrowsingDataRemover* const remover =\n      profile_->GetBrowsingDataRemover();\n  remover->RemoveWithFilterAndReply(\n      base::Time(), base::Time::Max(),\n      aerium_site_rules::EphemeralRemoveMask(profile_->GetPrefs()),\n      content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB,\n      std::move(filter),\n      BrowsingDataRemoverObserver::Create(remover, /*filterable_deletion=*/true,\n                                          profile_,\n                                          /*keep_browser_alive=*/true));\n}\n\n\&%' \
+    $BDLM_CC
+
+echo "[aerium] ephemeral sites applied"
+
+
 # --- The table itself.
 #
 # A screen rather than a dialog list, because a rule has four fields and a
@@ -2789,6 +2954,20 @@ cat > chrome/android/java/res/xml/aerium_site_rules_preferences.xml <<'AERIUM_SR
     <PreferenceCategory
         android:key="aerium_site_rules_list"
         android:title="@string/aerium_site_rules_list_title" />
+    <org.chromium.components.browser_ui.settings.ChromeSwitchPreference
+        android:key="aerium_ephemeral_all_sites"
+        android:title="@string/aerium_ephemeral_all_sites_title"
+        android:summary="@string/aerium_ephemeral_all_sites_summary"
+        android:persistent="false" />
+    <org.chromium.components.browser_ui.settings.ChromeSwitchPreference
+        android:key="aerium_ephemeral_clear_cache"
+        android:title="@string/aerium_ephemeral_clear_cache_title"
+        android:summary="@string/aerium_ephemeral_clear_cache_summary"
+        android:persistent="false" />
+    <Preference
+        android:key="aerium_ephemeral_delay"
+        android:title="@string/aerium_ephemeral_delay_title"
+        android:persistent="false" />
 </PreferenceScreen>
 AERIUM_SR_XML
 
@@ -2803,11 +2982,14 @@ import android.content.Context;
 import android.os.Bundle;
 import android.text.InputType;
 import android.text.TextUtils;
+import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.RadioButton;
+import android.widget.RadioGroup;
 
 import androidx.appcompat.app.AlertDialog;
 import androidx.preference.Preference;
@@ -2821,6 +3003,7 @@ import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.settings.ChromeBaseSettingsFragment;
 import org.chromium.chrome.browser.settings.search.ChromeBaseSearchIndexProvider;
+import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
 import org.chromium.components.browser_ui.settings.SettingsFragment;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
 import org.chromium.components.prefs.PrefService;
@@ -2860,6 +3043,34 @@ public class AeriumSiteRulesFragment extends ChromeBaseSettingsFragment {
     private static final String KEY_PATTERN = "pattern";
     private static final String KEY_KEEP = "keep";
 
+    // Aerium: a row is a keep rule or an ephemeral one. Absent means keep, which is what every
+    // rule written before this existed was, so nothing needs migrating. Must match
+    // aerium_site_rules.h.
+    private static final String KEY_MODE = "mode";
+    private static final String MODE_EPHEMERAL = "ephemeral";
+
+    private static final String MODE_SESSION = "session";
+    private static final String MODE_KEEP = "keep";
+
+    // Must match components/browsing_data/core/pref_names.h.
+    private static final String PREF_EPHEMERAL_CLEAR_CACHE =
+            "browser.clear_data.aerium_ephemeral_clear_cache";
+    private static final String PREF_EPHEMERAL_ALL_SITES =
+            "browser.clear_data.aerium_ephemeral_all_sites";
+    private static final String PREF_EPHEMERAL_DELAY =
+            "browser.clear_data.aerium_ephemeral_delay_seconds";
+
+    // Must match the keys in aerium_site_rules_preferences.xml.
+    private static final String PREF_CLEAR_CACHE_KEY = "aerium_ephemeral_clear_cache";
+    private static final String PREF_ALL_SITES_KEY = "aerium_ephemeral_all_sites";
+    private static final String PREF_DELAY_KEY = "aerium_ephemeral_delay";
+
+    // The browser clamps this to the same range when it reads it - see
+    // AeriumScheduleEphemeralClear(). Repeated here so a value that would be clamped is
+    // refused where it is typed rather than silently becoming something else.
+    private static final int DELAY_MIN_SECONDS = 0;
+    private static final int DELAY_MAX_SECONDS = 3600;
+
     private final SettableMonotonicObservableSupplier<String> mPageTitle =
             ObservableSuppliers.createMonotonic();
 
@@ -2877,6 +3088,46 @@ public class AeriumSiteRulesFragment extends ChromeBaseSettingsFragment {
             add.setOnPreferenceClickListener(
                     preference -> {
                         showRuleDialog(-1);
+                        return true;
+                    });
+        }
+
+        // Aerium: applies to the ephemeral rows only, so it lives under the table rather than in
+        // the clear-on-exit screen. Not persistent: the value is a profile pref read and written
+        // here, not an Android SharedPreference.
+        ChromeSwitchPreference allSites = findPreference(PREF_ALL_SITES_KEY);
+        if (allSites != null) {
+            allSites.setChecked(
+                    UserPrefs.get(getProfile()).getBoolean(PREF_EPHEMERAL_ALL_SITES));
+            allSites.setOnPreferenceChangeListener(
+                    (preference, newValue) -> {
+                        UserPrefs.get(getProfile())
+                                .setBoolean(PREF_EPHEMERAL_ALL_SITES, (boolean) newValue);
+                        // A keep row is an exception in this mode rather than a protection,
+                        // and describeKeep() says so, so the rows are rebuilt to pick that up.
+                        rebuildList();
+                        return true;
+                    });
+        }
+
+        Preference delay = findPreference(PREF_DELAY_KEY);
+        if (delay != null) {
+            updateDelaySummary(delay);
+            delay.setOnPreferenceClickListener(
+                    preference -> {
+                        showDelayDialog(preference);
+                        return true;
+                    });
+        }
+
+        ChromeSwitchPreference clearCache = findPreference(PREF_CLEAR_CACHE_KEY);
+        if (clearCache != null) {
+            clearCache.setChecked(
+                    UserPrefs.get(getProfile()).getBoolean(PREF_EPHEMERAL_CLEAR_CACHE));
+            clearCache.setOnPreferenceChangeListener(
+                    (preference, newValue) -> {
+                        UserPrefs.get(getProfile())
+                                .setBoolean(PREF_EPHEMERAL_CLEAR_CACHE, (boolean) newValue);
                         return true;
                     });
         }
@@ -2920,6 +3171,16 @@ public class AeriumSiteRulesFragment extends ChromeBaseSettingsFragment {
 
     /** "Cookies and site data, Cached images and files" - what this row actually protects. */
     private String describeKeep(JSONObject rule) {
+        // Aerium: neither an ephemeral nor a session-only row protects anything; both say when
+        // the site goes. Listing the keep checkboxes for one would describe a rule it does not
+        // have.
+        String mode = rule.optString(KEY_MODE);
+        if (MODE_EPHEMERAL.equals(mode)) {
+            return getString(R.string.aerium_site_rules_mode_ephemeral_summary);
+        }
+        if (MODE_SESSION.equals(mode)) {
+            return getString(R.string.aerium_site_rules_mode_session_summary);
+        }
         JSONObject keep = rule.optJSONObject(KEY_KEEP);
         StringBuilder summary = new StringBuilder();
         for (int i = 0; i < KEEP_KEYS.length; i++) {
@@ -2927,8 +3188,17 @@ public class AeriumSiteRulesFragment extends ChromeBaseSettingsFragment {
             if (summary.length() > 0) summary.append(", ");
             summary.append(getString(KEEP_LABELS[i]));
         }
-        return summary.length() == 0 ? getString(R.string.aerium_site_rules_keep_nothing)
-                                     : summary.toString();
+        if (summary.length() == 0) {
+            return getString(R.string.aerium_site_rules_keep_nothing);
+        }
+        // A keep row means something different once every site is being cleared: it is the
+        // exception rather than a protection against a sweep the user may not even have turned
+        // on. Saying so on the row is cheaper than expecting anyone to hold both switches in
+        // their head.
+        if (UserPrefs.get(getProfile()).getBoolean(PREF_EPHEMERAL_ALL_SITES)) {
+            return getString(R.string.aerium_site_rules_keep_exception, summary.toString());
+        }
+        return summary.toString();
     }
 
     /**
@@ -2960,18 +3230,57 @@ public class AeriumSiteRulesFragment extends ChromeBaseSettingsFragment {
         if (existing != null) input.setText(existing.optString(KEY_PATTERN));
         layout.addView(input);
 
+        // Aerium: which question this row answers. Two radio buttons rather than a switch,
+        // because they are not on/off versions of one another - "keep this when I quit" and
+        // "clear this the moment its last tab closes" are opposite instructions, and a switch
+        // labelled with one of them would make the other look like its absence.
+        String existingMode = existing == null ? MODE_KEEP : existing.optString(KEY_MODE);
+
+        RadioButton keepMode = new RadioButton(context);
+        keepMode.setText(R.string.aerium_site_rules_mode_keep);
+        RadioButton sessionMode = new RadioButton(context);
+        sessionMode.setText(R.string.aerium_site_rules_mode_session);
+        RadioButton ephemeralMode = new RadioButton(context);
+        ephemeralMode.setText(R.string.aerium_site_rules_mode_ephemeral);
+        RadioGroup modes = new RadioGroup(context);
+        modes.setOrientation(RadioGroup.VERTICAL);
+        modes.addView(keepMode);
+        modes.addView(sessionMode);
+        modes.addView(ephemeralMode);
+        layout.addView(modes);
+
         JSONObject existingKeep = existing == null ? null : existing.optJSONObject(KEY_KEEP);
+        LinearLayout keepBoxes = new LinearLayout(context);
+        keepBoxes.setOrientation(LinearLayout.VERTICAL);
+        layout.addView(keepBoxes);
+
         CheckBox[] boxes = new CheckBox[KEEP_KEYS.length];
         for (int i = 0; i < KEEP_KEYS.length; i++) {
             CheckBox box = new CheckBox(context);
             box.setText(KEEP_LABELS[i]);
-            // A new rule keeps everything it can. Someone adding a site to a screen called
-            // "Sites to keep" means keep it; the boxes are there to take things away again.
+            // A new rule keeps everything it can. Keep is the mode a new row starts in, and
+            // someone who picked it means keep; the boxes are there to take things away again.
             box.setChecked(
                     existingKeep == null || existingKeep.optBoolean(KEEP_KEYS[i], false));
             boxes[i] = box;
-            layout.addView(box);
+            keepBoxes.addView(box);
         }
+
+        // The checkboxes belong to the keep mode alone. Hidden rather than disabled in the other
+        // mode: a greyed-out list of things this rule keeps, on a rule whose entire point is that
+        // it keeps nothing, reads as a bug.
+        modes.setOnCheckedChangeListener(
+                (group, checkedId) ->
+                        keepBoxes.setVisibility(
+                                checkedId == keepMode.getId() ? View.VISIBLE : View.GONE));
+        // Ids are assigned by addView above, so check() can only be called now.
+        int checked = keepMode.getId();
+        if (MODE_EPHEMERAL.equals(existingMode)) {
+            checked = ephemeralMode.getId();
+        } else if (MODE_SESSION.equals(existingMode)) {
+            checked = sessionMode.getId();
+        }
+        modes.check(checked);
 
         AlertDialog.Builder builder =
                 new AlertDialog.Builder(context, R.style.ThemeOverlay_BrowserUI_AlertDialog)
@@ -3004,7 +3313,14 @@ public class AeriumSiteRulesFragment extends ChromeBaseSettingsFragment {
                                 input.setError(getString(R.string.aerium_site_rules_invalid));
                                 return;
                             }
-                            saveRule(index, pattern, boxes);
+                            String mode = MODE_KEEP;
+                            int picked = modes.getCheckedRadioButtonId();
+                            if (picked == ephemeralMode.getId()) {
+                                mode = MODE_EPHEMERAL;
+                            } else if (picked == sessionMode.getId()) {
+                                mode = MODE_SESSION;
+                            }
+                            saveRule(index, pattern, boxes, mode);
                             dialog.dismiss();
                         });
     }
@@ -3032,7 +3348,7 @@ public class AeriumSiteRulesFragment extends ChromeBaseSettingsFragment {
         return host;
     }
 
-    private void saveRule(int index, String pattern, CheckBox[] boxes) {
+    private void saveRule(int index, String pattern, CheckBox[] boxes, String mode) {
         try {
             JSONObject keep = new JSONObject();
             for (int i = 0; i < KEEP_KEYS.length; i++) {
@@ -3041,6 +3357,10 @@ public class AeriumSiteRulesFragment extends ChromeBaseSettingsFragment {
             JSONObject rule = new JSONObject();
             rule.put(KEY_PATTERN, pattern);
             rule.put(KEY_KEEP, keep);
+            // Aerium: written on both kinds of row so a rule that used to be ephemeral and was
+            // changed back does not keep its old mode by omission. The keep map is written either
+            // way, so switching a row back and forth does not lose its checkboxes.
+            rule.put(KEY_MODE, mode);
 
             JSONArray rules = readRules();
             if (index >= 0 && index < rules.length()) {
@@ -3062,6 +3382,66 @@ public class AeriumSiteRulesFragment extends ChromeBaseSettingsFragment {
         rules.remove(index);
         writeRules(rules);
         rebuildList();
+    }
+
+    /** "10 seconds after the last tab closes" - the current value, on the row that changes it. */
+    private void updateDelaySummary(Preference preference) {
+        int seconds = UserPrefs.get(getProfile()).getInteger(PREF_EPHEMERAL_DELAY);
+        preference.setSummary(
+                seconds == 0
+                        ? getString(R.string.aerium_ephemeral_delay_immediate)
+                        : getString(R.string.aerium_ephemeral_delay_summary, seconds));
+    }
+
+    /**
+     * The delay dialog. A number field rather than a slider or a fixed list, because the useful
+     * values are not evenly spread - 0, 10 and 300 are all reasonable answers and a slider would
+     * make the middle of that range easy and the ends hard.
+     */
+    private void showDelayDialog(Preference row) {
+        Context context = getStyledContext();
+        int padding = Math.round(24 * context.getResources().getDisplayMetrics().density);
+
+        EditText input = new EditText(context);
+        input.setSingleLine(true);
+        input.setInputType(InputType.TYPE_CLASS_NUMBER);
+        input.setText(String.valueOf(UserPrefs.get(getProfile()).getInteger(PREF_EPHEMERAL_DELAY)));
+        LinearLayout layout = new LinearLayout(context);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(padding, padding, padding, 0);
+        layout.addView(input);
+
+        AlertDialog dialog =
+                new AlertDialog.Builder(context, R.style.ThemeOverlay_BrowserUI_AlertDialog)
+                        .setTitle(R.string.aerium_ephemeral_delay_title)
+                        .setMessage(R.string.aerium_ephemeral_delay_desc)
+                        .setView(layout)
+                        .setPositiveButton(R.string.aerium_site_rules_save, null)
+                        .setNegativeButton(android.R.string.cancel, null)
+                        .create();
+        dialog.show();
+        Button positive = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+        if (positive == null) return;
+        positive.setOnClickListener(
+                view -> {
+                    int seconds;
+                    try {
+                        seconds = Integer.parseInt(input.getText().toString().trim());
+                    } catch (NumberFormatException e) {
+                        // Includes the empty field, which would otherwise parse as nothing and be
+                        // stored as 0 - that reads as "clear immediately", which is not what
+                        // clearing the box means.
+                        input.setError(getString(R.string.aerium_ephemeral_delay_invalid));
+                        return;
+                    }
+                    if (seconds < DELAY_MIN_SECONDS || seconds > DELAY_MAX_SECONDS) {
+                        input.setError(getString(R.string.aerium_ephemeral_delay_invalid));
+                        return;
+                    }
+                    UserPrefs.get(getProfile()).setInteger(PREF_EPHEMERAL_DELAY, seconds);
+                    updateDelaySummary(row);
+                    dialog.dismiss();
+                });
     }
 
     private JSONArray readRules() {
@@ -3109,7 +3489,7 @@ sed_i 's|^                    AeriumClearOnExitFragment.SEARCH_INDEX_DATA_PROVID
 sed_i 's|^import org.chromium.chrome.browser.browsing_data.AeriumClearOnExitFragment;$|&\nimport org.chromium.chrome.browser.browsing_data.AeriumSiteRulesFragment;|' \
     $SIPR
 
-sed_i 's|^      <message name="IDS_AERIUM_CLEAR_ON_EXIT_TITLE" desc=|      <message name="IDS_AERIUM_SITE_RULES_TITLE" desc="Title of the screen listing sites whose data is not deleted when the browser closes.">\n        Sites to keep\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_SUMMARY" desc="Summary under the entry that opens that screen.">\n        Sites whose data survives the deletion\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_LIST_TITLE" desc="Header above the list of kept sites.">\n        Kept sites\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_ADD" desc="Row that opens a dialog for adding a site, and the title of that dialog.">\n        Add a site\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_EDIT" desc="Title of the dialog shown when an existing site in the list is tapped.">\n        Edit site\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_EMPTY" desc="Shown in place of the list when no sites have been added.">\n        No sites yet. Everything selected above is deleted when you close Aerium.\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_HINT" desc="Hint text in the site field, telling the user what to type.">\n        example.com - covers the whole site, subdomains included\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_INVALID" desc="Error shown under the site field when what was typed cannot be read as a site.">\n        Enter a site, such as example.com\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_SAVE" desc="Button that stores the site being added or edited.">\n        Save\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_REMOVE" desc="Button that deletes the site being edited from the list.">\n        Remove\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_KEEP_SITE_DATA" desc="Data type a kept site can hold on to: cookies and other site storage.">\n        Cookies and site data\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_KEEP_CACHE" desc="Data type a kept site can hold on to: cached files.">\n        Cached images and files\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_KEEP_DOWNLOADS" desc="Data type a kept site can hold on to: its entries in the download list.">\n        Download history\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_KEEP_NOTHING" desc="Summary on a row where every data type was unticked, so the row keeps nothing.">\n        Nothing kept\n      </message>\n&|' \
+sed_i 's|^      <message name="IDS_AERIUM_CLEAR_ON_EXIT_TITLE" desc=|      <message name="IDS_AERIUM_SITE_RULES_TITLE" desc="Title of the screen listing per-site rules saying when each site'"'"'s data is deleted.">\n        Site rules\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_SUMMARY" desc="Summary under the entry that opens that screen.">\n        When each site'"'"'s data is deleted\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_LIST_TITLE" desc="Header above the list of per-site rules.">\n        Sites\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_ADD" desc="Row that opens a dialog for adding a site, and the title of that dialog.">\n        Add a site\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_EDIT" desc="Title of the dialog shown when an existing site in the list is tapped.">\n        Edit site\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_EMPTY" desc="Shown in place of the list when no sites have been added.">\n        No rules yet. Every site follows the settings on the previous screen.\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_HINT" desc="Hint text in the site field, telling the user what to type.">\n        example.com - covers the whole site, subdomains included\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_INVALID" desc="Error shown under the site field when what was typed cannot be read as a site.">\n        Enter a site, such as example.com\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_SAVE" desc="Button that stores the site being added or edited.">\n        Save\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_REMOVE" desc="Button that deletes the site being edited from the list.">\n        Remove\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_KEEP_SITE_DATA" desc="Data type a kept site can hold on to: cookies and other site storage.">\n        Cookies and site data\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_KEEP_CACHE" desc="Data type a kept site can hold on to: cached files.">\n        Cached images and files\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_KEEP_DOWNLOADS" desc="Data type a kept site can hold on to: its entries in the download list.">\n        Download history\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_KEEP_NOTHING" desc="Summary on a row where every data type was unticked, so the row keeps nothing.">\n        Nothing kept\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_MODE_KEEP" desc="First of two options in the site dialog: this rule protects the site from the deletion that happens when the browser closes.">\n        Keep this site when Aerium closes\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_MODE_EPHEMERAL" desc="Second of two options in the site dialog: this rule clears the site as soon as its last tab is closed, rather than protecting it.">\n        Clear this site as soon as its last tab closes\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_MODE_EPHEMERAL_SUMMARY" desc="Summary shown on a row set to clear the site when its last tab closes.">\n        Cleared when its last tab closes\n      </message>\n      <message name="IDS_AERIUM_EPHEMERAL_CLEAR_CACHE_TITLE" desc="Title of the switch that makes tab-close clearing drop the cached files too.">\n        Also clear cached files\n      </message>\n      <message name="IDS_AERIUM_EPHEMERAL_CLEAR_CACHE_SUMMARY" desc="Summary under that switch. Says which rows it affects and what it costs.">\n        Applies to sites cleared when their last tab closes. Their images, fonts and scripts are fetched again on the next visit.\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_MODE_SESSION" desc="Middle of three options in the site dialog: the site stays signed in while the browser is running and is cleared when it closes.">\n        Keep this site until Aerium closes, then clear it\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_MODE_SESSION_SUMMARY" desc="Summary shown on a row set to be cleared when the browser closes.">\n        Cleared when Aerium closes\n      </message>\n      <message name="IDS_AERIUM_EPHEMERAL_ALL_SITES_TITLE" desc="Title of the switch that clears every site when its last tab closes, leaving the table as the list of exceptions.">\n        Clear every site when its last tab closes\n      </message>\n      <message name="IDS_AERIUM_EPHEMERAL_ALL_SITES_SUMMARY" desc="Summary under that switch. Warns that it signs the user out of everything not listed.">\n        The sites above become the exceptions. Everything else is signed out as soon as you close its last tab.\n      </message>\n      <message name="IDS_AERIUM_EPHEMERAL_DELAY_TITLE" desc="Row that opens a dialog for setting how long to wait after a tab closes before clearing the site.">\n        Wait before clearing\n      </message>\n      <message name="IDS_AERIUM_EPHEMERAL_DELAY_DESC" desc="Explanation in that dialog, saying why a delay is useful and what the range is.">\n        Sign-in pages often open a tab that closes itself, so clearing the instant a tab goes can delete a cookie that was about to be used. A short wait also forgives closing a tab by accident. 0 to 3600 seconds.\n      </message>\n      <message name="IDS_AERIUM_EPHEMERAL_DELAY_SUMMARY" desc="Summary on that row, naming the wait in seconds. The placeholder is a number.">\n        <ph name="SECONDS">%1$d<ex>10</ex></ph> seconds after the last tab closes\n      </message>\n      <message name="IDS_AERIUM_EPHEMERAL_DELAY_IMMEDIATE" desc="Summary on that row when the wait is set to zero.">\n        As soon as the last tab closes\n      </message>\n      <message name="IDS_AERIUM_EPHEMERAL_DELAY_INVALID" desc="Error shown under the field when the number typed is out of range or not a number.">\n        Enter a number of seconds between 0 and 3600\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_KEEP_EXCEPTION" desc="Summary on a keep row while every other site is being cleared on tab close. The placeholder is the list of data types the row keeps.">\n        Exception: <ph name="TYPES">%1$s<ex>Cookies and site data</ex></ph>\n      </message>\n&|' \
     chrome/browser/ui/android/strings/android_chrome_strings.grd
 # --- Let an extension own the New Tab page on a phone.
 #
@@ -3964,6 +4344,44 @@ sed_i 's|      <message name="IDS_MENU_DEV_TOOLS" desc=|      <message name="IDS
     chrome/browser/ui/android/strings/android_chrome_strings.grd
 
 echo "[aerium] view page source applied"
+
+# --- Install an extension that is not on a store.
+#
+# Asked for repeatedly: a .crx from a GitHub release, or one already on the
+# device, cannot be installed at all today. The reason is one line.
+#
+# ChromeDownloadManagerDelegate::ShouldOpenDownload() is the only place a
+# downloaded CRX becomes an install, and it is gated on
+# extensions::util::IsExtensionDownload(), which is
+#
+#     download_item.GetMimeType() == Extension::kMimeType
+#
+# GitHub serves every release asset as application/octet-stream. So a .crx from
+# a GitHub release is not an extension download by that test, never reaches
+# CrxInstaller, and lands in the Downloads folder as an inert file. The
+# extension-mime-request-handling flag above does not help - it decides what to
+# do with a CRX MIME type, and there is not one.
+#
+# So the filename is accepted as well as the MIME type, but only from a host
+# this build already allows off-store installs from. That ordering matters. The
+# alternative - accepting any .crx by name - would send files from arbitrary
+# hosts into CrxInstaller, which refuses off-store installs it was not told to
+# allow, turning a download that used to save into an error message. This way a
+# trusted host is allowed to serve a .crx badly; it does not make new hosts
+# trusted.
+#
+# Nothing installs silently: CreateCrxInstaller() builds an ExtensionInstallPrompt
+# and the user still agrees to the permissions.
+#
+# Not done here, and worth being plain about: a .crx already sitting on the
+# device still has no path in. That needs a file picker, a content:// URI copied
+# somewhere CrxInstaller can read, and a JNI bridge to reach it - a bigger piece
+# than this, and a separate one.
+# Two source lines make up the condition, so both are pulled into the pattern
+# space and replaced together.
+sed_i '/^  if (extensions::util::IsExtensionDownload(\*item) \&\&$/{N;s%  if (extensions::util::IsExtensionDownload(\*item) \&\&\n      !extensions::WebstoreInstaller::GetAssociatedApproval(\*item)) {%  // Aerium: see theme.sh. A .crx whose host serves it as application/octet-stream\n  // rather than as an extension MIME type - which is what GitHub does for every\n  // release asset - is still a .crx, and refusing to install it means the only\n  // way to get an extension that is not on a store is no way at all.\n  //\n  // Narrow on purpose. It applies only when the host is already one this build\n  // allows off-store installs from, so this changes what a trusted host is\n  // allowed to serve, not which hosts are trusted. A .crx from anywhere else\n  // saves as a file exactly as before, rather than reaching CrxInstaller and\n  // being refused with an error where a download used to appear.\n  //\n  // The install prompt is unchanged: CreateCrxInstaller() builds one and the\n  // user still has to agree to the permissions.\n  const bool aerium_offstore_crx =\n      !extensions::util::IsExtensionDownload(*item) \&\&\n      item->GetTargetFilePath().MatchesExtension(\n          extensions::kExtensionFileExtension) \&\&\n      download_crx_util::OffStoreInstallAllowedByPrefs(profile_, *item);\n\n  if ((extensions::util::IsExtensionDownload(*item) || aerium_offstore_crx) \&\&\n      !extensions::WebstoreInstaller::GetAssociatedApproval(*item)) {%}' \
+    chrome/browser/download/chrome_download_manager_delegate.cc
+
 
 # --- The source URL of a download, shown and copyable.
 #

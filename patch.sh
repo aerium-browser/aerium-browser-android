@@ -130,8 +130,19 @@ sed -i 's|uncompiled_sources_ = \[|&\n  "browser_action.json",\n  "page_action.j
 sed -i 's/api::webstore_private::MV2DeprecationStatus::kHardDisable)));/api::webstore_private::MV2DeprecationStatus::kNone)));/' extensions/browser/api/webstore_private/webstore_private_api.cc
 sed -i 's/bool g_allow_mv2_for_testing = false;/bool g_allow_mv2_for_testing = true;/' extensions/browser/manifest_v2_handler.cc
 
-# --- Off-store extension downloads from the Opera and Edge catalogues.
-sed -i '/^bool OffStoreInstallAllowedByPrefs(/a\  for (const char* d : {"addons.opera.com", "operacdn.com", "microsoftedge.microsoft.com", "edge.microsoft.com", "delivery.mp.microsoft.com"}) if (item.GetURL().DomainIs(d) || item.GetReferrerUrl().DomainIs(d)) return true;' chrome/browser/download/download_crx_util.cc
+# --- Off-store extension downloads from the Opera and Edge catalogues, and
+# from GitHub releases.
+#
+# GitHub is where an extension that is on no store actually lives - uBlock
+# Origin's own releases included - and a release asset is served from
+# objects.githubusercontent.com (or release-assets.githubusercontent.com on
+# newer routing) after a redirect from github.com, so the referrer test is what
+# usually catches it and the asset hosts are here for when it does not.
+#
+# GitHub serves those assets as application/octet-stream rather than as an
+# extension MIME type, which is a second obstacle - see the CRX-by-filename
+# block in theme.sh. Both are needed; either alone leaves the file inert.
+sed -i '/^bool OffStoreInstallAllowedByPrefs(/a\  for (const char* d : {"addons.opera.com", "operacdn.com", "microsoftedge.microsoft.com", "edge.microsoft.com", "delivery.mp.microsoft.com", "github.com", "githubusercontent.com"}) if (item.GetURL().DomainIs(d) || item.GetReferrerUrl().DomainIs(d)) return true;' chrome/browser/download/download_crx_util.cc
 # sed -i 's/bool g_allow_offstore_install_for_testing = false;/bool g_allow_offstore_install_for_testing = true;/' chrome/browser/download/download_crx_util.cc
 
 # --- An extensions container in the phone toolbar.
