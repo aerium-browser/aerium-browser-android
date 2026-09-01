@@ -12,6 +12,10 @@ inputs:
     description: 'Workflow run id to restore the saved build tree from (empty = this run). download-artifact only sees the current run by default, so resuming a failed run from a NEW run requires passing that run''s id here.'
     required: false
     default: ''
+  arch:
+    description: 'Target architecture: arm64 (default) or x64. Selects target_cpu for the build and, because artifact names are global to a run, keeps each architecture''s checkpoints, APK and failure marker in their own namespace. arm64 keeps the unsuffixed names it has always used, so checkpoints written by a run that started before this input existed are still found by a resume.'
+    required: false
+    default: 'arm64'
 outputs:
   finished:
     description: 'true once the signed APK has been produced'
@@ -71,7 +75,7 @@ runs:
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
-        BASE: build-artifact-android
+        BASE: build-artifact-android${{ inputs.arch == 'arm64' && '' || format('-{0}', inputs.arch) }}
         RESTORE_RUN_ID: ${{ inputs.restore_run_id }}
       run: bash ./.github/scripts/checkpoint-slot.sh restore
 
@@ -167,6 +171,9 @@ runs:
       shell: bash
       env:
         STAGE_DIAG: ${{ github.workspace }}/stage-diag.txt
+        # build.sh derives the ABI and rewrites target_cpu in out/Default/args.gn
+        # from this. Everything else about the two builds is the same file.
+        AERIUM_TARGET_CPU: ${{ inputs.arch }}
       run: |
         cd "$GITHUB_WORKSPACE"
         chmod +x *.sh res/*.sh
@@ -294,7 +301,7 @@ runs:
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
-        BASE: build-artifact-android
+        BASE: build-artifact-android${{ inputs.arch == 'arm64' && '' || format('-{0}', inputs.arch) }}
       run: bash ./.github/scripts/checkpoint-slot.sh save
 
     - name: Upload build tree
@@ -347,7 +354,7 @@ runs:
       if: inputs.finished != 'true' && steps.build.outputs.code != '0'
       uses: actions/upload-artifact@v7
       with:
-        name: build-error-android
+        name: build-error-android${{ inputs.arch == 'arm64' && '' || format('-{0}', inputs.arch) }}
         path: ${{ github.workspace }}/stage-status/
         retention-days: 10
         overwrite: true
@@ -356,7 +363,7 @@ runs:
       if: inputs.finished != 'true' && steps.pack.outputs.packed == 'finished'
       uses: actions/upload-artifact@v7
       with:
-        name: aerium-android
+        name: aerium-android${{ inputs.arch == 'arm64' && '' || format('-{0}', inputs.arch) }}
         path: ${{ github.workspace }}/release/
         retention-days: 30
         compression-level: 0

@@ -7,7 +7,7 @@
 #                       $BUILD_TIMEOUT_MIN minutes, then stops gracefully so
 #                       the next stage can resume from the build tree.
 #
-# On success writes release/aerium-<version>-arm64-v8a.apk and release/finished.marker
+# On success writes release/aerium-<version>-<abi>.apk and release/finished.marker
 set -e
 source common.sh
 
@@ -49,6 +49,30 @@ TOTAL_BUDGET_MIN=${TOTAL_BUDGET_MIN:-$((JOB_TIMEOUT_MIN - CHECKPOINT_RESERVE_MIN
 START_TS=${STAGE_START_TS:-$(date +%s)}
 
 export VERSION=$(grep -m1 -o '[0-9]\+\(\.[0-9]\+\)\{3\}' vanadium/args.gn)
+
+# --- target architecture ------------------------------------------------------
+# arm64 unless the workflow says otherwise. Everything that varies with the
+# architecture is derived here, in one place, so a second workflow only has to
+# set AERIUM_TARGET_CPU and nothing downstream needs a second opinion:
+#
+#   target_cpu    what args.gn is rewritten to say
+#   ABI           what Android calls the same thing, and what goes in the APK
+#                 filename - it is the name people match against their device,
+#                 not the GN spelling
+#
+# x86 (32-bit) is deliberately absent. Android dropped it for new devices years
+# ago and the only things left running it are old emulator images; adding a
+# third build to the queue for those is not a trade worth making.
+export AERIUM_TARGET_CPU="${AERIUM_TARGET_CPU:-arm64}"
+case "$AERIUM_TARGET_CPU" in
+    arm64) export AERIUM_ABI=arm64-v8a ;;
+    x64)   export AERIUM_ABI=x86_64 ;;
+    *)
+        echo "[aerium] FATAL: AERIUM_TARGET_CPU=$AERIUM_TARGET_CPU is not one of arm64, x64" >&2
+        exit 1
+        ;;
+esac
+echo "[aerium] target cpu: $AERIUM_TARGET_CPU  abi: $AERIUM_ABI"
 export CHROMIUM_SOURCE=https://chromium.googlesource.com/chromium/src.git
 export DEBIAN_FRONTEND=noninteractive
 echo "[aerium] chromium version: $VERSION  ci: $MODE_CI"
@@ -185,6 +209,14 @@ EOF
     done
 
     cp $SCRIPT_DIR/args.gn out/Default/args.gn
+    # The checked-in args.gn names arm64. Rewritten rather than kept in two
+    # files so that every other argument - and there are thirty of them - stays
+    # in one place and cannot drift between architectures.
+    sed -i "s|^target_cpu = .*|target_cpu = \"$AERIUM_TARGET_CPU\"|" out/Default/args.gn
+    grep -q "^target_cpu = \"$AERIUM_TARGET_CPU\"$" out/Default/args.gn || {
+        echo "[aerium] FATAL: target_cpu was not set in out/Default/args.gn" >&2
+        exit 1
+    }
     gn gen out/Default
 
     # Nothing past this point runs git against chromium/src (no later stage
@@ -425,8 +457,8 @@ export ANDROID_HOME=$PWD/third_party/android_sdk/public
 
 mkdir -p $SCRIPT_DIR/release
 set_keys
-sign_apk "$(find out/Default/apks -name 'Chrome*.apk' | head -n1)" "$SCRIPT_DIR/release/aerium-$VERSION-arm64-v8a.apk"
+sign_apk "$(find out/Default/apks -name 'Chrome*.apk' | head -n1)" "$SCRIPT_DIR/release/aerium-$VERSION-$AERIUM_ABI.apk"
 rm -rf $SCRIPT_DIR/keys
 echo "$VERSION" > $SCRIPT_DIR/release/version.txt
 touch $SCRIPT_DIR/release/finished.marker
-echo "[aerium] build finished: release/aerium-$VERSION-arm64-v8a.apk"
+echo "[aerium] build finished: release/aerium-$VERSION-$AERIUM_ABI.apk"

@@ -36,7 +36,7 @@ Open the [Chrome Web Store](https://chromewebstore.google.com/), switch on **Des
 - **[uBlock Origin](https://chromewebstore.google.com/detail/ublock-origin/cjpalhdlnbpafiamejdnhcphjbkeiagm) (recommended)** — content blocking that doesn't get in your way. Install this one first.
 - [**uBlock Origin Lite**](https://chromewebstore.google.com/detail/ublock-origin-lite/ddkjiahejlhfcafbddmgiahcphecmpfh) — same author, same filter lists, a lighter footprint if that's what you'd rather trade for.
 - [**floccus**](https://chromewebstore.google.com/detail/floccus-bookmarks-sync/fnaicdffflnofjppbagibeoednhnbjhg) — bookmark sync across browsers, using storage you control.
-- [**TablissNG**](https://chromewebstore.google.com/detail/tablissng/dlaogejjiafeobgofajdlkkhjlignalk) — a new tab page worth looking at twice, actively maintained.
+- [**TablissNG**](https://chromewebstore.google.com/detail/tablissng/dlaogejjiafeobgofajdlkkhjlignalk) — a new tab page worth looking at twice, actively maintained. This is also the answer to "can I set my own New Tab background?" — Aerium ships no setting for it because an extension owning the whole page does the job better than a wallpaper picker would.
 - [**Cookie AutoDelete V3**](https://chromewebstore.google.com/detail/cookie-autodelete-v3/jofioghmpdcgiiobkhmdojhjbjiejfbd) — clears a site's cookies once you close its tabs, with a whitelist for the ones you want to keep.
 - [**Decentraleyes**](https://chromewebstore.google.com/detail/decentraleyes/ldpochfccmkkmhdbclfhpagapcfdljkj) — serves common libraries locally instead of fetching them from a CDN, cutting a quiet tracking channel most blockers miss.
 

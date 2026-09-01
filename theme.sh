@@ -364,6 +364,7 @@ inline void AeriumFirstRunDataSource::StartDataRequest(
   <section>
     <h2>Extensions</h2>
     <p>This build supports extensions, which stock Chrome on Android does not. A content blocker such as uBlock Origin is the single most useful thing to add.</p>
+    <p>An extension can also own the New Tab page, which is how you change what it looks like &mdash; Aerium has no built-in setting for a custom background because <a href="https://chromewebstore.google.com/detail/tablissng/dlaogejjiafeobgofajdlkkhjlignalk">TablissNG</a> already does it better than a setting would, with your own images or a fresh photo each time.</p>
   </section>
 
   <section>
