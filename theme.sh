@@ -703,7 +703,41 @@ sed_i 's|    sk_sp<cc::ColorFilter> image_filter;|&\n    // Aerium: see theme.sh
 
 DMF=third_party/blink/renderer/platform/graphics/dark_mode_filter.cc
 sed_i 's|  image_classifier = std::make_unique<DarkModeImageClassifier>();|&\n  blacken_dark_backgrounds = settings.blacken_dark_backgrounds;|' $DMF
-sed_i '/^SkColor4f DarkModeFilter::InvertColorIfNeeded(const SkColor4f\& color,$/{N;s|                                              ElementRole role) {|                                              ElementRole role) {\n  // Aerium: take a background that is already near black the rest of the way\n  // down. Checked before the classifier because a colour this dark is one it\n  // would decline to invert anyway.\n  //\n  // Ungated on purpose. AdjustGray, which the colour filter applies after\n  // inverting, only touches NEUTRAL greys - it tests IsWithinEpsilon on the\n  // channels - so a page with a tinted background inverts to a tinted near\n  // black and keeps the cast, while a white page goes to true black. Same\n  // switch, two different answers. This tests the channels independently, so\n  // it catches both. It runs only when force dark is running at all, which is\n  // to say only when the user asked for darkening.\n  if (role == ElementRole::kBackground) {\n    constexpr float kNearBlack = 48.0f / 255.0f;\n    if (color.fR < kNearBlack \&\& color.fG < kNearBlack \&\&\n        color.fB < kNearBlack) {\n      return SkColor4f{0.0f, 0.0f, 0.0f, color.fA};\n    }\n  }\n|}' $DMF
+# The fold itself. Uses the weights DarkModeColorClassifier::CalculateColorBrightness
+# uses, so "how dark is this" means the same thing here as it does to the
+# classifier that just declined the colour.
+sed_i 's%const size_t kMaxCacheSize = 1024u;%\&\n\n// Aerium: pull a background the classifier declined to invert toward black.\n//\n// The classifier is InvertHighBrightnessColorsClassifier(205): it inverts\n// backgrounds BRIGHTER than 205 and returns everything else untouched. That\n// is the whole reason a dark site stays grey. A site at #313338 is too dark\n// to invert and too light for any near-black clamp, so both paths pass it\n// through and Discord renders exactly as it always did.\n//\n// So scale instead of clamping: new brightness = old * (old / 205), a\n// gamma-2 fold anchored where the classifier takes over. #0d1117 lands on\n// #010101, #181818 on #030303, #313338 on #0d0d0d - black to the eye - while\n// a genuinely mid-grey #787878 only reaches #464646 and stays distinguishable\n// from the black behind it. Continuous at the anchor, so nothing jumps as a\n// colour crosses 205.\n//\n// Channels are scaled together rather than the lightness being rewritten, so\n// a tinted surface keeps its tint on the way down.\nSkColor4f AeriumFoldTowardBlack(const SkColor4f\& color) {\n  const float brightness =\n      0.299f * color.fR + 0.587f * color.fG + 0.114f * color.fB;\n  constexpr float kAnchor = 205.0f / 255.0f;\n  if (brightness <= 0.0f || brightness >= kAnchor) {\n    return color;\n  }\n  const float scale = brightness / kAnchor;\n  return SkColor4f{color.fR * scale, color.fG * scale, color.fB * scale,\n                   color.fA};\n}%' $DMF
+
+# The call site: after the classifier has declined, not before it. A colour the
+# classifier DOES invert has already been sent to near-black by the LAB
+# inversion plus the zeroed AdjustGray floor above, and folding it twice would
+# take a light page's cards down with its background.
+sed_i '/^        immutable_.color_filter.get(), color);$/{N;s%^        immutable_.color_filter.get(), color);\n  }$%        immutable_.color_filter.get(), color);\n  }\n\n  // Aerium: see theme.sh. A background the classifier left alone is folded\n  // toward black rather than returned as it came in. Deliberately AFTER the\n  // classifier, not before: a colour it does invert has already been taken to\n  // near black by the LAB inversion and the zeroed AdjustGray floor above, and\n  // folding that a second time would drag a light page'"'"'s cards down with its\n  // background.\n  if (immutable_.blacken_dark_backgrounds \&\& role == ElementRole::kBackground) {\n    return AeriumFoldTowardBlack(color);\n  }%}' $DMF
+
+# The contrast heuristic assumed #121212 behind everything, which stops being
+# true the moment the fold lands. AdjustDarkenColor uses it to decide whether a
+# border is already readable and may be darkened further; told the wrong
+# background it keeps borders lighter than they need to be.
+sed_i 's%  const SkColor4f\& background = \[\&contrast_background\]() {%  const SkColor4f\& background = [\&contrast_background, this]() {%' $DMF
+sed_i 's%      return SkColor4f::FromColor(SK_ColorDark);%      // Aerium: follow the fold - see theme.sh.\n      return immutable_.blacken_dark_backgrounds\n                 ? SkColors::kBlack\n                 : SkColor4f::FromColor(SK_ColorDark);%' $DMF
+
+# The canvas underneath all of it. StyleEngine hardcodes the base background
+# for any page whose root colour scheme resolves to dark:
+#
+#     color_scheme_background_ =
+#         root_color_scheme == mojom::blink::ColorScheme::kLight
+#             ? Color::kWhite
+#             : Color(0x12, 0x12, 0x12);
+#
+# That colour is painted behind the document and never goes near DarkModeFilter
+# - it is not a CSS background, it is what the viewport is cleared to. So on a
+# site that declares color-scheme: dark and leaves its body background alone,
+# every pixel the user sees is #121212 and there is nothing in the paint path
+# to fold. The switch was working and the page was still grey.
+SE=third_party/blink/renderer/core/css/style_engine.cc
+sed_i 's|#include "third_party/blink/renderer/platform/geometry/physical_size.h"|\&\n#include "third_party/blink/renderer/platform/graphics/dark_mode_settings_builder.h"|' $SE
+sed_i 's|            : Color(0x12, 0x12, 0x12);|            : (GetCurrentDarkModeSettings().blacken_dark_backgrounds\n                   ? Color::kBlack\n                   : Color(0x12, 0x12, 0x12));|' $SE
+
 
 # The key, the startup hook and the switch.
 sed_i 's|    public static final String FIRST_RUN_FLOW_COMPLETE = "first_run_flow";|    /** Whether Aerium blackens sites that ship their own dark theme. */\n    public static final String AERIUM_BLACKEN_DARK_SITES = "Chrome.Aerium.BlackenDarkSites";\n\n&|' \
@@ -3891,3 +3925,140 @@ sed_i 's|^      <message name="IDS_AERIUM_UPDATE_AVAILABLE_TITLE" desc=|      <m
     chrome/browser/ui/android/strings/android_chrome_strings.grd
 
 echo "[aerium] update notification applied"
+
+# --- View page source, in the More tools submenu.
+#
+# Everything but the menu row already exists in 152. ids.xml declares
+# view_source, KeyboardShortcuts maps VIEW_SOURCE onto it, and ChromeActivity
+# handles it:
+#
+#     if (id == R.id.view_source
+#             && !currentTab.isNativePage()
+#             && DevToolsWindowAndroid.canViewSource(...)) {
+#       currentTab.getWebContents().getMainFrame().viewSource();
+#
+# So the feature is built, tested and reachable - by a keyboard shortcut, on a
+# phone, which is to say not reachable. The desktop has the row and Android
+# does not, and that is the entire gap. Nothing here touches the action; it
+# adds a way to ask for it.
+#
+# The guard repeats canViewSource() rather than trusting the handler's, because
+# an item that appears and then does nothing when tapped is worse than one that
+# is absent - view-source is refused on native pages and wherever the policy
+# blocks DevTools, and both are states a user can be in.
+MTIB=chrome/android/java/src/org/chromium/chrome/browser/tabbed_mode/MoreToolsItemBuilder.java
+sed_i 's%    /\*\* Builds the "Dev tools" menu item. \*/%/**\n     * Returns whether the "View page source" menu item should be displayed.\n     *\n     * @param currentTab The current tab.\n     */\n    public boolean shouldShowViewSourceItem(@Nullable Tab currentTab) {\n        // Aerium: see theme.sh. No form-factor test, unlike dev tools - reading\n        // the markup of a page is not a tablet-sized activity.\n        if (currentTab == null || currentTab.isNativePage()) {\n            return false;\n        }\n\n        WebContents webContents = currentTab.getWebContents();\n        if (webContents == null) {\n            return false;\n        }\n\n        return DevToolsWindowAndroid.canViewSource(currentTab.getProfile(), webContents);\n    }\n\n    /** Builds the "View page source" menu item. */\n    public ListItem buildViewSourceItem() {\n        return AppMenuItemUtils.createStandardListItem(\n                AppMenuItemUtils.buildModelForStandardMenuItem(\n                        mContext,\n                        mAppMenuItemTheme,\n                        R.id.view_source,\n                        R.string.aerium_menu_view_source,\n                        Resources.ID_NULL,\n                        mIsMenuIconAtStart),\n                /* showIcon= */ false);\n    }\n\n&%' \
+    $MTIB
+
+# More tools is hidden entirely when every item in it would be hidden, so the
+# new row has to join that test as well as the list.
+sed_i 's%                || shouldShowDevToolsItem(currentTab)) {%                || shouldShowDevToolsItem(currentTab)\n                || shouldShowViewSourceItem(currentTab)) {%' \
+    $MTIB
+
+# Placed after Developer tools, which is where the desktop keeps it too.
+sed_i '/^                    if (mMoreToolsItemBuilder.shouldShowDevToolsItem(currentTab)) {$/{N;N;s|                        submenuItems.add(mMoreToolsItemBuilder.buildDevToolsItem());\n                    }|                        submenuItems.add(mMoreToolsItemBuilder.buildDevToolsItem());\n                    }\n\n                    // Aerium: see theme.sh.\n                    if (mMoreToolsItemBuilder.shouldShowViewSourceItem(currentTab)) {\n                        submenuItems.add(mMoreToolsItemBuilder.buildViewSourceItem());\n                    }|}' \
+    chrome/android/java/src/org/chromium/chrome/browser/tabbed_mode/TabbedAppMenuPropertiesDelegate.java
+
+sed_i 's|      <message name="IDS_MENU_DEV_TOOLS" desc=|      <message name="IDS_AERIUM_MENU_VIEW_SOURCE" desc="Menu item that opens the HTML source of the current page in a new tab. [CHAR_LIMIT=27]">\n        View page source\n      </message>\n&|' \
+    chrome/browser/ui/android/strings/android_chrome_strings.grd
+
+echo "[aerium] view page source applied"
+
+# --- The source URL of a download, shown and copyable.
+#
+# Downloads home already prints the domain in the caption line - UiUtils
+# .generateGenericCaption() runs the URL through formatUrlForDisplayInNotification
+# and truncates it to MAX_ORIGIN_LENGTH_FOR_DOWNLOAD_HOME_CAPTION - so you can
+# see that a file came from example.com and nothing more. Which of the six
+# links on that page it was, or what the query string carried, is not
+# recoverable from the UI at all, and the OfflineItem has held the full URL the
+# whole time.
+#
+# The row cannot show it: a full URL is longer than the title it would sit
+# under. So it goes in the overflow menu next to Share and Delete, and the
+# toast prints the URL rather than a confirmation - one tap both shows the
+# link and puts it on the clipboard, which is what someone asking this question
+# wants to do with it next.
+#
+# Menu items in this holder are keyed by their string resource id, which is
+# what the delegate switches on, so a new item is a string plus two branches.
+OIVH=chrome/browser/download/internal/android/java/src/org/chromium/chrome/browser/download/home/list/holder/OfflineItemViewHolder.java
+sed_i 's|^import org.chromium.ui.listmenu.ListMenu;$|import org.chromium.ui.base.Clipboard;\n&|' $OIVH
+sed_i 's|    private @Nullable Runnable mShowWarningBypassDialogCallback;|&\n\n    // Aerium: see theme.sh. Null when the item has no usable source URL, which\n    // is also what hides the menu row.\n    private @Nullable Runnable mCopySourceCallback;|' $OIVH
+
+sed_i 's|        mRenameCallback =|        // Aerium: see theme.sh.\n        mCopySourceCallback =\n                (offlineItem.url != null \&\& offlineItem.url.isValid())\n                        ? () -> {\n                            String url = offlineItem.url.getSpec();\n                            Clipboard.getInstance().setText(offlineItem.title, url);\n                            Toast.makeText(mMore.getContext(), url, Toast.LENGTH_LONG).show();\n                        }\n                        : null;\n\n&|' $OIVH
+
+sed_i 's|        if (mCanShare) listItems.add(buildSimpleMenuItem(R.string.share));|&\n        // Aerium: see theme.sh.\n        if (mCopySourceCallback != null) {\n            listItems.add(buildSimpleMenuItem(R.string.aerium_download_copy_source_url));\n        }|' $OIVH
+
+sed_i 's|                    } else if (textId == R.string.menu_open_with) {|                    } else if (textId == R.string.aerium_download_copy_source_url) {\n                        // Aerium: see theme.sh.\n                        if (mCopySourceCallback != null) mCopySourceCallback.run();\n&|' $OIVH
+
+sed_i 's|      <message name="IDS_MENU_DEV_TOOLS" desc=|      <message name="IDS_AERIUM_DOWNLOAD_COPY_SOURCE_URL" desc="Item in a downloaded file'"'"'s overflow menu. Shows the address the file was downloaded from and copies it to the clipboard. [CHAR_LIMIT=27]">\n        Copy source link\n      </message>\n&|' \
+    chrome/browser/ui/android/strings/android_chrome_strings.grd
+
+echo "[aerium] download source url applied"
+
+# --- Hand a download to another app.
+#
+# Asked for repeatedly by people who use ADM, 1DM or IDM+ and want the browser
+# to stop being the thing that fetches large files: those apps segment,
+# resume across network changes, and survive the browser being killed, none of
+# which Chromium's downloader does on a phone.
+#
+# The hook is upstream's own escape hatch. DownloadController::OnDownloadStarted
+# already has a branch that hands a download somewhere else and drops
+# Chromium's copy - it is how a PDF gets opened inline:
+#
+#     if (should_cancel_download) {
+#       ScheduleRemoveDownloadItem(download_item);
+#       download_item->RemoveObserver(this);
+#       return;
+#     }
+#
+# So this asks the same question first, in the same shape, and uses the same
+# three lines to bow out.
+#
+# The decision is made in Java, not in native, and native only learns whether
+# somebody took it. That is deliberate: the switch is a SharedPreference like
+# the other Aerium Android switches, and pushing the test to the Java side
+# means no new profile pref, no addition to the generated Pref enum, and no
+# second place where "is this on" can be answered differently. The cost is one
+# JNI call per download start.
+#
+# What cannot be carried across is authentication. DownloadItem exposes the
+# URL, the MIME type and the referrer, and no cookie - so a download that only
+# works while signed in will not work in another app. That is a property of
+# handing a bare URL to a different process, not something this could fix, and
+# the switch summary says so rather than letting people find out with a 403.
+sed_i 's|^import org.jni_zero.CalledByNative;$|import android.content.ActivityNotFoundException;\nimport android.content.Context;\nimport android.content.Intent;\nimport android.content.pm.ResolveInfo;\nimport android.net.Uri;\nimport android.text.TextUtils;\n\n&|' \
+    chrome/android/java/src/org/chromium/chrome/browser/download/DownloadController.java
+sed_i 's|^import org.chromium.build.annotations.NullMarked;$|import org.chromium.base.ContextUtils;\n&|' \
+    chrome/android/java/src/org/chromium/chrome/browser/download/DownloadController.java
+sed_i 's|^import org.chromium.chrome.browser.pdf.PdfPage;$|import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;\nimport org.chromium.chrome.browser.preferences.ChromeSharedPreferences;\n&|' \
+    chrome/android/java/src/org/chromium/chrome/browser/download/DownloadController.java
+
+sed_i 's%    static void enqueueDownloadManagerRequest(final DownloadInfo info) {%/**\n     * Aerium: see theme.sh. Offers the download to another app, and reports back\n     * whether one took it - native cancels its own download only if this is\n     * true, so every way of declining ends in an ordinary in-browser download.\n     */\n    @CalledByNative\n    private static boolean maybeOpenWithExternalApp(\n            GURL url, @JniType("std::string") String mimeType, GURL referrer) {\n        if (!ChromeSharedPreferences.getInstance()\n                .readBoolean(ChromePreferenceKeys.AERIUM_EXTERNAL_DOWNLOAD_MANAGER, false)) {\n            return false;\n        }\n        if (url == null || !url.isValid()) return false;\n\n        // Only ordinary web downloads. A blob:, data: or filesystem: URL means\n        // nothing outside the process that minted it, and handing one over\n        // would fail in the other app rather than here.\n        String scheme = url.getScheme();\n        if (!"http".equals(scheme) \&\& !"https".equals(scheme)) return false;\n\n        Context context = ContextUtils.getApplicationContext();\n        Intent intent = new Intent(Intent.ACTION_VIEW);\n        intent.setDataAndType(\n                Uri.parse(url.getSpec()),\n                TextUtils.isEmpty(mimeType) ? "application/octet-stream" : mimeType);\n        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);\n        if (referrer != null \&\& referrer.isValid()) {\n            intent.putExtra(Intent.EXTRA_REFERRER, Uri.parse(referrer.getSpec()));\n        }\n\n        // Never hand it to ourselves. Aerium registers for http and https VIEW\n        // intents, so without this test a type nothing else claims comes\n        // straight back in as a navigation and downloads again - the same file,\n        // in a loop, with the switch on. A chooser resolves to the system\n        // resolver rather than to us, so several handlers still reach the user.\n        ResolveInfo resolved = context.getPackageManager().resolveActivity(intent, 0);\n        if (resolved == null\n                || resolved.activityInfo == null\n                || context.getPackageName().equals(resolved.activityInfo.packageName)) {\n            return false;\n        }\n\n        try {\n            context.startActivity(intent);\n            return true;\n        } catch (ActivityNotFoundException | SecurityException e) {\n            return false;\n        }\n    }\n\n&%' \
+    chrome/android/java/src/org/chromium/chrome/browser/download/DownloadController.java
+
+DLC=chrome/browser/download/android/download_controller.cc
+sed_i 's|^void DownloadController::OnDownloadStarted(DownloadItem\* download_item) {$|\&\n  // Aerium: see theme.sh. Offered to another app before anything else looks at\n  // it; if one takes it, this download is dropped the way the PDF branch below\n  // drops its own.\n  {\n    JNIEnv* env = base::android::AttachCurrentThread();\n    if (Java_DownloadController_maybeOpenWithExternalApp(\n            env, url::GURLAndroid::FromNativeGURL(env, download_item->GetURL()),\n            download_item->GetMimeType(),\n            url::GURLAndroid::FromNativeGURL(\n                env, download_item->GetReferrerUrl()))) {\n      ScheduleRemoveDownloadItem(download_item);\n      download_item->RemoveObserver(this);\n      return;\n    }\n  }\n|' $DLC
+
+# The switch, in Settings > Downloads, next to the other two.
+sed_i 's|^</PreferenceScreen>$|    <org.chromium.components.browser_ui.settings.ChromeSwitchPreference\n        android:key="aerium_external_download_manager"\n        android:title="@string/aerium_external_download_manager_title"\n        android:summary="@string/aerium_external_download_manager_summary" />\n\n&|' \
+    chrome/browser/download/android/java/res/xml/download_preferences.xml
+
+DLS=chrome/browser/download/android/java/src/org/chromium/chrome/browser/download/settings/DownloadSettings.java
+sed_i 's|^import org.chromium.chrome.browser.preferences.Pref;$|import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;\nimport org.chromium.chrome.browser.preferences.ChromeSharedPreferences;\n&|' $DLS
+sed_i 's|    public static final String PREF_AUTO_OPEN_PDF_ENABLED = "auto_open_pdf_enabled";|\&\n\n    // Aerium: see theme.sh.\n    public static final String PREF_AERIUM_EXTERNAL_DOWNLOAD_MANAGER =\n            "aerium_external_download_manager";|' $DLS
+sed_i 's|    private ChromeSwitchPreference mAutoOpenPdfEnabledPref;|\&\n    private ChromeSwitchPreference mAeriumExternalDownloadManagerPref;|' $DLS
+sed_i 's|        mLocationChangePref.setDownloadLocationHelper(new DownloadLocationHelperImpl(getProfile()));|\&\n\n        // Aerium: see theme.sh. Inserted here rather than after the auto-open-PDF\n        // block below, because that block is an if/else and appending to either\n        // arm would put this inside a branch.\n        mAeriumExternalDownloadManagerPref =\n                (ChromeSwitchPreference) findPreference(PREF_AERIUM_EXTERNAL_DOWNLOAD_MANAGER);\n        if (mAeriumExternalDownloadManagerPref != null) {\n            mAeriumExternalDownloadManagerPref.setOnPreferenceChangeListener(this);\n        }|' $DLS
+sed_i 's|^        } else if (PREF_AUTO_OPEN_PDF_ENABLED.equals(preference.getKey())) {$|        } else if (PREF_AERIUM_EXTERNAL_DOWNLOAD_MANAGER.equals(preference.getKey())) {\n            // Aerium: see theme.sh.\n            ChromeSharedPreferences.getInstance()\n                    .writeBoolean(\n                            ChromePreferenceKeys.AERIUM_EXTERNAL_DOWNLOAD_MANAGER,\n                            (boolean) newValue);\n&|' $DLS
+sed_i 's|^        mLocationChangePref.updateSummary();$|\&\n\n        // Aerium: see theme.sh. First statement of the method, so this sits at\n        // method level rather than inside one of the branches below.\n        if (mAeriumExternalDownloadManagerPref != null) {\n            mAeriumExternalDownloadManagerPref.setChecked(\n                    ChromeSharedPreferences.getInstance()\n                            .readBoolean(\n                                    ChromePreferenceKeys.AERIUM_EXTERNAL_DOWNLOAD_MANAGER,\n                                    false));\n        }|' $DLS
+
+sed_i 's|    /\*\* Whether Aerium blackens sites that ship their own dark theme. \*/|    /** Whether Aerium hands downloads to another app instead of fetching them. */\n    public static final String AERIUM_EXTERNAL_DOWNLOAD_MANAGER =\n            "Chrome.Aerium.ExternalDownloadManager";\n\n\&|' \
+    $CPK
+sed_i 's|^                AERIUM_BLACKEN_DARK_SITES,$|                AERIUM_EXTERNAL_DOWNLOAD_MANAGER,\n\&|' $CPK
+
+sed_i 's|      <message name="IDS_MENU_DEV_TOOLS" desc=|      <message name="IDS_AERIUM_EXTERNAL_DOWNLOAD_MANAGER_TITLE" desc="Title of the switch that sends downloads to a separate download manager app.">\n        Download with another app\n      </message>\n      <message name="IDS_AERIUM_EXTERNAL_DOWNLOAD_MANAGER_SUMMARY" desc="Summary under that switch. Warns that sign-in cookies are not passed to the other app.">\n        Offer each download to a download manager app instead of fetching it here. Sign-in cookies are not passed on, so downloads that need an account may fail in the other app.\n      </message>\n&|' \
+    chrome/browser/ui/android/strings/android_chrome_strings.grd
+
+echo "[aerium] external download manager applied"
