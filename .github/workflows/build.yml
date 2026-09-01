@@ -579,8 +579,23 @@ jobs:
           # with a 403. Falls back to GITHUB_TOKEN when the secret is absent,
           # so this stays inert until RELEASE_TOKEN exists.
           token: ${{ secrets.RELEASE_TOKEN || github.token }}
-          tag_name: v${{ steps.ver.outputs.version }}
-          name: Aerium ${{ steps.ver.outputs.version }} (arm64)
+          # The build number is part of the tag, so a release is never
+          # overwritten. Tagging on the Chromium version alone meant every
+          # build after the first replaced that release's APK in place: same
+          # URL, different binary, no way for anyone to tell which one they
+          # have, no earlier build to fall back to, and a git tag that moved
+          # under anyone who had fetched it - while published_at stayed at the
+          # first publish, so the release looked untouched the whole time.
+          #
+          # The extra entries cost nothing where it matters. The in-app updater
+          # parses a tag by cutting everything from the first dash, so
+          # v152.0.7977.64-b116 and v152.0.7977.64-b117 are the same version to
+          # it and neither is an update over the other - only a Chromium bump
+          # ever reaches a user as a notification. The build number is in the
+          # name as well as the tag because three releases called "Aerium
+          # 151.0.7922.137" and nothing else are indistinguishable in the list.
+          tag_name: v${{ steps.ver.outputs.version }}-b${{ github.run_number }}
+          name: Aerium ${{ steps.ver.outputs.version }} (arm64, build ${{ github.run_number }})
           body_path: /tmp/notes.md
           generate_release_notes: true
           fail_on_unmatched_files: true
