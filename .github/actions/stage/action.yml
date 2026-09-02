@@ -435,6 +435,27 @@ runs:
         # it needs credentials the session did not have.
         #
         # So: name the failed targets, then print the error itself.
+        #
+        # "The error itself" is out/Default/siso_output, NOT build_stdout.log.
+        # This block used to print 200 lines of the latter and call that the
+        # error, which it is not: build_stdout.log is siso's progress stream -
+        # one line per action, all of them successes - and a compile error never
+        # appears in it. Run 117 stage 4 failed on
+        # chrome_browsing_data_lifetime_manager.o and this section faithfully
+        # printed two hundred lines of unrelated .o names, so the diagnostics
+        # said which target failed and not one word about why. siso writes the
+        # command line and the compiler's stderr to siso_output, which is a few
+        # kilobytes.
+        #
+        # Order matters as much as content. The job-log API returns the TAIL, so
+        # whatever is printed last is what survives; that is the whole reason
+        # this section exists. So the progress tail shrinks to 40 lines and goes
+        # FIRST, and siso_output goes LAST, where the tail window cannot push it
+        # out of reach.
+        echo "--- last 40 lines of build progress (context, not the error) ---"
+        tail -n 40 chromium/build_stdout.log 2>/dev/null \
+          || echo "(no build output was captured)"
+        echo
         if [ -s "$OUT/.siso_failed_targets" ]; then
           echo "--- failed targets ---"
           cat "$OUT/.siso_failed_targets"
@@ -442,9 +463,15 @@ runs:
           echo "(no .siso_failed_targets - the stage did not fail on a target)"
         fi
         echo
-        echo "--- last 200 lines of build output ---"
-        tail -n 200 chromium/build_stdout.log 2>/dev/null \
-          || echo "(no build output was captured)"
+        echo "--- siso_output: the failing command and its compiler output ---"
+        if [ -s "$OUT/siso_output" ]; then
+          # Capped so a pathological template error cannot itself blow the tail
+          # window; 2000 lines is far more than any single diagnostic needs.
+          tail -n 2000 "$OUT/siso_output"
+        else
+          echo "(siso_output is empty or absent - the stage did not fail in a"
+          echo " compile step, so look at the progress tail above instead)"
+        fi
         echo
         echo "=== end of stage diagnostics ==="
         exit 0
