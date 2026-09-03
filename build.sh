@@ -248,6 +248,21 @@ if [ -f "$SBI" ] && grep -q ShuffleSubchannelColorData "$SBI" && ! grep -q allow
     echo "[aerium] resume hotfix: allow_unsafe_buffers pragma applied to $SBI"
 fi
 
+# --- Resume hotfix (removable once a build that STARTED after 2026-09-03 goes
+# green): 152 removed the default argument from base::JSONReader::Read, which
+# now requires the options word explicitly. The two calls in
+# aerium_site_rules.h passed only the string, so the first translation unit to
+# include that header - chrome_browsing_data_lifetime_manager.cc - failed under
+# -Werror in run 119 stage 4, 88k targets deep. theme.sh carries the fix, but
+# theme.sh only runs during source setup, so a tree checkpointed before it does
+# not have it. Idempotent: the pattern is gone after the first application, and
+# a fresh tree written by the current theme.sh never matches it.
+ASR=chrome/browser/browsing_data/aerium_site_rules.h
+if [ -f "$ASR" ] && grep -q 'JSONReader::Read(raw);' "$ASR"; then
+    sed -i 's|base::JSONReader::Read(raw);|base::JSONReader::Read(raw, base::JSON_PARSE_RFC);|g' "$ASR"
+    echo "[aerium] resume hotfix: JSON_PARSE_RFC added to $ASR"
+fi
+
 # --- Resume sync for the first-run page: theme.sh only runs during source
 # setup, so a tree saved by an earlier stage keeps whatever version of the
 # page it was built with. Re-emit the header from theme.sh whenever the tree's

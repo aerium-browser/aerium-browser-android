@@ -2681,7 +2681,8 @@ inline std::map<uint64_t, std::set<std::string>> KeepGroups(
   if (raw.empty()) {
     return groups;
   }
-  const std::optional<base::Value> parsed = base::JSONReader::Read(raw);
+  const std::optional<base::Value> parsed =
+      base::JSONReader::Read(raw, base::JSON_PARSE_RFC);
   if (!parsed || !parsed->is_list()) {
     return groups;
   }
@@ -2763,7 +2764,8 @@ inline std::set<std::string> DomainsForMode(PrefService* prefs,
   if (raw.empty()) {
     return domains;
   }
-  const std::optional<base::Value> parsed = base::JSONReader::Read(raw);
+  const std::optional<base::Value> parsed =
+      base::JSONReader::Read(raw, base::JSON_PARSE_RFC);
   if (!parsed || !parsed->is_list()) {
     return domains;
   }
