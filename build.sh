@@ -263,6 +263,19 @@ if [ -f "$ASR" ] && grep -q 'JSONReader::Read(raw);' "$ASR"; then
     echo "[aerium] resume hotfix: JSON_PARSE_RFC added to $ASR"
 fi
 
+# --- Resume hotfix (removable alongside the one above): the restored-flag entry
+# for android-surface-control named ::gpu::features::kAndroidSurfaceControl.
+# gpu_finch_features.h opens `namespace gpu` only to forward-declare
+# GpuFeatureInfo; the feature itself is in the global `features` namespace, so
+# the qualified name did not resolve and about_flags.cc failed under -Werror in
+# run 120. Same reasoning as the JSONReader hotfix: theme.sh has the corrected
+# spelling but does not run on a resumed tree. Idempotent both ways.
+ABF=chrome/browser/about_flags.cc
+if [ -f "$ABF" ] && grep -q '::gpu::features::kAndroidSurfaceControl' "$ABF"; then
+    sed -i 's|::gpu::features::kAndroidSurfaceControl|::features::kAndroidSurfaceControl|g' "$ABF"
+    echo "[aerium] resume hotfix: kAndroidSurfaceControl requalified in $ABF"
+fi
+
 # --- Resume sync for the first-run page: theme.sh only runs during source
 # setup, so a tree saved by an earlier stage keeps whatever version of the
 # page it was built with. Re-emit the header from theme.sh whenever the tree's

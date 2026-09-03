@@ -2522,12 +2522,16 @@ sed_i -E '/^ +(AndroidPaymentAppsFragment|AutofillAndPasswordsFragment|AutofillB
 # hands anyone on a panel that behaves this way a switch they can try - which
 # is precisely what an experiments page is for.
 #
-# gpu::features rather than plain features: about_flags.cc has its own
-# `features` in scope, and gpu_finch_features.h is already included for the
-# switches beside it.
+# ::features:: and not ::gpu::features::. gpu_finch_features.h opens `namespace
+# gpu` only to forward-declare GpuFeatureInfo; every feature in it, this one
+# included, lives in the GLOBAL `features` namespace. That is what the 236 other
+# FEATURE_VALUE_TYPE entries in about_flags.cc use. The leading :: is worth
+# keeping anyway: the flag table sits inside about_flags::{anonymous}, so an
+# unqualified `features::` would break the day anything declares a nested one.
+# about_flags.cc already includes the header at the top, so nothing else needed.
 sed_i 's|^inline constexpr char kAndroidAdaptiveFrameRateName\[\] =$|inline constexpr char kAeriumAndroidSurfaceControlName[] =\n    "Android SurfaceControl";\ninline constexpr char kAeriumAndroidSurfaceControlDescription[] =\n    "Use SurfaceControl to composite the browser'"'"'s output, which lets the "\n    "system put it in a hardware overlay. Chromium enables this by default. "\n    "Turning it off changes how the browser presents frames, which on some "\n    "phones is what decides whether the panel runs above 60 Hz while "\n    "scrolling. Off costs power on most devices - only worth trying if this "\n    "one is capping the refresh rate.";\n\n&|' \
     chrome/browser/flag_descriptions.h
-sed_i 's|^    {"android-adaptive-frame-rate",$|    {"android-surface-control",\n     flag_descriptions::kAeriumAndroidSurfaceControlName,\n     flag_descriptions::kAeriumAndroidSurfaceControlDescription, kOsAndroid,\n     FEATURE_VALUE_TYPE(::gpu::features::kAndroidSurfaceControl)},\n\n&|' \
+sed_i 's|^    {"android-adaptive-frame-rate",$|    {"android-surface-control",\n     flag_descriptions::kAeriumAndroidSurfaceControlName,\n     flag_descriptions::kAeriumAndroidSurfaceControlDescription, kOsAndroid,\n     FEATURE_VALUE_TYPE(::features::kAndroidSurfaceControl)},\n\n&|' \
     chrome/browser/about_flags.cc
 # --- The site rules table: sites whose data survives the on-exit deletion.
 #
