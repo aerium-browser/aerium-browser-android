@@ -3702,12 +3702,14 @@ inline base::Version ParseReleaseTag(std::string_view tag) {
 
 class AeriumUpdateChecker : public KeyedService {
  public:
-  explicit AeriumUpdateChecker(Profile* profile) : profile_(profile) {
-    ScheduleNextCheck();
-  }
+  // Out of line, below, for the same reason Shutdown() is: this class holds a
+  // unique_ptr, a timer and a WeakPtrFactory, which makes it "complex" to the
+  // chromium-style plugin, and that plugin rejects a complex class whose
+  // constructor or destructor body is written inside the class.
+  explicit AeriumUpdateChecker(Profile* profile);
   AeriumUpdateChecker(const AeriumUpdateChecker&) = delete;
   AeriumUpdateChecker& operator=(const AeriumUpdateChecker&) = delete;
-  ~AeriumUpdateChecker() override = default;
+  ~AeriumUpdateChecker() override;
 
   // KeyedService:
   void Shutdown() override;
@@ -3724,6 +3726,13 @@ class AeriumUpdateChecker : public KeyedService {
   base::OneShotTimer timer_;
   base::WeakPtrFactory<AeriumUpdateChecker> weak_factory_{this};
 };
+
+inline AeriumUpdateChecker::AeriumUpdateChecker(Profile* profile)
+    : profile_(profile) {
+  ScheduleNextCheck();
+}
+
+inline AeriumUpdateChecker::~AeriumUpdateChecker() = default;
 
 inline void AeriumUpdateChecker::Shutdown() {
   timer_.Stop();

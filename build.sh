@@ -335,6 +335,43 @@ if [ -f "$APH" ]; then
     rm -f "$APH_FRESH"
 fi
 
+# --- The update checker, the same way, and for the same plugin. Run 121 stopped
+# on chrome_browser_main_extra_parts_profiles.o, the only translation unit that
+# includes this header:
+#
+#   aerium_update_checker.h:138:3: error: [chromium-style] Complex constructor
+#   has an inlined body.
+#   aerium_update_checker.h:143:3: error: [chromium-style] Complex destructor
+#   has an inline body.
+#
+# AeriumUpdateChecker holds a unique_ptr, a OneShotTimer and a WeakPtrFactory,
+# which is what makes it "complex" to the plugin; Shutdown() was already out of
+# line for the neighbouring rule and the constructor and destructor now are too.
+# The desktop repos never saw this because they build against a stock LLVM with
+# clang_use_chrome_plugins off, so the plugin does not run there at all.
+#
+# Re-emitted rather than sed-patched for the reason given above: any later edit
+# to this header reaches a resumed tree too.
+AUC=chrome/browser/aerium/aerium_update_checker.h
+if [ -f "$AUC" ]; then
+    AUC_FRESH=$(mktemp)
+    awk '/^cat > chrome\/browser\/aerium\/aerium_update_checker.h <<.AERIUM_UPDATE_CHECKER_H.$/{f=1;next} /^AERIUM_UPDATE_CHECKER_H$/{f=0} f' \
+        "$SCRIPT_DIR/theme.sh" > "$AUC_FRESH"
+    if ! grep -q '^inline AeriumUpdateChecker::~AeriumUpdateChecker() = default;' "$AUC_FRESH"; then
+        echo "[aerium] FATAL: could not extract the update checker from theme.sh." >&2
+        echo "[aerium] The heredoc markers in theme.sh must have moved." >&2
+        rm -f "$AUC_FRESH"
+        exit 1
+    fi
+    if cmp -s "$AUC_FRESH" "$AUC"; then
+        echo "[aerium] update checker in the tree already matches theme.sh"
+    else
+        cp "$AUC_FRESH" "$AUC"
+        echo "[aerium] resume sync: refreshed $AUC from theme.sh"
+    fi
+    rm -f "$AUC_FRESH"
+fi
+
 # The manifest that page includes. Regenerated on every stage rather than only
 # during source setup: it is derived entirely from files in this repository -
 # the Vanadium patch series and the two build scripts - so it costs a second
