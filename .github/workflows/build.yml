@@ -535,7 +535,7 @@ jobs:
       - name: Download APK artifact
         uses: actions/download-artifact@v8
         with:
-          name: aerium-android
+          name: aerium-android-arm64
           path: release
       - name: Resolve version
         id: ver
@@ -614,4 +614,4 @@ jobs:
             echo "Build did not finish within 24 stages; dispatch the workflow again to continue from the saved tree."
             exit 1
           fi
-          echo "Build finished - APK is in the aerium-android artifact and published as a release."
+          echo "Build finished - APK is in the aerium-android-arm64 artifact and published as a release."

@@ -75,7 +75,7 @@ runs:
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
-        BASE: build-artifact-android${{ inputs.arch == 'arm64' && '' || format('-{0}', inputs.arch) }}
+        BASE: build-artifact-android-${{ inputs.arch }}
         RESTORE_RUN_ID: ${{ inputs.restore_run_id }}
       run: bash ./.github/scripts/checkpoint-slot.sh restore
 
@@ -291,8 +291,8 @@ runs:
     # after the delete, and five stages of compiling were unrecoverable. This
     # tree is the one that takes nineteen hours to rebuild.
     #
-    # So the checkpoint alternates between build-artifact-android and
-    # build-artifact-android-b. Each stage writes to whichever slot is not
+    # So the checkpoint alternates between build-artifact-android-<arch> and
+    # build-artifact-android-<arch>-b. Each stage writes to whichever slot is not
     # current and retires the other only once the upload has actually
     # succeeded, so there is always one complete checkpoint on the run.
     - name: Pick a checkpoint slot
@@ -301,7 +301,7 @@ runs:
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
-        BASE: build-artifact-android${{ inputs.arch == 'arm64' && '' || format('-{0}', inputs.arch) }}
+        BASE: build-artifact-android-${{ inputs.arch }}
       run: bash ./.github/scripts/checkpoint-slot.sh save
 
     - name: Upload build tree
@@ -354,7 +354,7 @@ runs:
       if: inputs.finished != 'true' && steps.build.outputs.code != '0'
       uses: actions/upload-artifact@v7
       with:
-        name: build-error-android${{ inputs.arch == 'arm64' && '' || format('-{0}', inputs.arch) }}
+        name: build-error-android-${{ inputs.arch }}
         path: ${{ github.workspace }}/stage-status/
         retention-days: 10
         overwrite: true
@@ -363,7 +363,7 @@ runs:
       if: inputs.finished != 'true' && steps.pack.outputs.packed == 'finished'
       uses: actions/upload-artifact@v7
       with:
-        name: aerium-android${{ inputs.arch == 'arm64' && '' || format('-{0}', inputs.arch) }}
+        name: aerium-android-${{ inputs.arch }}
         path: ${{ github.workspace }}/release/
         retention-days: 30
         compression-level: 0
