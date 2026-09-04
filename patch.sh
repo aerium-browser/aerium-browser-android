@@ -145,6 +145,33 @@ sed -i 's/bool g_allow_mv2_for_testing = false;/bool g_allow_mv2_for_testing = t
 sed -i '/^bool OffStoreInstallAllowedByPrefs(/a\  for (const char* d : {"addons.opera.com", "operacdn.com", "microsoftedge.microsoft.com", "edge.microsoft.com", "delivery.mp.microsoft.com", "github.com", "githubusercontent.com"}) if (item.GetURL().DomainIs(d) || item.GetReferrerUrl().DomainIs(d)) return true;' chrome/browser/download/download_crx_util.cc
 # sed -i 's/bool g_allow_offstore_install_for_testing = false;/bool g_allow_offstore_install_for_testing = true;/' chrome/browser/download/download_crx_util.cc
 
+# --- Manifest V2 extensions keep working.
+#
+# Being able to INSTALL from Edge Add-ons or the Opera store, which the
+# allowlist above is for, is only half of it. Chromium switches MV2 extensions
+# off at runtime regardless of where they came from, so an install that
+# succeeds is followed by an extension that never runs. That is what people
+# hitting this are actually describing, and it got sharper when uBlock Origin's
+# MV2 build left the Chrome Web Store: the extension has nowhere official left
+# to come from AND would not run once fetched.
+#
+# The desktop repos never had this problem. ungoogled-chromium carries
+# extensions-manifestv2.patch, which does exactly this. Android is Vanadium
+# based and carries no ungoogled patches, so it inherited stock behaviour and
+# quietly disabled MV2 while Linux and Windows did not - a real three-platform
+# split, not a perception one.
+#
+# Chromium has not removed MV2 itself: extensions/common/extension.cc in 152
+# still sets kMinimumSupportedManifestVersion to 2 and IsManifestSupported()
+# accepts it. ShouldDisableLegacyExtensions() is the single switch on top.
+#
+# The testing branch is removed rather than left above the return, because with
+# an unconditional false it becomes unreachable and this tree compiles with
+# -Wunreachable-code-aggressive under -Werror. g_allow_mv2_for_testing is still
+# referenced by the AutoReset helper further down the file, so dropping this
+# use does not orphan it.
+sed -i '/^bool ShouldDisableLegacyExtensions() {$/{N;N;N;N;N;N;s%bool ShouldDisableLegacyExtensions() {\n  if (g_allow_mv2_for_testing) {\n    // We allow legacy MV2 extensions for testing purposes.\n    return false;\n  }\n\n  return true;%bool ShouldDisableLegacyExtensions() {\n  // Aerium: Manifest V2 extensions stay loadable - see patch.sh.\n  return false;%}' extensions/browser/manifest_v2_handler.cc
+
 # --- An extensions container in the phone toolbar.
 sed -i '/<ViewStub/{N;N;N;N;N;N; /optional_button_stub/a\
         <ViewStub\
