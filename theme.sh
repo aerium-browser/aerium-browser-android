@@ -4496,3 +4496,95 @@ sed_i 's|      <message name="IDS_MENU_DEV_TOOLS" desc=|      <message name="IDS
     chrome/browser/ui/android/strings/android_chrome_strings.grd
 
 echo "[aerium] external download manager applied"
+
+
+# --- The bottom bar, and with it the new-tab button at the bottom of the tab
+# --- switcher.
+#
+# The most-asked-for thing on the tracker: the tab switcher's + sits in the top
+# left corner, which is the hardest place to reach one-handed on a tall phone.
+#
+# Chromium already has the answer and keeps it switched off. TabSwitcherPaneBase
+# hands out an EMPTY action button when the bottom bar is on for the tab
+# switcher - getActionButtonDataSupplier() returns mEmptyActionButtonDataSupplier
+# when BottomBarConfigUtils.isBottomBarEnabled() && shouldShowOnGts() - and the
+# new-tab button appears in the bottom bar instead. So this is upstream's own
+# supported layout rather than a button we bolt on, which matters for a surface
+# that Chromium reworks regularly.
+#
+# Done as a feature on the command line rather than by patching
+# BottomBarConfigUtils, deliberately. isBottomBarEnabled() carries a
+# LINT.IfChange pointing at ToolbarVariationUtils.isToolbarUiRefactorEnabled(),
+# so at least one other place mirrors the same condition; forcing the util to
+# return true while the feature itself stayed off would leave those two
+# disagreeing about whether there is a bottom bar. Turning the real feature on
+# keeps every call site reading the same answer.
+#
+# The params are the ones from the "1A with NTP, GTS and GLIC filled" variation
+# in about_flags.cc, minus both GLIC entries. show_bottom_bar_on_gts is the one
+# that moves the + ; disable_on_ntp=false keeps the bar on the new tab page so
+# it does not appear and disappear as you navigate. always_use_filled_glic_icon
+# and show_glic_setting_toggle are left out: they are Google assistant surface,
+# nothing here needs them, and a variation nobody can audit is not one to ship.
+#
+# Default on, with a switch, because that is the layout people asked for and
+# the ones who dislike a bottom bar should not have to find chrome://flags to
+# get rid of it. Note the first restart after toggling may not pick the params
+# up: Chromium caches field-trial params in shared preferences and reads them
+# at the following start, so a second restart settles it.
+sed_i 's|    public static final String AERIUM_BLACKEN_DARK_SITES = "Chrome.Aerium.BlackenDarkSites";|&\n\n    /** Whether Aerium shows the bottom bar, which also moves the tab switcher new-tab button. */\n    public static final String AERIUM_BOTTOM_BAR = "Chrome.Aerium.BottomBar";|' \
+    $CPK
+sed_i 's|^                AERIUM_EXTERNAL_DOWNLOAD_MANAGER,$|                AERIUM_BOTTOM_BAR,\n&|' \
+    $CPK
+
+# Distinct local names: the blacken-dark-sites block below already declares
+# commandLine, existing and merged in this same scope.
+sed_i 's%            FontPreloader.getInstance().load(getApplication());%&\n\n            // Aerium: features are fixed when the process starts, so the bottom\n            // bar goes on the command line here rather than being flipped live.\n            if (ChromeSharedPreferences.getInstance()\n                    .readBoolean(ChromePreferenceKeys.AERIUM_BOTTOM_BAR, true)) {\n                CommandLine bottomBarLine = CommandLine.getInstance();\n                String bottomBarExisting = bottomBarLine.getSwitchValue("enable-features");\n                String bottomBarFeature =\n                        "AndroidBottomBar:show_bottom_bar_on_gts/true/disable_on_ntp/false";\n                String bottomBarMerged =\n                        (bottomBarExisting == null || bottomBarExisting.isEmpty())\n                                ? bottomBarFeature\n                                : bottomBarExisting + "," + bottomBarFeature;\n                bottomBarLine.appendSwitchWithValue("enable-features", bottomBarMerged);\n            }%' \
+    $CAI
+
+sed_i 's|^</PreferenceScreen>$|    <org.chromium.components.browser_ui.settings.ChromeSwitchPreference\n        android:key="aerium_bottom_bar"\n        android:title="@string/aerium_bottom_bar_title"\n        android:summary="@string/aerium_bottom_bar_summary" />\n&|' \
+    chrome/browser/ui/android/night_mode/java/res/xml/theme_preferences.xml
+
+sed_i 's|^        // TODO(crbug.com/40198953): Notify feature engagement system that settings were opened.$|        ChromeSwitchPreference bottomBar =\n                (ChromeSwitchPreference) findPreference("aerium_bottom_bar");\n        if (bottomBar != null) {\n            bottomBar.setChecked(\n                    sharedPreferencesManager.readBoolean(\n                            ChromePreferenceKeys.AERIUM_BOTTOM_BAR, true));\n            bottomBar.setOnPreferenceChangeListener(\n                    (preference, newValue) -> {\n                        sharedPreferencesManager.writeBoolean(\n                                ChromePreferenceKeys.AERIUM_BOTTOM_BAR, (boolean) newValue);\n                        showRestartSnackbar();\n                        return true;\n                    });\n        }\n\n&|' \
+    $TSF
+
+sed_i 's|      <message name="IDS_AERIUM_EXTERNAL_DOWNLOAD_MANAGER_TITLE" desc=|      <message name="IDS_AERIUM_BOTTOM_BAR_TITLE" desc="Title of the switch that moves the main browser controls to a bar along the bottom of the screen.">\n        Bottom bar\n      </message>\n      <message name="IDS_AERIUM_BOTTOM_BAR_SUMMARY" desc="Summary under the Bottom bar switch. Mentions the new tab button moving and that a restart is needed.">\n        Put the browser controls along the bottom of the screen, within reach of your thumb. The new tab button in the tab switcher moves down with them. Restart Aerium to apply.\n      </message>\n&|' \
+    chrome/browser/ui/android/strings/android_chrome_strings.grd
+
+echo "[aerium] bottom bar applied"
+
+
+# --- The Chrome Web Store, in its desktop layout.
+#
+# The store only offers the install button on its desktop pages. On a phone
+# user agent it renders the listing and no way to add anything, so extensions
+# are unreachable from the phone even though this build can install them -
+# which is a strange place to leave a browser whose whole point on Android is
+# that extensions work.
+#
+# Written as a per-site content setting rather than forced at request time, so
+# it behaves like any other site exception: it appears under Site settings ->
+# Desktop site, and turning it off there sticks.
+#
+# Both hosts on purpose. chrome.google.com/webstore is the address people have
+# and pass around, and it redirects to chromewebstore.google.com; seeding only
+# the first would stop applying the moment the redirect fires, which is to say
+# immediately.
+#
+# Seeded once per profile and never again. The marker is what makes a later
+# change by the user theirs to keep - without it every start would undo them.
+# finishNativeInitialization() rather than createInitialTab(), because the
+# latter only runs on a cold start with no tabs to restore, so anyone with a
+# session already open would never have been seeded at all.
+CTA=chrome/android/java/src/org/chromium/chrome/browser/ChromeTabbedActivity.java
+sed_i 's|^import org.chromium.url.GURL;$|import org.chromium.components.browser_ui.site_settings.WebsitePreferenceBridge;\nimport org.chromium.components.content_settings.ContentSetting;\nimport org.chromium.components.content_settings.ContentSettingsType;\n&|' \
+    $CTA
+sed_i 's%            recordFirstAppLaunchTimestampIfNeeded();%&\n\n            // Aerium: give the Chrome Web Store its desktop layout - see theme.sh.\n            if (!ChromeSharedPreferences.getInstance()\n                    .readBoolean(ChromePreferenceKeys.AERIUM_WEBSTORE_DESKTOP_SEEDED, false)) {\n                Profile aeriumProfile = getProfileProviderSupplier().get().getOriginalProfile();\n                for (String aeriumHost :\n                        new String[] {\n                            "https://chrome.google.com", "https://chromewebstore.google.com"\n                        }) {\n                    GURL aeriumWebstore = new GURL(aeriumHost);\n                    WebsitePreferenceBridge.setContentSettingDefaultScope(\n                            aeriumProfile,\n                            ContentSettingsType.REQUEST_DESKTOP_SITE,\n                            aeriumWebstore,\n                            aeriumWebstore,\n                            ContentSetting.ALLOW);\n                }\n                ChromeSharedPreferences.getInstance()\n                        .writeBoolean(\n                                ChromePreferenceKeys.AERIUM_WEBSTORE_DESKTOP_SEEDED, true);\n            }%' \
+    $CTA
+
+sed_i 's|    public static final String AERIUM_BOTTOM_BAR = "Chrome.Aerium.BottomBar";|&\n\n    /** Whether the one-time Chrome Web Store desktop-site exception has been written. */\n    public static final String AERIUM_WEBSTORE_DESKTOP_SEEDED = "Chrome.Aerium.WebstoreDesktopSeeded";|' \
+    $CPK
+sed_i 's|^                AERIUM_BOTTOM_BAR,$|                AERIUM_WEBSTORE_DESKTOP_SEEDED,\n&|' \
+    $CPK
+
+echo "[aerium] chrome web store desktop site applied"
