@@ -344,7 +344,7 @@ inline void AeriumFirstRunDataSource::StartDataRequest(
       <li><strong>Nothing is preloaded or predicted.</strong> Pages, DNS and links are fetched when you ask for them, which is also easier on the battery.</li>
       <li><strong>HTTPS-First is on</strong> in its balanced mode, so plain HTTP is upgraded where a site supports it.</li>
       <li><strong>Global Privacy Control is sent</strong> on every request &mdash; a legally recognised opt-out under CCPA.</li>
-      <li><strong>The search engine list is privacy-first</strong>, with Startpage as the default and DuckDuckGo and SearXNG alongside it.</li>
+      <li><strong>The search engine list is privacy-first</strong>, with Startpage as the default and DuckDuckGo, Brave Search, Mojeek, Qwant, Ecosia and degoog alongside it.</li>
       <li><strong>Translate is gone</strong>, along with the settings entry and its search index.</li>
     </ul>
   </section>
@@ -1271,10 +1271,10 @@ sed -i 's/^  registry->RegisterListPref(prefs::kAboutFlagsEntries);$/  \/\/ Sile
 
 # --- Default search engines: replace every per-country engine list with one
 # fixed privacy-focused set - Startpage (default), DuckDuckGo, Brave Search,
-# Mojeek, Qwant, Ecosia, SearXNG (searx.be instance) and the two DuckDuckGo
-# no-JS variants. Brave, Mojeek, Qwant and Ecosia are upstream entries already
+# Mojeek, Qwant, Ecosia, degoog and the two DuckDuckGo no-JS variants. Brave,
+# Mojeek, Qwant and Ecosia are upstream entries already
 # (ids 109, 103, 94 and 101), so they cost a list entry each and no new
-# definition; only the DuckDuckGo variants and SearXNG needed defining. Stock keeps
+# definition; only the DuckDuckGo variants and degoog needed defining. Stock keeps
 # Google-led per-country lists; ungoogled-style builds leave the user with a
 # broken/absent default until they configure one manually. Any other engine
 # can still be added by hand in settings.
@@ -1282,7 +1282,7 @@ sed -i 's/^  registry->RegisterListPref(prefs::kAboutFlagsEntries);$/  \/\/ Sile
 # Mechanics (verified against Chromium 151.0.7922.71 source):
 # - prepopulated_engines.json is the master engine list (startpage already
 #   exists upstream, id 113, with a bundled icon; the DuckDuckGo variants and
-#   SearXNG are new entries). New IDs take the free slots just above
+#   degoog are new entries). New IDs take the free slots just above
 #   upstream's highest (116), with kMaxPrepopulatedEngineID raised to match -
 #   exactly what the comment above that constant instructs.
 #   kCurrentDataVersion is raised so profiles created by earlier builds pick
@@ -1334,12 +1334,27 @@ sed_i '/^    "ecosia": {$/i\
       "id": 118\
     },\
 ' $SE_DEFS/prepopulated_engines.json
-sed_i '/^    "seznam": {$/i\
-    "searx": {\
-      "name": "SearXNG",\
-      "keyword": "searx.be",\
-      "favicon_url": "https://searx.be/favicon.ico",\
-      "search_url": "https://searx.be/search?q={searchTerms}",\
+# degoog replaces SearXNG, and deliberately reuses its id. Chromium keys a
+# prepopulated engine's row in the profile keyword database by prepopulate_id,
+# so keeping 119 turns the SearXNG row shipped in earlier builds INTO the
+# degoog row on update, rather than leaving an orphan beside a new one.
+#
+# The URLs are the ones degoog publishes in its own OpenSearch document at
+# https://degoog.org/opensearch.xml, not guessed from the address bar. All
+# three were fetched and checked: /search?q= returns 200, the suggest endpoint
+# returns well-formed OpenSearch JSON (["priv",["privalia", ...]]), and the
+# favicon is a real 15 KB image/x-icon.
+#
+# Anchored on "duckduckgo" rather than on "seznam" as searx was, so the entry
+# lands in alphabetical order (daum, degoog, duckduckgo, ...). JSON key order
+# has no effect on behaviour; this is only so the file stays readable.
+sed_i '/^    "duckduckgo": {$/i\
+    "degoog": {\
+      "name": "degoog",\
+      "keyword": "degoog.org",\
+      "favicon_url": "https://degoog.org/public/favicon/favicon.ico",\
+      "search_url": "https://degoog.org/search?q={searchTerms}",\
+      "suggest_url": "https://degoog.org/api/suggest/opensearch?q={searchTerms}",\
       "type": "SEARCH_ENGINE_OTHER",\
       "id": 119\
     },\
@@ -1360,10 +1375,22 @@ sed_i '/^    "seznam": {$/i\
 # applied - the refresh just stops happening.
 #
 # Deriving it from upstream with a constant offset removes the cliff: it can
-# never be overtaken, and it only decreases if upstream's does. The offset is
-# 41 because upstream is 210 here, which reproduces 251 - the value this used
-# to hardcode - so no already-shipped profile sees its version go backwards.
-SE_DATA_VERSION_OFFSET=41
+# never be overtaken, and it only decreases if upstream's does. The offset
+# started at 41, reproducing the 251 this used to hardcode, so no
+# already-shipped profile saw its version go backwards.
+#
+# It is 43 now, for 253, and that is a fix as much as a bump. The merge is
+# gated on a strict inequality - template_url_prepopulate_data_resolver.cc
+# returns nullopt unless keywords_metadata.builtin_keyword_data_version is
+# strictly BELOW kCurrentDataVersion - so a value that stays put reaches
+# nobody who already has a profile. Adding Brave, Mojeek, Qwant and Ecosia
+# left the offset at 41, which meant existing installs would have kept the
+# old five-engine list; only a fresh profile would have seen the new ones.
+# Raising it now delivers those four as well as this change.
+#
+# So: raise this whenever the engine list changes, not only when an id is
+# added. A new entry that nothing merges is invisible.
+SE_DATA_VERSION_OFFSET=43
 SE_DATA_VERSION=
 # The engines inserted above claim ids 117-119, sitting immediately above
 # upstream's highest (116 at both 151 and 152). Unlike the data version these
@@ -1422,7 +1449,7 @@ if [ -e $SE_DEFS/prepopulated_engines.json ]; then
 fi
 sed_i 's/"kMaxPrepopulatedEngineID": [0-9]\+,/"kMaxPrepopulatedEngineID": '"$AERIUM_MAX_ENGINE_ID"',/; s/"kCurrentDataVersion": [0-9]\+/"kCurrentDataVersion": '"$((SE_DATA_VERSION + SE_DATA_VERSION_OFFSET))"'/; s/"name": "startpage",/"name": "Startpage",/' \
     $SE_DEFS/prepopulated_engines.json
-sed_i '/^    "ZZ": {$/,/^    }$/{s/^        "&google",$/        "\&startpage",\n        "\&duckduckgo",\n        "\&brave",\n        "\&mojeek",\n        "\&qwant",\n        "\&ecosia",\n        "\&searx",\n        "\&duckduckgo_lite",\n        "\&duckduckgo_html"/; /^        "&bing",$/d; /^        "&yahoo"$/d}' \
+sed_i '/^    "ZZ": {$/,/^    }$/{s/^        "&google",$/        "\&startpage",\n        "\&duckduckgo",\n        "\&brave",\n        "\&mojeek",\n        "\&qwant",\n        "\&ecosia",\n        "\&degoog",\n        "\&duckduckgo_lite",\n        "\&duckduckgo_html"/; /^        "&bing",$/d; /^        "&yahoo"$/d}' \
     $SE_DEFS/regional_settings.json
 sed_i 's|auto iter = TemplateURLPrepopulateData::kRegionalSettings.find(country_id);|// Aerium: every country gets the same privacy-focused engine list - the\n  // "ZZ" default in regional_settings.json - instead of per-country\n  // Google-led lists.\n  auto iter = TemplateURLPrepopulateData::kRegionalSettings.find(CountryId());|' \
     components/regional_capabilities/regional_capabilities_utils.cc
