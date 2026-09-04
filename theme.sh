@@ -1270,8 +1270,11 @@ sed -i 's/^  registry->RegisterListPref(prefs::kAboutFlagsEntries);$/  \/\/ Sile
     components/webui/flags/pref_service_flags_storage.cc
 
 # --- Default search engines: replace every per-country engine list with one
-# fixed privacy-focused set - Startpage (default), DuckDuckGo, DuckDuckGo
-# Lite, DuckDuckGo HTML and SearXNG (searx.be instance). Stock keeps
+# fixed privacy-focused set - Startpage (default), DuckDuckGo, Brave Search,
+# Mojeek, Qwant, Ecosia, SearXNG (searx.be instance) and the two DuckDuckGo
+# no-JS variants. Brave, Mojeek, Qwant and Ecosia are upstream entries already
+# (ids 109, 103, 94 and 101), so they cost a list entry each and no new
+# definition; only the DuckDuckGo variants and SearXNG needed defining. Stock keeps
 # Google-led per-country lists; ungoogled-style builds leave the user with a
 # broken/absent default until they configure one manually. Any other engine
 # can still be added by hand in settings.
@@ -1419,7 +1422,7 @@ if [ -e $SE_DEFS/prepopulated_engines.json ]; then
 fi
 sed_i 's/"kMaxPrepopulatedEngineID": [0-9]\+,/"kMaxPrepopulatedEngineID": '"$AERIUM_MAX_ENGINE_ID"',/; s/"kCurrentDataVersion": [0-9]\+/"kCurrentDataVersion": '"$((SE_DATA_VERSION + SE_DATA_VERSION_OFFSET))"'/; s/"name": "startpage",/"name": "Startpage",/' \
     $SE_DEFS/prepopulated_engines.json
-sed_i '/^    "ZZ": {$/,/^    }$/{s/^        "&google",$/        "\&startpage",\n        "\&duckduckgo",\n        "\&duckduckgo_lite",\n        "\&duckduckgo_html",\n        "\&searx"/; /^        "&bing",$/d; /^        "&yahoo"$/d}' \
+sed_i '/^    "ZZ": {$/,/^    }$/{s/^        "&google",$/        "\&startpage",\n        "\&duckduckgo",\n        "\&brave",\n        "\&mojeek",\n        "\&qwant",\n        "\&ecosia",\n        "\&searx",\n        "\&duckduckgo_lite",\n        "\&duckduckgo_html"/; /^        "&bing",$/d; /^        "&yahoo"$/d}' \
     $SE_DEFS/regional_settings.json
 sed_i 's|auto iter = TemplateURLPrepopulateData::kRegionalSettings.find(country_id);|// Aerium: every country gets the same privacy-focused engine list - the\n  // "ZZ" default in regional_settings.json - instead of per-country\n  // Google-led lists.\n  auto iter = TemplateURLPrepopulateData::kRegionalSettings.find(CountryId());|' \
     components/regional_capabilities/regional_capabilities_utils.cc
