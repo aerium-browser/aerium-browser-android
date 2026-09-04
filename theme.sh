@@ -1152,6 +1152,19 @@ sed_i '/^      name: "GlobalPrivacyControlForce",$/a\
 # entry instead. No ungoogled-chromium existing_switch_flag_entries.h here
 # (Vanadium isn't ungoogled-chromium-based), so the flag is added directly
 # to the main kFeatureEntries array.
+#
+# The switch this gate reads is now set from two places, and both are fine
+# because both land before native starts or before the CDM is registered:
+# this flag, and the DRM switch on Settings -> Advanced -> Media, which
+# ChromeApplicationImpl turns into the same --enable-widevine. The Media
+# switch is the one to point people at; the flag predates it and still works.
+#
+# Worth noting why the flag works here and did not on desktop. Android
+# registers CDMs from BrowserMainLoop::PostCreateThreads, which is after
+# ChromeBrowserMainParts has turned flags into switches. On Linux the CDM has
+# to be loaded before the zygote is sandboxed, which is before any of that -
+# so the identical flag there was dead, and the desktop repos gate on a Local
+# State pref read in PreCreateThreads instead.
 sed -i '/^const FeatureEntry kFeatureEntries\[\] = {$/a\
     {"enable-widevine",\
      "Enable Widevine DRM",\
@@ -4601,8 +4614,10 @@ echo "[aerium] chrome web store desktop site applied"
 # was missing before - the old chrome://flags entry could never work, because on
 # Linux the CDM is registered before the sandbox closes and long before any
 # pref exists to read. Doing it from Java sidesteps that entirely on Android:
-# the switch is on the command line before native starts, so cdm_registration.cc
-# sees it at the moment it decides.
+# the switch is on the command line before native starts, so the gate added
+# earlier in this script - the one that already wraps AddWidevine - sees it at
+# the moment it decides. That gate has been here since the beginning; this
+# switch is a second, findable way to set the same thing.
 #
 # Both need a restart, so both offer one.
 sed_i 's|    public static final String AERIUM_WEBSTORE_DESKTOP_SEEDED = "Chrome.Aerium.WebstoreDesktopSeeded";|&\n\n    /** Whether Aerium registers the Widevine CDM, so DRM-protected sites can play. */\n    public static final String AERIUM_DRM = "Chrome.Aerium.Drm";\n\n    /** Whether audio and video keep playing when Aerium is in the background. */\n    public static final String AERIUM_BACKGROUND_PLAYBACK = "Chrome.Aerium.BackgroundPlayback";|' \
@@ -4762,12 +4777,3 @@ sed_i 's|      <message name="IDS_AERIUM_BOTTOM_BAR_TITLE" desc=|      <message 
     chrome/browser/ui/android/strings/android_chrome_strings.grd
 
 echo "[aerium] media settings applied"
-
-# The gate itself. Reached only when ChromeApplicationImpl put the switch on
-# the command line above, which happens before native starts - so unlike the
-# chrome://flags entry this replaces, it is readable at the moment the CDM is
-# registered. base/command_line.h is already included at the top of the file.
-sed_i '/^#if BUILDFLAG(ENABLE_WIDEVINE)$/{N;s%#if BUILDFLAG(ENABLE_WIDEVINE)\n  AddWidevine(cdms);%#if BUILDFLAG(ENABLE_WIDEVINE)\n  // Aerium: DRM is opt-in, from Settings -> Advanced -> Media. Nothing is\n  // registered until somebody asks for it, so a build with no CDM behaves as\n  // though DRM does not exist rather than advertising a capability it cannot\n  // deliver.\n  if (base::CommandLine::ForCurrentProcess()->HasSwitch("enable-widevine")) {\n    AddWidevine(cdms);\n  }%}' \
-    chrome/common/media/cdm_registration.cc
-
-echo "[aerium] drm gate applied"
