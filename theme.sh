@@ -2388,13 +2388,41 @@ sed_i 's|^      <message name="IDS_AERIUM_PATCHES_TITLE" desc=|      <message na
 #
 # Chromium can afford an unbounded wait because Finch can turn the blocker off
 # in the field within hours; a self-built browser cannot. So the wait gets an
-# upper bound. Five seconds is far beyond the normal path - the blocker's own
+# upper bound - the blocker's own
 # Android.AppLaunchDrawBlocker.ActiveTabAvailable histogram is measured in
-# hundreds of milliseconds - so a launch that is merely slow still gets the
+# hundreds of milliseconds, so a launch that is merely slow still gets the
 # flicker-free start the blocker exists to provide, while a launch that is
 # broken shows the browser instead of the logo. The worst case this can cause
 # is the flash of empty toolbar the feature was written to avoid, which is a
 # far better failure than never starting.
+#
+# The bound was five seconds and is now two, because five turned out to be a
+# per-launch cost rather than an emergency brake. ChromeTabbedActivity decides
+# whether to wait like this:
+#
+#   if (isTabNtp && !currentTab.isNativePage() && !isTabWebUiNtp) {
+#       currentTab.addObserver(... onContentChanged -> onActiveTabAvailable());
+#   } else {
+#       mAppLaunchDrawBlocker.onActiveTabAvailable();
+#   }
+#
+# An extension-provided new tab page keeps chrome://newtab as its virtual URL,
+# so isTabNtp is true; it is not a native page, so isNativePage() is false; and
+# isTabWebUiNtp only covers the WebUI override, gated on sUseWebUiNtpAndroid
+# and a Google default search engine. So it takes the waiting branch and sits
+# there until the extension's page commits - which on a cold start, for an
+# extension that fetches anything, is seconds.
+#
+# Upstream already knows this shape of hang. The comment beside isTabWebUiNtp
+# reads "The WebUI NTP is not a native Tab, so we don't wait for it to be
+# created, otherwise it hangs the rendering thread." An extension NTP is not a
+# native tab either; the guard simply does not cover it.
+#
+# Two seconds is still several times the normal path. The complete fix is to
+# not wait at all when the new tab page comes from an extension, which needs a
+# signal for that at the point the decision is made - the tab has committed
+# nothing yet, so its URL cannot answer it. Worth doing, and worth doing with a
+# device to test against rather than by inference.
 #
 # invalidate() matters as much as the flags. onPreDraw is only consulted when
 # something asks for a draw, and the reason nothing is on screen is precisely
@@ -2403,7 +2431,7 @@ sed_i 's|^      <message name="IDS_AERIUM_PATCHES_TITLE" desc=|      <message na
 ALDB=chrome/android/java/src/org/chromium/chrome/browser/ui/AppLaunchDrawBlocker.java
 sed_i 's|^import org.chromium.base.supplier.MonotonicObservableSupplier;$|&\nimport org.chromium.base.task.PostTask;\nimport org.chromium.base.task.TaskTraits;|' \
     $ALDB
-sed_i 's|^    private final long mStartTime;$|&\n\n    /**\n     * Aerium: upper bound on how long the launch draw may stay blocked. See\n     * theme.sh - without it a condition that never fires means a browser that\n     * never paints.\n     */\n    private static final long AERIUM_DRAW_BLOCK_TIMEOUT_MS = 5000;\n\n    /** Aerium: whether the deadline above has been armed for this launch. */\n    private boolean mAeriumDrawUnblockScheduled;|' \
+sed_i 's|^    private final long mStartTime;$|&\n\n    /**\n     * Aerium: upper bound on how long the launch draw may stay blocked. See\n     * theme.sh - without it a condition that never fires means a browser that\n     * never paints, and with 5000 it meant a browser that sat on the logo for\n     * five seconds every single launch for anyone whose new tab page comes\n     * from an extension.\n     */\n    private static final long AERIUM_DRAW_BLOCK_TIMEOUT_MS = 2000;\n\n    /** Aerium: whether the deadline above has been armed for this launch. */\n    private boolean mAeriumDrawUnblockScheduled;|' \
     $ALDB
 sed_i 's|^        mBlockDrawForIncognitoRestore = true;$|&\n        aeriumScheduleDrawUnblock();|' \
     $ALDB
