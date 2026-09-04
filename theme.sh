@@ -1036,7 +1036,7 @@ sed_i '/^  xr_module_desc,$/d' \
 # No setting for it. "Media keeps playing" is what a browser should do; making
 # it optional would mean shipping the wrong behaviour by default and hoping
 # people find the switch.
-sed_i 's|            FontPreloader.getInstance().load(getApplication());|&\n\n            // Aerium: media keeps playing when the browser is backgrounded or\n            // the screen goes off - see theme.sh. Read in the renderer, and\n            // forwarded there by content on its own, so setting it here is\n            // the whole change.\n            CommandLine.getInstance().appendSwitch("disable-background-media-suspend");|' \
+sed_i 's|            FontPreloader.getInstance().load(getApplication());|&\n\n            // Aerium: media keeps playing when the browser is backgrounded or\n            // the screen goes off - see theme.sh. Read in the renderer, and\n            // forwarded there by content on its own, so setting it here is\n            // the whole change. Behind a switch now, because it is a behaviour\n            // change people can reasonably want either way. Defaulted on: that\n            // is what this build has always done.\n            if (ChromeSharedPreferences.getInstance()\n                    .readBoolean(ChromePreferenceKeys.AERIUM_BACKGROUND_PLAYBACK, true)) {\n                CommandLine.getInstance().appendSwitch("disable-background-media-suspend");\n            }|' \
     $CAI
 
 # --- The other half of background playback: pages that pause themselves.
@@ -4588,3 +4588,186 @@ sed_i 's|^                AERIUM_BOTTOM_BAR,$|                AERIUM_WEBSTORE_DE
     $CPK
 
 echo "[aerium] chrome web store desktop site applied"
+
+# --- Settings -> Advanced -> Media: DRM, and background playback.
+#
+# Two switches that had no home. Background playback was unconditional, and DRM
+# was decided by whether the CDM happened to be on disk - neither was something
+# anyone could see or change.
+#
+# DRM is off by default, which is the Brave arrangement: a browser that does not
+# ship Google's CDM should not behave as though it has one until asked. Turning
+# it on is a deliberate act and it is one switch away, which is the part that
+# was missing before - the old chrome://flags entry could never work, because on
+# Linux the CDM is registered before the sandbox closes and long before any
+# pref exists to read. Doing it from Java sidesteps that entirely on Android:
+# the switch is on the command line before native starts, so cdm_registration.cc
+# sees it at the moment it decides.
+#
+# Both need a restart, so both offer one.
+sed_i 's|    public static final String AERIUM_WEBSTORE_DESKTOP_SEEDED = "Chrome.Aerium.WebstoreDesktopSeeded";|&\n\n    /** Whether Aerium registers the Widevine CDM, so DRM-protected sites can play. */\n    public static final String AERIUM_DRM = "Chrome.Aerium.Drm";\n\n    /** Whether audio and video keep playing when Aerium is in the background. */\n    public static final String AERIUM_BACKGROUND_PLAYBACK = "Chrome.Aerium.BackgroundPlayback";|' \
+    $CPK
+sed_i 's|^                AERIUM_WEBSTORE_DESKTOP_SEEDED,$|                AERIUM_BACKGROUND_PLAYBACK,\n                AERIUM_DRM,\n&|' \
+    $CPK
+
+# The DRM switch, put on the command line before native comes up. Off by
+# default, so a build with no CDM installed behaves as if DRM does not exist -
+# which it does not.
+sed_i 's%            FontPreloader.getInstance().load(getApplication());%&\n\n            // Aerium: DRM is opt-in - see theme.sh. On the command line here so\n            // that cdm_registration.cc can see it when it registers the CDM,\n            // which on some platforms happens before any pref is readable.\n            if (ChromeSharedPreferences.getInstance()\n                    .readBoolean(ChromePreferenceKeys.AERIUM_DRM, false)) {\n                CommandLine.getInstance().appendSwitch("enable-widevine");\n            }%' \
+    $CAI
+
+cat > chrome/android/java/res/xml/aerium_media_preferences.xml <<'AERIUM_MEDIA_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright 2026 The Chromium Authors
+     Use of this source code is governed by a BSD-style license that can be
+     found in the LICENSE file. -->
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+    <org.chromium.components.browser_ui.settings.ChromeSwitchPreference
+        android:key="aerium_background_playback"
+        android:persistent="false"
+        android:title="@string/aerium_background_playback_title"
+        android:summary="@string/aerium_background_playback_summary" />
+    <org.chromium.components.browser_ui.settings.ChromeSwitchPreference
+        android:key="aerium_drm"
+        android:persistent="false"
+        android:title="@string/aerium_drm_title"
+        android:summary="@string/aerium_drm_summary" />
+</PreferenceScreen>
+AERIUM_MEDIA_XML
+
+sed_i 's|^  "java/res/xml/aerium_clear_on_exit_preferences.xml",$|  "java/res/xml/aerium_media_preferences.xml",\n&|' \
+    chrome/android/chrome_java_resources.gni
+
+mkdir -p chrome/android/java/src/org/chromium/chrome/browser/settings
+cat > chrome/android/java/src/org/chromium/chrome/browser/settings/AeriumMediaFragment.java <<'AERIUM_MEDIA_JAVA'
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+package org.chromium.chrome.browser.settings;
+
+import android.app.Activity;
+import android.os.Bundle;
+
+import org.chromium.base.supplier.MonotonicObservableSupplier;
+import org.chromium.base.supplier.ObservableSuppliers;
+import org.chromium.base.supplier.SettableMonotonicObservableSupplier;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
+import org.chromium.chrome.R;
+import org.chromium.chrome.browser.ApplicationLifetime;
+import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
+import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
+import org.chromium.chrome.browser.settings.search.ChromeBaseSearchIndexProvider;
+import org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;
+import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
+import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager.SnackbarManageable;
+import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
+import org.chromium.components.browser_ui.settings.SettingsFragment;
+import org.chromium.components.browser_ui.settings.SettingsUtils;
+
+/**
+ * Aerium: Settings -> Advanced -> Media. See theme.sh.
+ *
+ * <p>Both switches are read before native starts and turned into command-line switches there, so
+ * neither can take effect on the process that is already running - which is why every change here
+ * offers a restart. They are android:persistent="false" for the same reason: the values live in
+ * ChromeSharedPreferences under keys ChromeApplicationImpl reads at startup, not in the preference
+ * framework's own store.
+ */
+@NullMarked
+public class AeriumMediaFragment extends ChromeBaseSettingsFragment {
+    // Must match the keys in aerium_media_preferences.xml.
+    private static final String PREF_BACKGROUND_PLAYBACK = "aerium_background_playback";
+    private static final String PREF_DRM = "aerium_drm";
+
+    private static final int RESTART_SNACKBAR_DURATION_MS = 10000;
+
+    private final SettableMonotonicObservableSupplier<String> mPageTitle =
+            ObservableSuppliers.createMonotonic();
+
+    @Override
+    public void onCreatePreferences(@Nullable Bundle savedInstanceState, @Nullable String rootKey) {
+        SettingsUtils.addPreferencesFromResource(this, R.xml.aerium_media_preferences);
+        mPageTitle.set(getString(R.string.aerium_media_title));
+
+        bind(PREF_BACKGROUND_PLAYBACK, ChromePreferenceKeys.AERIUM_BACKGROUND_PLAYBACK, true);
+        bind(PREF_DRM, ChromePreferenceKeys.AERIUM_DRM, false);
+    }
+
+    private void bind(String prefKey, String sharedPrefKey, boolean defaultValue) {
+        ChromeSwitchPreference pref = (ChromeSwitchPreference) findPreference(prefKey);
+        if (pref == null) return;
+        pref.setChecked(
+                ChromeSharedPreferences.getInstance().readBoolean(sharedPrefKey, defaultValue));
+        pref.setOnPreferenceChangeListener(
+                (preference, newValue) -> {
+                    ChromeSharedPreferences.getInstance()
+                            .writeBoolean(sharedPrefKey, (boolean) newValue);
+                    showRestartSnackbar();
+                    return true;
+                });
+    }
+
+    private void showRestartSnackbar() {
+        Activity activity = getActivity();
+        if (!(activity instanceof SnackbarManageable)) return;
+        SnackbarManager manager = ((SnackbarManageable) activity).getSnackbarManager();
+        manager.showSnackbar(
+                Snackbar.make(
+                                getString(R.string.aerium_restart_to_apply),
+                                new SnackbarManager.SnackbarController() {
+                                    @Override
+                                    public void onAction(@Nullable Object actionData) {
+                                        ApplicationLifetime.terminate(true);
+                                    }
+                                },
+                                Snackbar.TYPE_ACTION,
+                                Snackbar.UMA_UNKNOWN)
+                        .setAction(getString(R.string.aerium_relaunch), null)
+                        .setDuration(RESTART_SNACKBAR_DURATION_MS));
+    }
+
+    @Override
+    public MonotonicObservableSupplier<String> getPageTitle() {
+        return mPageTitle;
+    }
+
+    @Override
+    public @SettingsFragment.AnimationType int getAnimationType() {
+        return SettingsFragment.AnimationType.PROPERTY;
+    }
+
+    public static final ChromeBaseSearchIndexProvider SEARCH_INDEX_DATA_PROVIDER =
+            new ChromeBaseSearchIndexProvider(
+                    AeriumMediaFragment.class.getName(), R.xml.aerium_media_preferences);
+}
+AERIUM_MEDIA_JAVA
+
+sed_i 's|^  "java/src/org/chromium/chrome/browser/browsing_data/AeriumClearOnExitFragment.java",$|  "java/src/org/chromium/chrome/browser/settings/AeriumMediaFragment.java",\n&|' \
+    chrome/android/chrome_java_sources.gni
+
+# The row in Settings, ordered between Appearance (23) and Glic (25).
+sed_i 's|^        android:title="@string/appearance_settings" />$|&\n    <Preference\n        android:fragment="org.chromium.chrome.browser.settings.AeriumMediaFragment"\n        android:key="aerium_media"\n        android:order="24"\n        android:title="@string/aerium_media_title" />|' \
+    chrome/android/java/res/xml/main_preferences.xml
+
+# Named in the search-index registry, which is also what keeps R8 from
+# stripping a class only ever referenced from XML.
+sed_i 's|^import org.chromium.chrome.browser.browsing_data.AeriumClearOnExitFragment;$|&\nimport org.chromium.chrome.browser.settings.AeriumMediaFragment;|' \
+    $SIPR
+sed_i 's|^                    AeriumClearOnExitFragment.SEARCH_INDEX_DATA_PROVIDER,$|&\n                    AeriumMediaFragment.SEARCH_INDEX_DATA_PROVIDER,|' \
+    $SIPR
+
+sed_i 's|      <message name="IDS_AERIUM_BOTTOM_BAR_TITLE" desc=|      <message name="IDS_AERIUM_MEDIA_TITLE" desc="Title of the Media settings screen, which holds the DRM and background playback switches.">\n        Media\n      </message>\n      <message name="IDS_AERIUM_BACKGROUND_PLAYBACK_TITLE" desc="Title of the switch that keeps audio and video playing when the browser is not in front.">\n        Background playback\n      </message>\n      <message name="IDS_AERIUM_BACKGROUND_PLAYBACK_SUMMARY" desc="Summary under the background playback switch. Mentions that a restart is needed.">\n        Keep audio and video playing when you switch away from Aerium or turn the screen off. Restart Aerium to apply.\n      </message>\n      <message name="IDS_AERIUM_DRM_TITLE" desc="Title of the switch that turns on playback of DRM-protected video.">\n        Play DRM-protected content\n      </message>\n      <message name="IDS_AERIUM_DRM_SUMMARY" desc="Summary under the DRM switch. Explains that it is off by default and that the CDM is Google proprietary software.">\n        Register the Widevine CDM so sites like Netflix can play protected video. Off by default: the CDM is proprietary Google software that Aerium does not ship, and a browser without one should not tell sites it has one. Restart Aerium to apply.\n      </message>\n&|' \
+    chrome/browser/ui/android/strings/android_chrome_strings.grd
+
+echo "[aerium] media settings applied"
+
+# The gate itself. Reached only when ChromeApplicationImpl put the switch on
+# the command line above, which happens before native starts - so unlike the
+# chrome://flags entry this replaces, it is readable at the moment the CDM is
+# registered. base/command_line.h is already included at the top of the file.
+sed_i '/^#if BUILDFLAG(ENABLE_WIDEVINE)$/{N;s%#if BUILDFLAG(ENABLE_WIDEVINE)\n  AddWidevine(cdms);%#if BUILDFLAG(ENABLE_WIDEVINE)\n  // Aerium: DRM is opt-in, from Settings -> Advanced -> Media. Nothing is\n  // registered until somebody asks for it, so a build with no CDM behaves as\n  // though DRM does not exist rather than advertising a capability it cannot\n  // deliver.\n  if (base::CommandLine::ForCurrentProcess()->HasSwitch("enable-widevine")) {\n    AddWidevine(cdms);\n  }%}' \
+    chrome/common/media/cdm_registration.cc
+
+echo "[aerium] drm gate applied"
