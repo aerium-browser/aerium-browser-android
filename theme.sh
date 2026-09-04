@@ -2536,6 +2536,46 @@ if [ -e $PAYMENT_PREFS ] && grep -q 'kCanMakePaymentEnabled, true,' $PAYMENT_PRE
 fi
 sed_i -E '/^ +(AndroidPaymentAppsFragment|AutofillAndPasswordsFragment|AutofillBuyNowPayLaterFragment|AutofillCardBenefitsFragment|AutofillIdentityDocsFragment|AutofillOptionsFragment|AutofillPaymentMethodsFragment|AutofillPersonalContextFragment|AutofillProfilesFragment|AutofillShoppingFragment|AutofillTravelFragment|FinancialAccountsManagementFragment|NonCardPaymentMethodsManagementFragment)\.SEARCH_INDEX_DATA_PROVIDER,$/d' \
     $SIPR
+
+# The last payment row left standing was not in the autofill cluster at all.
+# Settings > Privacy and security still carried "Access payment methods"
+# (IDS_CAN_MAKE_PAYMENT_TITLE), the switch behind PaymentRequest's
+# canMakePayment(), because it lives in privacy_preferences.xml rather than in
+# main_preferences.xml where patch.sh does its removals.
+#
+# It reads as a contradiction to anyone who opens that screen. The browser has
+# no payment methods to access - every screen that could hold one is gone - so
+# the row offers to let sites check a store that cannot exist. Worse, it is a
+# live switch: the pref underneath is false (Vanadium patch 0079), and one tap
+# turns it back on, restoring the one part of this whole area a web page can
+# observe directly.
+#
+# So the row goes, matched by key the way patch.sh matches its own, and for the
+# same reasons: an element found by key survives upstream adding or reordering
+# attributes, [^<>] cannot run past the element it started in, and a key that
+# matches nothing is fatal rather than skipped.
+perl -0777 -pi -e '
+    s{[ \t]*<[\w.]+\b[^<>]*?android:key="can_make_payment"[^<>]*?/>\n}{}s
+        or die "[aerium] FATAL: no element with android:key=\"can_make_payment\" "
+               . "in privacy_preferences.xml - upstream renamed or restructured "
+               . "it\n";
+' chrome/android/java/res/xml/privacy_preferences.xml
+
+# And the Java that binds it. This is the half that matters: PrivacySettings
+# reads the row twice, and only one of the two reads tolerates its absence.
+# updatePreferences() already null-checks before calling setChecked; the
+# constructor path does not, so findPreference returns null and
+# setOnPreferenceChangeListener throws the moment Privacy and security is
+# opened. That exact mismatch - an XML entry removed while the Java still
+# expected it - is what made Settings crash on open in the 151 build, which
+# patch.sh's own comment records.
+#
+# Guarding rather than deleting the three lines, because the guard is the shape
+# upstream already uses two methods down for the same preference. If upstream
+# ever restores the row, this code keeps working either way.
+sed_i 's|^        canMakePaymentPref.setOnPreferenceChangeListener(this);$|        if (canMakePaymentPref != null) {\n            canMakePaymentPref.setOnPreferenceChangeListener(this);\n        }|' \
+    chrome/android/java/src/org/chromium/chrome/browser/privacy/settings/PrivacySettings.java
+
 # --- Put the SurfaceControl switch back in chrome://flags.
 #
 # Reported against this repo: on a Vivo X100 Ultra running Android 16, whose
