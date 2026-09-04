@@ -2431,7 +2431,7 @@ sed_i 's|^      <message name="IDS_AERIUM_PATCHES_TITLE" desc=|      <message na
 ALDB=chrome/android/java/src/org/chromium/chrome/browser/ui/AppLaunchDrawBlocker.java
 sed_i 's|^import org.chromium.base.supplier.MonotonicObservableSupplier;$|&\nimport org.chromium.base.task.PostTask;\nimport org.chromium.base.task.TaskTraits;|' \
     $ALDB
-sed_i 's|^    private final long mStartTime;$|&\n\n    /**\n     * Aerium: upper bound on how long the launch draw may stay blocked. See\n     * theme.sh - without it a condition that never fires means a browser that\n     * never paints, and with 5000 it meant a browser that sat on the logo for\n     * five seconds every single launch for anyone whose new tab page comes\n     * from an extension.\n     */\n    private static final long AERIUM_DRAW_BLOCK_TIMEOUT_MS = 2000;\n\n    /** Aerium: whether the deadline above has been armed for this launch. */\n    private boolean mAeriumDrawUnblockScheduled;|' \
+sed_i 's|^    private final long mStartTime;$|&\n\n    /**\n     * Aerium: upper bound on how long the launch draw may stay blocked. See\n     * theme.sh - without it a condition that never fires means a browser that\n     * never paints.\n     */\n    private static final long AERIUM_DRAW_BLOCK_TIMEOUT_MS = 5000;\n\n    /** Aerium: whether the deadline above has been armed for this launch. */\n    private boolean mAeriumDrawUnblockScheduled;|' \
     $ALDB
 sed_i 's|^        mBlockDrawForIncognitoRestore = true;$|&\n        aeriumScheduleDrawUnblock();|' \
     $ALDB
@@ -4805,3 +4805,40 @@ sed_i 's|      <message name="IDS_AERIUM_BOTTOM_BAR_TITLE" desc=|      <message 
     chrome/browser/ui/android/strings/android_chrome_strings.grd
 
 echo "[aerium] media settings applied"
+
+# --- Do not hold the first draw for a new tab page that an extension provides.
+#
+# ChromeTabbedActivity waits for onContentChanged before letting the toolbar
+# draw, so a cold start does not flash an empty toolbar before the native NTP
+# is ready:
+#
+#   if (isTabNtp && !currentTab.isNativePage() && !isTabWebUiNtp) {
+#       currentTab.addObserver(... onContentChanged -> onActiveTabAvailable());
+#   } else {
+#       mAppLaunchDrawBlocker.onActiveTabAvailable();
+#   }
+#
+# An extension-provided new tab page satisfies all three conditions: it keeps
+# chrome://newtab as its virtual URL so isTabNtp is true, it is not a native
+# page, and isTabWebUiNtp covers only the WebUI override - gated on
+# sUseWebUiNtpAndroid and a Google default search engine. So it waits for a
+# native page that will never be created, and only the deadline above ends the
+# wait. Reported as the browser sitting on the logo for six or seven seconds on
+# every launch with TablissNG as the new tab page, and only then - a normal web
+# page as the homepage is not an NTP url, takes the else branch, and starts
+# instantly. That asymmetry is what identified it.
+#
+# Upstream reasons exactly this way already. The comment beside isTabWebUiNtp
+# reads "The WebUI NTP is not a native Tab, so we don't wait for it to be
+# created, otherwise it hangs the rendering thread." An extension NTP is not a
+# native tab either, so the same conclusion applies; the guard simply predates
+# extensions being usable here.
+#
+# UrlOverrideUtils.isNtpOverrideEnabled() is upstream's own answer to "is the
+# new tab page overridden", backed by ExtensionsUrlOverrideRegistry and the
+# policy registry, so a policy-set new tab page is covered for free. The class
+# is already imported by this file.
+sed_i 's|^                if (isTabNtp \&\& !currentTab.isNativePage() \&\& !isTabWebUiNtp) {$|                // Aerium: an overridden new tab page never becomes a native page, so\n                // waiting for one holds the launch until the deadline. See theme.sh.\n                if (isTabNtp\n                        \&\& !currentTab.isNativePage()\n                        \&\& !isTabWebUiNtp\n                        \&\& !UrlOverrideUtils.isNtpOverrideEnabled()) {|' \
+    chrome/android/java/src/org/chromium/chrome/browser/ChromeTabbedActivity.java
+
+echo "[aerium] ntp override draw guard applied"
