@@ -1,0 +1,13 @@
+Aerium is an open-source, Chromium-based browser for Android built on Vanadium (GrapheneOS), with extension support and a deep-navy space theme.
+
+- Extensions: Navigate to the Chrome Web Store, enable "Desktop site", and install as normal. Manifest V2 (MV2) extensions are supported, along with Opera and Microsoft Edge add-on stores. Unpacked extensions can also be loaded manually via Developer mode.
+
+- Using extensions: Pin an extension's icon to the toolbar from the menu next to it in the extensions list to access its popup. To allow an extension in Incognito, go to "Manage extensions", select "Details", and enable "Allow in Incognito".
+
+- Autofill: Android's platform autofill is used by default, so third-party password managers fill web forms natively.
+
+- Privacy: Safe Browsing is off by default (toggleable in Settings), and the browser avoids unnecessary background traffic.
+
+- Debug URLs: use "chrome://chrome-urls" to view them.
+
+- WebRTC IP policy: available under "Privacy and security" in Settings.

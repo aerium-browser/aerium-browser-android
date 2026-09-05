@@ -1,0 +1,494 @@
+name: 'Stage'
+description: 'One resumable build stage: restore tree, build for a time slice, save tree or publish the APK'
+inputs:
+  finished:
+    description: 'true if a previous stage already finished the build'
+    required: true
+  from_artifact:
+    description: '"auto" to resume from a saved build tree when one exists, "never" to force a fresh start'
+    required: false
+    default: 'auto'
+  restore_run_id:
+    description: 'Workflow run id to restore the saved build tree from (empty = this run). download-artifact only sees the current run by default, so resuming a failed run from a NEW run requires passing that run''s id here.'
+    required: false
+    default: ''
+  arch:
+    description: 'Target architecture: arm64 (default) or x64. Selects target_cpu for the build and, because artifact names are global to a run, keeps each architecture''s checkpoints, APK and failure marker in their own namespace. arm64 keeps the unsuffixed names it has always used, so checkpoints written by a run that started before this input existed are still found by a resume.'
+    required: false
+    default: 'arm64'
+outputs:
+  finished:
+    description: 'true once the signed APK has been produced'
+    value: ${{ steps.result.outputs.finished }}
+runs:
+  using: 'composite'
+  steps:
+    - name: Record stage start time
+      if: inputs.finished != 'true'
+      shell: bash
+      # build.sh budgets its compile window against this, so that the (large,
+      # growing) checkpoint restore below is counted against the job's 350-min
+      # timeout instead of being invisible to it.
+      run: echo "STAGE_START_TS=$(date +%s)" >> "$GITHUB_ENV"
+
+    - name: Maximize build space
+      if: inputs.finished != 'true'
+      uses: easimon/maximize-build-space@v10
+      with:
+        # The swap file is carved out of the root reserve, so the reserve
+        # must cover swap + depot_tools + apt + misc root writes - anything
+        # beyond that is disk taken AWAY from the build volume. A full fresh
+        # Android Chromium checkout + partial compile has repeatedly filled
+        # the disk (exit 137 at stage 1, i.e. not accumulation across
+        # stages), so reserve/swap are kept lean: -j2 lowered peak memory
+        # enough that a large swap buffer is no longer the priority, disk
+        # headroom for the source tree is.
+        #
+        # Raised 10240 -> 16384 after stages started dying with NO uploaded
+        # logs (HTTP 404), which is the runner agent itself being killed
+        # rather than the build failing - an OOM shows up as exit 137 *in*
+        # the log. A df at the last such failure had root at 3.0G free while
+        # the build volume still had 47G of 96G free, and install-build-deps
+        # installs GBs of packages to root on every fresh stage. With 6144
+        # of the reserve consumed by the swap file, the old 10240 left only
+        # ~4G of usable root. Swap is deliberately NOT reduced to pay for
+        # this: use_thin_lto is on now, and ThinLTO linking is exactly when
+        # the swap buffer matters.
+        root-reserve-mb: '16384'
+        temp-reserve-mb: '2048'
+        swap-size-mb: '6144'
+        remove-dotnet: 'true'
+        remove-android: 'true'
+        remove-haskell: 'true'
+        remove-codeql: 'true'
+        remove-docker-images: 'true'
+        build-mount-path: '${{ github.workspace }}/chromium'
+
+    # The checkpoint alternates between two slots - see "Pick a checkpoint
+    # slot" below for why - so which name holds the current one depends on how
+    # many stages have run. Artifact ids increase monotonically, so the largest
+    # id is the most recent upload; a run written before the two-slot scheme
+    # has only the base name and resolves to it unchanged.
+    - name: Resolve the checkpoint slot to restore
+      id: restore-slot
+      if: inputs.finished != 'true' && inputs.from_artifact != 'never'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        BASE: build-artifact-android-${{ inputs.arch }}
+        RESTORE_RUN_ID: ${{ inputs.restore_run_id }}
+      run: bash ./.github/scripts/checkpoint-slot.sh restore
+
+    - name: Restore build tree (best effort)
+      if: inputs.finished != 'true' && inputs.from_artifact != 'never' && inputs.restore_run_id == ''
+            && steps.restore-slot.outputs.name != ''
+      uses: actions/download-artifact@v8
+      continue-on-error: true
+      with:
+        name: ${{ steps.restore-slot.outputs.name }}
+        path: ${{ github.workspace }}/chromium
+
+    - name: Restore build tree from another run (best effort)
+      if: inputs.finished != 'true' && inputs.from_artifact != 'never' && inputs.restore_run_id != ''
+            && steps.restore-slot.outputs.name != ''
+      uses: actions/download-artifact@v8
+      continue-on-error: true
+      with:
+        name: ${{ steps.restore-slot.outputs.name }}
+        path: ${{ github.workspace }}/chromium
+        run-id: ${{ inputs.restore_run_id }}
+        github-token: ${{ github.token }}
+
+    - name: Unpack build tree
+      if: inputs.finished != 'true'
+      shell: bash
+      run: |
+        cd "$GITHUB_WORKSPACE"
+        if [ -f chromium/artifacts.tar.zst ]; then
+          echo "Resuming from saved build tree"
+          tar -x -I 'zstd -T0' -f chromium/artifacts.tar.zst
+          rm -f chromium/artifacts.tar.zst
+        else
+          echo "No saved build tree; starting fresh"
+        fi
+        df -h /
+
+    - name: Snapshot restored build state
+      if: inputs.finished != 'true'
+      shell: bash
+      # Diagnostics for the "every stage rebuilds everything" problem. They
+      # are WRITTEN here, at the start of the job, and PRINTED by the step at
+      # the very end of it, because the job-log API is tail-only (~400 KB,
+      # which on a five-hour stage is the last few minutes) - anything logged
+      # from here would never be readable.
+      #
+      # Nothing in this step may ever fail the stage.
+      run: |
+        set +e
+        set +o pipefail
+        cd "$GITHUB_WORKSPACE"
+        OUT=chromium/src/out/Default
+        D="$GITHUB_WORKSPACE/stage-diag.txt"
+        : > "$D"
+        {
+          echo "######## STAGE DIAGNOSTICS (run $GITHUB_RUN_ID, attempt $GITHUB_RUN_ATTEMPT) ########"
+          echo "captured $(date -u '+%Y-%m-%dT%H:%M:%SZ') by $(tar --version | head -1)"
+          echo
+          echo "=== [1] POST-UNPACK: siso incremental state ==="
+          for f in "$OUT/.siso_fs_state" "$OUT/.siso_fs_state.journal"; do
+            if [ -e "$f" ]; then ls -la "$f"; else echo "MISSING: $f"; fi
+          done
+          echo
+          echo "=== [2] POST-UNPACK: mtimes of restored object files ==="
+          find "$OUT/obj" -name '*.o' 2>/dev/null | head -5 > "$GITHUB_WORKSPACE/diag-objs.txt"
+          if [ -s "$GITHUB_WORKSPACE/diag-objs.txt" ]; then
+            while read -r o; do stat --printf='%n  mtime=%y  size=%s\n' "$o"; done < "$GITHUB_WORKSPACE/diag-objs.txt"
+            FRACS=$(while read -r o; do stat --printf='%y\n' "$o"; done < "$GITHUB_WORKSPACE/diag-objs.txt" \
+                    | sed -E 's/.*\.([0-9]+).*/\1/' | sort -u | tr -d '\n')
+            if [ "$FRACS" = "000000000" ]; then
+              echo "MTIME-VERDICT: TRUNCATED - every restored object sits on a whole second."
+              echo "  tar dropped the sub-second mtimes siso's state file is keyed on, so"
+              echo "  the restored state cannot match anything and the stage rebuilds all of it."
+            else
+              echo "MTIME-VERDICT: PRESERVED - restored objects still carry sub-second mtimes."
+              echo "  If this stage STILL skips nothing, tar precision was not the cause."
+            fi
+          else
+            echo "(no object files in the restored tree - fresh start, verdict N/A)"
+          fi
+          echo
+          echo "=== [3] POST-UNPACK: siso/ninja bookkeeping in out/Default ==="
+          ls -la "$OUT" 2>/dev/null | grep -i 'siso\|ninja' || echo "(none, or no out dir)"
+          echo "restored object files: $(find "$OUT/obj" -name '*.o' 2>/dev/null | wc -l)"
+          echo
+        } >> "$D" 2>&1
+        echo "wrote $D; it is printed by the last step of this job"
+        exit 0
+
+    - name: Build
+      id: build
+      if: inputs.finished != 'true'
+      shell: bash
+      env:
+        STAGE_DIAG: ${{ github.workspace }}/stage-diag.txt
+        # build.sh derives the ABI and rewrites target_cpu in out/Default/args.gn
+        # from this. Everything else about the two builds is the same file.
+        AERIUM_TARGET_CPU: ${{ inputs.arch }}
+      run: |
+        cd "$GITHUB_WORKSPACE"
+        chmod +x *.sh res/*.sh
+        free -h || true
+        df -h || true
+        set +e
+        ./build.sh --ci
+        echo "code=$?" >> "$GITHUB_OUTPUT"
+        df -h || true
+
+    - name: Disk usage breakdown (diagnostic, only on failure)
+      if: inputs.finished != 'true' && steps.build.outputs.code != '0'
+      shell: bash
+      run: |
+        cd "$GITHUB_WORKSPACE"
+        echo "--- top-level chromium/ ---"
+        du -sh --max-depth=1 chromium 2>/dev/null | sort -rh | head -10 || true
+        echo "--- top-level chromium/src/ ---"
+        du -sh --max-depth=1 chromium/src 2>/dev/null | sort -rh | head -20 || true
+        echo "--- chromium/src/out/Default/ ---"
+        du -sh --max-depth=1 chromium/src/out/Default 2>/dev/null | sort -rh | head -10 || true
+        echo "--- root filesystem outside chromium/ (top consumers) ---"
+        du -sh --max-depth=2 /home /usr /opt /var 2>/dev/null | sort -rh | head -15 || true
+
+    - name: Pack build tree
+      id: pack
+      if: inputs.finished != 'true'
+      shell: bash
+      run: |
+        cd "$GITHUB_WORKSPACE"
+        if [ -f release/finished.marker ]; then
+          echo "packed=finished" >> "$GITHUB_OUTPUT"
+        elif [ -f chromium/src/BUILD.gn ] && [ -f chromium/src/out/Default/args.gn ] && [ -f chromium/src/out/Default/build.ninja ]; then
+          # Save progress even when this stage's build failed, so a fixed
+          # workflow can resume instead of starting over. build.ninja is
+          # required on top of BUILD.gn/args.gn: a tree where gn gen itself
+          # failed (e.g. a bad args.gn flag - run 29985315083) has the first
+          # two but no build graph, and uploading it would overwrite the
+          # previous GOOD checkpoint (the artifact name is shared across
+          # runs with overwrite: true), destroying resumable progress in
+          # exchange for a tree that can't be resumed anyway.
+          EXTRA=""
+          for f in chromium/.gclient_entries chromium/.gclient_previous_sync_commits; do
+            [ -f "$f" ] && EXTRA="$EXTRA $f"
+          done
+          # tar exit code 1 only means files changed while reading - the
+          # archive is still usable, which --warning=no-file-changed and the
+          # `RC -gt 1` check below already handle.
+          #
+          # .siso_fs_state.journal must NOT be excluded. It is not volatile
+          # scratch: it is siso's incremental record of which steps have
+          # completed. build.sh ends every stage with `timeout -s INT`, so
+          # siso is always interrupted and never folds the journal into
+          # .siso_fs_state - the journal IS the state. Excluding it made
+          # every stage start with no incremental knowledge and recompile
+          # the same ~28,300 objects, so a 15-stage run finished at the
+          # exact 38.1% it reached in stage 1 (remaining went 45,981 ->
+          # 46,030). Object files were in the checkpoint all along and were
+          # simply rewritten byte-identically.
+          #
+          # --format=posix is load-bearing, not cosmetic. GNU tar's default
+          # "gnu" format stores mtimes as whole seconds, while siso's
+          # .siso_fs_state keys every recorded output on its NANOSECOND mtime.
+          # A default-format pack/unpack round trip therefore hands the next
+          # stage a tree in which every single file's mtime has been rounded
+          # down to .000000000, so not one entry in the restored state file
+          # matches the file it describes, the whole state is discarded as
+          # stale, and the stage recompiles ~30k objects it already has. Only
+          # the pax format carries sub-second times (verified with GNU tar
+          # 1.35, the version on ubuntu-latest: gnu round-trips
+          # 10:11:12.123456789 as 10:11:12.000000000, posix as
+          # 10:11:12.123456789). The Unpack step needs no matching flag - tar
+          # detects the format when reading.
+          #
+          # --pax-option pays for it: pax otherwise emits an extended header
+          # for every file just to carry atime/ctime, which nothing here
+          # restores or cares about. Dropping those two keeps the archive the
+          # same size as before for whole-second files and only spends the
+          # extra header where a sub-second mtime actually needs preserving.
+          #
+          # Probed against an empty archive first: a stage that reached this
+          # point has ~5 hours of compilation in it, and a tar that refused
+          # the flags would abort the pack and throw all of it away. Falling
+          # back to the old format merely leaves the incremental state
+          # unusable again - the failure we already have - instead of losing
+          # the objects too.
+          TAR_FMT=(--format=posix --pax-option='delete=atime,delete=ctime')
+          if ! tar -c "${TAR_FMT[@]}" -f /dev/null --files-from=/dev/null 2>/dev/null; then
+            echo "WARNING: this tar rejects the pax flags; packing in the default format"
+            TAR_FMT=()
+          fi
+          set +e
+          tar -c -I 'zstd -T0 -3' -f chromium/artifacts.tar.zst \
+            "${TAR_FMT[@]}" \
+            --warning=no-file-changed \
+            --exclude='chromium/artifacts.tar.zst' \
+            chromium/src chromium/.gclient $EXTRA
+          RC=$?
+          set -e
+          if [ $RC -gt 1 ]; then
+            echo "tar failed with exit code $RC"
+            exit $RC
+          fi
+          ls -la chromium/artifacts.tar.zst
+          echo "packed=intermediate" >> "$GITHUB_OUTPUT"
+        else
+          echo "Source setup did not complete; nothing worth saving"
+          echo "packed=none" >> "$GITHUB_OUTPUT"
+        fi
+
+    # overwrite: true deletes the existing artifact and then uploads the new
+    # one, so anything that interrupts the job in between leaves the run with
+    # no checkpoint at all. That is what killed the Windows repo's run
+    # 33089940410: it was cancelled eight seconds into the upload, moments
+    # after the delete, and five stages of compiling were unrecoverable. This
+    # tree is the one that takes nineteen hours to rebuild.
+    #
+    # So the checkpoint alternates between build-artifact-android-<arch> and
+    # build-artifact-android-<arch>-b. Each stage writes to whichever slot is not
+    # current and retires the other only once the upload has actually
+    # succeeded, so there is always one complete checkpoint on the run.
+    - name: Pick a checkpoint slot
+      id: save-slot
+      if: inputs.finished != 'true' && steps.pack.outputs.packed == 'intermediate'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        BASE: build-artifact-android-${{ inputs.arch }}
+      run: bash ./.github/scripts/checkpoint-slot.sh save
+
+    - name: Upload build tree
+      if: inputs.finished != 'true' && steps.pack.outputs.packed == 'intermediate'
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ steps.save-slot.outputs.target }}
+        path: ${{ github.workspace }}/chromium/artifacts.tar.zst
+        retention-days: 10
+        compression-level: 0
+
+    # Only now, with the replacement stored. A failure here costs one
+    # checkpoint of storage for its retention period and nothing else - the
+    # next restore picks the newer of the two by id either way.
+    - name: Retire the previous checkpoint
+      if: inputs.finished != 'true' && steps.save-slot.outputs.previous_id != ''
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        PREVIOUS_ID: ${{ steps.save-slot.outputs.previous_id }}
+      run: |
+        gh api -X DELETE \
+          "repos/$GITHUB_REPOSITORY/actions/artifacts/$PREVIOUS_ID" \
+          || echo "could not retire artifact $PREVIOUS_ID (non-fatal)"
+
+    - name: Record that this failure is deterministic
+      # build.sh has already turned the ordinary "ran out of time budget" case
+      # into exit 0 (RET=124 -> exit 0), so a non-zero code here can only be a
+      # failure that will reproduce: a compile error, a gn gen error, or a
+      # FATAL from the source-setup substitutions. Resuming such a run just
+      # recompiles up to the same broken target and dies in the same place.
+      #
+      # A runner death or a job timeout never reaches this step at all, and
+      # those are precisely the failures worth resuming. So the presence of
+      # this marker is the discriminator auto-resume needs, and it comes from
+      # the stage knowing what happened rather than from scraping logs.
+      if: inputs.finished != 'true' && steps.build.outputs.code != '0'
+      shell: bash
+      run: |
+        mkdir -p "$GITHUB_WORKSPACE/stage-status"
+        {
+          echo "exit_code=${{ steps.build.outputs.code }}"
+          echo "stage_run_id=$GITHUB_RUN_ID"
+          echo "commit=$GITHUB_SHA"
+        } > "$GITHUB_WORKSPACE/stage-status/build-error.txt"
+        sed -n '1,40p' "$GITHUB_WORKSPACE/chromium/src/out/Default/.siso_failed_targets" \
+          >> "$GITHUB_WORKSPACE/stage-status/build-error.txt" 2>/dev/null || true
+
+    - name: Upload deterministic-failure marker
+      if: inputs.finished != 'true' && steps.build.outputs.code != '0'
+      uses: actions/upload-artifact@v7
+      with:
+        name: build-error-android-${{ inputs.arch }}
+        path: ${{ github.workspace }}/stage-status/
+        retention-days: 10
+        overwrite: true
+
+    - name: Upload final APK
+      if: inputs.finished != 'true' && steps.pack.outputs.packed == 'finished'
+      uses: actions/upload-artifact@v7
+      with:
+        name: aerium-android-${{ inputs.arch }}
+        path: ${{ github.workspace }}/release/
+        retention-days: 30
+        compression-level: 0
+        overwrite: true
+
+    - name: Print stage diagnostics
+      # Deliberately the LAST thing this job does, and deliberately
+      # unconditional. The job-log API only returns the tail of the log, so a
+      # diagnostic printed anywhere earlier in a five-hour stage is thrown
+      # away before anyone can read it. Everything below was collected
+      # earlier and is merely replayed here.
+      if: ${{ always() && inputs.finished != 'true' }}
+      shell: bash
+      run: |
+        set +e
+        set +o pipefail
+        cd "$GITHUB_WORKSPACE"
+        OUT=chromium/src/out/Default
+        cat "$GITHUB_WORKSPACE/stage-diag.txt" 2>/dev/null || echo "(no diagnostics were captured)"
+
+        echo "=== [4] AFTER PACK: siso incremental state as shipped in the checkpoint ==="
+        for f in "$OUT/.siso_fs_state" "$OUT/.siso_fs_state.journal"; do
+          if [ -e "$f" ]; then ls -la "$f"; else echo "MISSING: $f"; fi
+        done
+        echo "  A large .siso_fs_state with NO journal means siso shut down cleanly and"
+        echo "  folded its journal in. A journal still sitting here means it did not."
+
+        echo
+        echo "=== [5] the objects sampled after unpack, as they are now ==="
+        echo "  (same mtime as section [2] = siso reused it; newer = it was recompiled)"
+        while read -r o; do
+          if [ -e "$o" ]; then stat --printf='%n  mtime=%y\n' "$o"; else echo "GONE: $o"; fi
+        done < "$GITHUB_WORKSPACE/diag-objs.txt" 2>/dev/null
+
+        echo
+        echo "=== [6] does THIS runner's tar preserve sub-second mtimes with the pack flags? ==="
+        T="${RUNNER_TEMP:-/tmp}/paxcheck"
+        rm -rf "$T"; mkdir -p "$T/in" "$T/out"
+        printf x > "$T/in/probe"
+        touch -d '2026-01-02 03:04:05.123456789' "$T/in/probe"
+        ( cd "$T" \
+          && tar -c --format=posix --pax-option='delete=atime,delete=ctime' \
+                 --warning=no-file-changed -f probe.tar in \
+          && tar -x -f probe.tar -C out )
+        echo "  packed  : $(stat --printf='%y' "$T/in/probe" 2>/dev/null)"
+        echo "  restored: $(stat --printf='%y' "$T/out/in/probe" 2>/dev/null)"
+
+        echo
+        echo "=== [7] siso bookkeeping and log files left in out/Default ==="
+        ls -la "$OUT" 2>/dev/null | grep -i 'siso\|\.INFO' || echo "(none)"
+
+        echo
+        echo "=== [8] state/journal mentions in the build output ==="
+        grep -n -i -m 25 'fs_state\|journal\|load.*state\|state.*load\|restat' \
+          chromium/build_stdout.log 2>/dev/null || echo "(none)"
+
+        echo
+        echo "=== [9] FIRST 60 lines of the build output (does siso report loading state?) ==="
+        head -n 60 chromium/build_stdout.log 2>/dev/null || echo "(no build output was captured)"
+
+        echo
+        echo "=== [10] WHY THE BUILD STOPPED ==="
+        # The head of the build output answers a question about incremental
+        # state. It cannot answer "what failed", because a compile error is at
+        # the END - and the Actions API only returns the tail of a job log, so
+        # a 200-line head dump is exactly what pushes the error out of reach.
+        # Stage 4 of run 32633921251 failed with a real compile error that was
+        # unreadable for precisely this reason, and the marker artifact holding
+        # it needs credentials the session did not have.
+        #
+        # So: name the failed targets, then print the error itself.
+        #
+        # "The error itself" is out/Default/siso_output, NOT build_stdout.log.
+        # This block used to print 200 lines of the latter and call that the
+        # error, which it is not: build_stdout.log is siso's progress stream -
+        # one line per action, all of them successes - and a compile error never
+        # appears in it. Run 117 stage 4 failed on
+        # chrome_browsing_data_lifetime_manager.o and this section faithfully
+        # printed two hundred lines of unrelated .o names, so the diagnostics
+        # said which target failed and not one word about why. siso writes the
+        # command line and the compiler's stderr to siso_output, which is a few
+        # kilobytes.
+        #
+        # Order matters as much as content. The job-log API returns the TAIL, so
+        # whatever is printed last is what survives; that is the whole reason
+        # this section exists. So the progress tail shrinks to 40 lines and goes
+        # FIRST, and siso_output goes LAST, where the tail window cannot push it
+        # out of reach.
+        echo "--- last 40 lines of build progress (context, not the error) ---"
+        tail -n 40 chromium/build_stdout.log 2>/dev/null \
+          || echo "(no build output was captured)"
+        echo
+        if [ -s "$OUT/.siso_failed_targets" ]; then
+          echo "--- failed targets ---"
+          cat "$OUT/.siso_failed_targets"
+        else
+          echo "(no .siso_failed_targets - the stage did not fail on a target)"
+        fi
+        echo
+        echo "--- siso_output: the failing command and its compiler output ---"
+        if [ -s "$OUT/siso_output" ]; then
+          # Capped so a pathological template error cannot itself blow the tail
+          # window; 2000 lines is far more than any single diagnostic needs.
+          tail -n 2000 "$OUT/siso_output"
+        else
+          echo "(siso_output is empty or absent - the stage did not fail in a"
+          echo " compile step, so look at the progress tail above instead)"
+        fi
+        echo
+        echo "=== end of stage diagnostics ==="
+        exit 0
+
+    - name: Fail stage if the build failed
+      if: inputs.finished != 'true' && steps.build.outputs.code != '0'
+      shell: bash
+      run: |
+        echo "build.sh exited with code ${{ steps.build.outputs.code }} (tree was saved for resume)"
+        exit 1
+
+    - name: Set result
+      id: result
+      shell: bash
+      run: |
+        if [ "${{ inputs.finished }}" = "true" ] || [ "${{ steps.pack.outputs.packed }}" = "finished" ]; then
+          echo "finished=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "finished=false" >> "$GITHUB_OUTPUT"
+        fi

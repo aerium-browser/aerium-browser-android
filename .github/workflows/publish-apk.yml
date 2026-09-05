@@ -1,0 +1,121 @@
+# Publish an APK that a build already produced.
+#
+# The build workflow publishes its own release at the end of the run that
+# finished the build, which is the normal path and stays that way. This exists
+# for the case where the build succeeded and only the publish step did not:
+# the APK is sitting in that run's artifact, valid and signed, and rebuilding
+# it would cost about nineteen hours to get back a file we already have.
+#
+# That case is not hypothetical. Run 122 finished the build and failed on
+# "Download APK artifact" because the workflow asked for aerium-android while
+# the stage action had uploaded aerium-android-arm64 - a naming bug, fixed in
+# the same commit as this file, but one that left a finished 304 MB APK with
+# no way to release it. Re-running the job would not have helped: a re-run
+# uses the workflow file from the original run's commit, which still has the
+# wrong name in it.
+#
+# Deliberately dispatch-only. Nothing triggers this automatically.
+name: Publish APK from a finished build
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Workflow run id that produced the APK artifact'
+        type: string
+        required: true
+      build_number:
+        description: 'Run NUMBER of that build, for the -b suffix in the tag (e.g. 122)'
+        type: string
+        required: true
+      arch:
+        description: 'Which build to publish'
+        type: choice
+        options: [arm64, x64]
+        default: arm64
+        required: true
+
+permissions:
+  contents: write
+  # download-artifact needs this to reach another run's artifacts.
+  actions: read
+
+concurrency:
+  group: aerium-android-publish-${{ inputs.arch }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      # Only for CHANGELOG.md, same as the build workflow's publish job: the
+      # release notes come from a file in the tree rather than the git log.
+      - uses: actions/checkout@v5
+        with:
+          submodules: false
+
+      - name: Download the APK artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: aerium-android-${{ inputs.arch }}
+          path: release
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Resolve version and ABI
+        id: ver
+        run: |
+          set -euo pipefail
+          case "${{ inputs.arch }}" in
+            arm64) ABI=arm64-v8a ;;
+            x64)   ABI=x86_64 ;;
+            *) echo "unknown arch ${{ inputs.arch }}" >&2; exit 1 ;;
+          esac
+          echo "abi=$ABI" >> "$GITHUB_OUTPUT"
+          V="$(cat release/version.txt 2>/dev/null || true)"
+          if [ -z "$V" ]; then
+            V="$(ls release/aerium-*-$ABI.apk | sed -E "s/.*aerium-([0-9.]+)-$ABI.*/\1/" | head -n1)"
+          fi
+          [ -n "$V" ] || { echo "could not resolve a version from the artifact" >&2; exit 1; }
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: $V  abi: $ABI"
+
+      - name: Compute checksum
+        run: |
+          set -euo pipefail
+          cd release
+          sha256sum aerium-*-${{ steps.ver.outputs.abi }}.apk > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Compose release notes
+        run: |
+          set -euo pipefail
+          V="${{ steps.ver.outputs.version }}"
+          awk -v v="$V" 'BEGIN{f=0} /^## /{ if (f) exit; if ($2 == v) { f=1; next } } f' \
+            CHANGELOG.md > /tmp/notes.md || true
+          if [ -s /tmp/notes.md ]; then
+            echo "Using the CHANGELOG.md section for $V:"
+            cat /tmp/notes.md
+          else
+            echo "No CHANGELOG.md section for $V - publishing with generated notes only."
+          fi
+
+      # Tag and name match what the build workflow would have produced, using
+      # the BUILD's run number rather than this run's, so the release is the
+      # one that build was going to make and not a differently numbered twin.
+      # x64 publishes as a prerelease for the same reason the x64 workflow
+      # does: /releases/latest is what the in-app updater reads and it must
+      # keep pointing at arm64.
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          token: ${{ secrets.RELEASE_TOKEN || github.token }}
+          tag_name: v${{ steps.ver.outputs.version }}-b${{ inputs.build_number }}
+          name: Aerium ${{ steps.ver.outputs.version }} (${{ inputs.arch }}, build ${{ inputs.build_number }})
+          body_path: /tmp/notes.md
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          prerelease: ${{ inputs.arch == 'x64' }}
+          files: |
+            release/aerium-*-${{ steps.ver.outputs.abi }}.apk
+            release/SHA256SUMS.txt
