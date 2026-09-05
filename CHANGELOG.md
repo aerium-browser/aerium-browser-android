@@ -13,6 +13,26 @@ behind any of this.
   the desktop builds were on - this build was on 152.0.7977.75 and is now
   ahead of both.
 
+**Fixed**
+
+- The launcher icon is bigger and no longer sits on a white plate. The mark is
+  a full-colour disc that is already its own tile, and it was being drawn small
+  on a second, white one - a third of the area of the tile, with the rest of it
+  white. It now fills the tile, on its own darkest navy rather than white, so
+  there is no white left to read as a border. Reported in
+  [#13](https://github.com/aerium-browser/aerium-browser-android/issues/13).
+  The themed (monochrome) icon is deliberately unchanged: the system tints that
+  one flat colour, so a mark filling the tile there just becomes a blob.
+- Third-party autofill can no longer be switched off for a whole session by one
+  unlucky moment at startup. Aerium delegates form filling to whichever autofill
+  service you picked in Android, and the check for whether that service is
+  usable was run exactly once, when the first tab opened. If Android had not
+  finished bringing the service up by then, every tab for the rest of that run
+  got the built-in engine instead - which in this build means no autofill at
+  all, since the built-in passwords UI is not shipped. The only cure was
+  restarting the browser. The check now re-runs as tabs are created, and only
+  ever changes its mind in the direction of turning autofill on.
+
 **Fingerprinting**
 
 - `window.queryLocalFonts()` is off. The Local Font Access API returns every

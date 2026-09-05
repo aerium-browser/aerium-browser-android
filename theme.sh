@@ -158,6 +158,90 @@ sed_i '/^  \/\/ Ensure the pref is reset if platform autofill is restricted\.$/,
                       uses_platform_autofill_);\
   }' chrome/browser/ui/autofill/autofill_client_provider.cc
 
+# --- ... and stop it latching for the session, either.
+#
+# The block above stops the availability answer being written to disk as false.
+# It does not stop it being cached in memory as false, and that is the same bug
+# one scope smaller.
+#
+# uses_platform_autofill_ is a const member computed exactly once, in the
+# constructor, from a single call to getAndroidAutofillFrameworkAvailability().
+# AutofillClientProvider is a KeyedService, and its factory selects
+# ProfileSelection::kRedirectedToOriginal for regular profiles - upstream even
+# leaves a TODO there asking whether OTR should get its own - so there is one
+# instance per browser session, shared by every profile in the family, and
+# CreateClientForWebContents() hands every WebContents a client picked from that
+# one answer.
+#
+# So the constructor runs at the first tab of the session, and whatever the
+# framework says at that instant decides the whole session. If AutofillManager
+# has not come up yet - the case the block above already documents - every tab
+# opened afterwards gets ChromeAutofillClient, including tabs opened minutes
+# later when the service has long since resolved. Aerium ships no autofill
+# settings UI, so nothing can undo it; the only recovery is to restart the
+# browser and hope the race falls the other way.
+#
+# Upstream does not have to care, because stock Chrome has Settings -> Autofill
+# services to force the issue. It also already re-asks per surface where it
+# cannot cache: isAutofillEnabledForCct() calls
+# getAndroidAutofillFrameworkAvailability() fresh for every Custom Tab rather
+# than reading this member. Re-asking is a JNI call and a few pref reads, and
+# upstream is willing to pay it per CCT.
+#
+# So: re-ask while the answer is no. The member latches on and never off, which
+# is deliberate and asymmetric:
+#
+#   - false is the state that is broken here. In this build it means no autofill
+#     at all, not "Chrome fills instead", because patch.sh removes the built-in
+#     passwords and autofill surfaces. There is nothing to lose by leaving it.
+#   - true is the state worth protecting. Re-checking on every call would let a
+#     single transient failure mid-session flip a working browser back to the
+#     dead state - reintroducing the flake in the other direction, which is
+#     exactly what the pref fix above was for.
+#
+# Durable restrictions still win, because they are re-evaluated inside
+# getAndroidAutofillFrameworkAvailability() on every call: enterprise policy,
+# an unsupported platform, and Google being the selected service all return a
+# non-AVAILABLE status, so promotion cannot happen while any of them holds.
+#
+# Honest about scope: this is a real latch and this removes it. It is not proven
+# to be the cause of the "autofill misses in a normal tab but works in an
+# incognito one" report - the shared-provider design above means both tabs are
+# handed the same answer, so a same-session asymmetry has to come from somewhere
+# else. It is fixed because it is wrong on its own, and because a browser with
+# no autofill UI cannot afford a state it cannot leave.
+#
+# The header carries two claims that this makes false - "always of the same type
+# across all WebContents instances" and "constant once this provider has been
+# created" - so both are rewritten rather than left to mislead the next reader.
+sed_i 's|^#include "components/keyed_service/core/keyed_service.h"$|#include "base/memory/raw_ptr.h"\n&|' \
+    chrome/browser/ui/autofill/autofill_client_provider.h
+
+sed_i 's|^// always of the same type across all WebContents instances\.$|// of the same type across every WebContents created once the answer settles.\n// Aerium: that answer is no longer fixed at construction - see\n// CreateClientForWebContents(), which re-asks while it is false.|' \
+    chrome/browser/ui/autofill/autofill_client_provider.h
+
+sed_i '/^  \/\/ The return value is constant once this provider has been created\. The$/,/^  const bool uses_platform_autofill_;$/c\
+  \/\/ Aerium: returns true iff platform autofill should be used instead of\
+  \/\/ built-in autofill. No longer constant - it latches on and never off. See\
+  \/\/ CreateClientForWebContents().\
+  bool uses_platform_autofill() const { return uses_platform_autofill_; }\
+\
+ private:\
+  \/\/ Aerium: not const any more. CreateClientForWebContents() promotes this\
+  \/\/ once the framework answers, so one unlucky check at the first tab of the\
+  \/\/ session no longer decides the session.\
+  bool uses_platform_autofill_;\
+  \/\/ Aerium: kept so the re-check is possible at all. Owned by the Profile,\
+  \/\/ which outlives this KeyedService.\
+  const raw_ptr<PrefService> prefs_;' \
+    chrome/browser/ui/autofill/autofill_client_provider.h
+
+sed_i 's|^          UsesVirtualViewStructureForAutofill(CHECK_DEREF(prefs))) {$|          UsesVirtualViewStructureForAutofill(CHECK_DEREF(prefs))),\n      prefs_(prefs) {|' \
+    chrome/browser/ui/autofill/autofill_client_provider.cc
+
+sed_i 's|^  if (uses_platform_autofill()) {$|#if BUILDFLAG(IS_ANDROID)\n  // Aerium: re-ask while the answer is no. The constructor asked once, at the\n  // first tab of the session, and a framework that was not ready yet would\n  // otherwise pin every later tab to the built-in client - which in this build\n  // means no autofill at all, and no settings UI to recover with. Latches on\n  // and never off: promoting a dead state is free, demoting a working one is\n  // the flake this is meant to remove.\n  if (!uses_platform_autofill_ \&\&\n      UsesVirtualViewStructureForAutofill(CHECK_DEREF(prefs_.get()))) {\n    uses_platform_autofill_ = true;\n    // Same two side effects the constructor performs when it settles on true,\n    // so the saved package and the shared pref other apps read do not stay\n    // describing the state we just left.\n    Java_AutofillClientProviderUtils_updatePackageUsedForAutofill(\n        base::android::AttachCurrentThread(), prefs_.get(), true);\n    SetSharedPrefForSettingsContentProvider(true);\n  }\n#endif  // BUILDFLAG(IS_ANDROID)\n&|' \
+    chrome/browser/ui/autofill/autofill_client_provider.cc
+
 # --- Stop Settings crashing on open. patch.sh deletes the six autofill and
 # password entries (orders 11-17) from main_preferences.xml, but MainSettings
 # .java still expects the XML to define them. Both branches of
