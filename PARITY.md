@@ -32,11 +32,23 @@ Legend: ✅ shipped · 🟡 partial · ❌ gap · — not applicable on this pla
 | HTTPS-First Balanced Mode on by default | ✅ | ✅ | ✅ |
 | Global Privacy Control on every request | ✅ | ✅ | ✅ |
 | Canvas / clientRects / measureText noise, WebGL spoof | ✅ | ✅ | ✅ |
+| ...on by default, not only after a first-run choice | ✅ | ✅ | ✅ |
+| navigator.hardwareConcurrency reports 2 | ✅ | ✅ | ✅ |
+| High-entropy client hints not populated | ✅ | ✅ | ✅ |
+| Time zone override (off by default, chrome://flags) | ✅ | ✅ | ✅ |
 | Safe Browsing off by default | ✅ | ✅ | ✅ |
 | Widevine off, toggleable | ✅ | ✅ | ✅ |
 | Passwords and autofill out of the menus and settings | ✅ | ✅ | ✅ |
 | Payment probing off by default | ✅ | ✅ | ✅ |
 | Preloading, optimization guide, domain reliability off | ✅ | ✅ | ✅ |
+
+Fingerprinting defaults: desktop reaches these through flags seeded in
+`default-flags.patch`, so they are listed in `chrome://flags` and one click to
+undo; Android compiles them in, because Vanadium has no flags-seeding mechanism
+and an unreachable switch would be worse than none. The time zone override is
+the exception on both — it is registered but not seeded, because its breakage
+is silent (a wrong meeting time reads as a wrong meeting time, not as a browser
+setting) where the rest announce themselves.
 
 Payment probing: `payments.can_make_payment_enabled` is registered false by
 ungoogled-chromium's `extra/inox-patchset/0006-modify-default-prefs.patch` on
