@@ -5872,10 +5872,20 @@ echo "[aerium] audio fingerprint noise applied"
 # strongest font signal there is and the only one that does not have to be
 # measured a family at a time. Firefox and Safari do not implement it.
 #
-# Setting status to "" gives the generated blink::features::kFontAccess a
-# disabled default, and the json5 schema's copied_from_base_feature_if defaults
-# to "enabled_or_overridden", so the chrome://flags entry can turn the Blink
+# An empty status gives the generated blink::features::kFontAccess a disabled
+# default, and the json5 schema's copied_from_base_feature_if defaults to
+# "enabled_or_overridden", so the chrome://flags entry can turn the Blink
 # feature back on. That is the mechanism, not decoration.
+#
+# It has to be written as {"default": ""} and not as a bare "". json5_generator
+# validates the two forms down different branches of _is_valid(): a string is
+# matched against valid_values, which is ["stable", "experimental", "test"] and
+# does not include the empty string, while a dict is checked per entry with an
+# explicit `or val == ""` that permits it. A bare "" therefore fails generation
+# with `Unknown value: ''` before anything is compiled. That is what broke run
+# 142 - the first build to carry this block - and it would have broken every
+# build after it, because it is deterministic. Upstream's own value for this
+# entry, {"Android": "", "default": "stable"}, is a dict for the same reason.
 #
 # Not done here or on desktop: Cromite's Fonts-fingerprinting-mitigation.patch,
 # which addresses the other half - the measurement channel, where a page
@@ -5897,7 +5907,7 @@ cat > "$AERIUM_FONT_PART" <<'AERIUM_FONT_PART_EOF'
       // Turn it back on at chrome://flags/#aerium-local-font-access; the entry
       // exists because design tools are a real use for it.
       name: "FontAccess",
-      status: "",
+      status: {"default": ""},
 AERIUM_FONT_PART_EOF
 perl -0777 -pi -e '
     BEGIN { $ins = do { local $/; open my $f, "<", $ENV{AERIUM_FONT_PART} or die
