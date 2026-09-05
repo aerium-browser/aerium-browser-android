@@ -5417,3 +5417,40 @@ sed_i '/^const FeatureEntry kFeatureEntries\[\] = {$/a\
     chrome/browser/about_flags.cc
 
 echo "[aerium] time zone override applied"
+
+# --- navigator.hardwareConcurrency answers 2.
+#
+# The last piece of parity with the reduced-system-info flag that the desktop
+# repos now seed on by default. That flag does three things: clamps
+# hardwareConcurrency, makes the user agent report a unified platform, and
+# populates only low-entropy client hints. Two of the three are already true
+# here - Vanadium's
+# 0159-Derive-high-entropy-client-hints-with-reduced-user-a.patch ships
+# kClientHintsFromReducedUA enabled, which covers the client hints and the
+# values derived from the reduced user agent - so only the first was missing.
+#
+# The core count is a strong signal because it is small, stable and free to
+# collect: it survives clearing everything, it is the same in incognito, and
+# CreepJS reads it directly. Two is the number ungoogled-chromium reports, so
+# Aerium users on both platforms land in the same bucket as every
+# ungoogled-chromium user rather than in one shaped like their own hardware.
+#
+# Unconditional rather than behind a feature, matching the canvas, measureText,
+# client-rects and WebGL mitigations above: Vanadium has no flags-seeding
+# mechanism, so a feature here would be a switch with no way to reach it.
+#
+# The assignment is replaced rather than an early return added in front of it,
+# so there is no unreachable code for -Wunreachable-code-aggressive to reject,
+# and so the probe::ApplyHardwareConcurrencyOverride call below still runs and
+# DevTools emulation still works. It also means a rerun finds nothing to match
+# and fails, which an inserted return would not.
+#
+# What it costs: a site that sizes a worker pool from this will use two workers.
+perl -0777 -pi -e '
+    s!  unsigned int hardware_concurrency =\n      NavigatorConcurrentHardware::hardwareConcurrency\(\);\n!  // Aerium: a fixed answer, so the core count cannot be part of a\n  // fingerprint. The desktop builds reach the same value through the\n  // reduced-system-info flag in ungoogled-chromium; see theme.sh.\n  unsigned int hardware_concurrency = 2;\n!
+        or die "[aerium] FATAL: NavigatorBase::hardwareConcurrency no longer "
+             . "reads the core count from NavigatorConcurrentHardware - "
+             . "upstream restructured it, or this block already ran\n";
+' third_party/blink/renderer/core/execution_context/navigator_base.cc
+
+echo "[aerium] hardwareConcurrency clamp applied"
