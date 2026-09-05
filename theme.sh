@@ -5126,3 +5126,59 @@ sed_i 's|^                if (isTabNtp \&\& !currentTab.isNativePage() \&\& !isT
     chrome/android/java/src/org/chromium/chrome/browser/ChromeTabbedActivity.java
 
 echo "[aerium] ntp override draw guard applied"
+
+# --- The performance_manager policies that ship written but switched off.
+#
+# The desktop repos do this as aerium-runtime-efficiency.patch; this is the
+# Android subset of the same change, and it is a subset for a reason rather
+# than an oversight.
+#
+# A de-googled build never reaches the variations server, so every base::Feature
+# runs on whatever default is written into the source. Upstream lands a feature
+# DISABLED_BY_DEFAULT and turns it on through Finch afterwards, so a disabled
+# default in the tree says nothing about whether the code is finished - it is
+# just the state it was committed in, and the state we are stuck with. Each of
+# these has a consumer already wired up in
+# chrome_browser_main_extra_parts_performance_manager.cc.
+#
+# kUnimportantFramesPriority and kThrottleUnimportantFrameRate are one change
+# and enabling either alone does nothing. ImportantFrameDecorator's
+# IsImportant() begins "always important if the feature is disabled", so with
+# the first off every frame is important, and FrameThrottlingPolicy - whose
+# whole body is "if (!frame_node->IsImportant())" - throttles nothing. Together
+# they demote a cross-process subframe that does not intersect the viewport, or
+# covers only a small part of it and has never been touched, and halve its
+# begin-frame rate. That is an ad iframe described structurally, which is what
+# makes it work in a browser that ships no filter list. Both consumers sit
+# outside the !BUILDFLAG(IS_ANDROID) guards, so both apply here.
+#
+# kEnableBestEffortTaskInhibitingPolicy fences BEST_EFFORT thread-pool work
+# while a visible page is loading or the user is typing, with a floor of 30
+# seconds of BEST_EFFORT time per 5 minutes so nothing starves. On a phone that
+# is battery as much as speed.
+#
+# kLevelDBSiteDataStoreBestEffort is one line in leveldb_site_data_store.cc:
+# BEST_EFFORT rather than USER_BLOCKING for the site-data store's task runner.
+#
+# Not here, and not an omission: kInfiniteTabsFreezing and
+# kInfiniteTabsFreezingOnMemoryPressure, which the desktop patch does enable.
+# FreezingPolicy is constructed inside a !BUILDFLAG(IS_ANDROID) block, with an
+# upstream comment saying it "isn't enabled on Android yet as it doesn't play
+# well with the freezing logic already in place in renderers" - so the feature
+# has no consumer here, and the memory-pressure variant is read only inside
+# #if BUILDFLAG(IS_WIN). Enabling a feature nothing reads is noise that later
+# reads as coverage.
+#
+# The two multi-line declarations are addressed by range rather than by their
+# second line: "             base::FEATURE_DISABLED_BY_DEFAULT);" appears a
+# dozen times in this file, so matching it alone would flip every one of them.
+sed_i '/^BASE_FEATURE(kLevelDBSiteDataStoreBestEffort,$/,+1 s|^             base::FEATURE_DISABLED_BY_DEFAULT);$|             base::FEATURE_ENABLED_BY_DEFAULT);|' \
+    components/performance_manager/features.cc
+sed_i '/^BASE_FEATURE(kEnableBestEffortTaskInhibitingPolicy,$/,+1 s|^             base::FEATURE_DISABLED_BY_DEFAULT);$|             base::FEATURE_ENABLED_BY_DEFAULT);|' \
+    components/performance_manager/features.cc
+sed_i 's|^BASE_FEATURE(kUnimportantFramesPriority, base::FEATURE_DISABLED_BY_DEFAULT);$|BASE_FEATURE(kUnimportantFramesPriority, base::FEATURE_ENABLED_BY_DEFAULT);|' \
+    components/performance_manager/features.cc
+sed_i 's|^BASE_FEATURE(kThrottleUnimportantFrameRate, base::FEATURE_DISABLED_BY_DEFAULT);$|BASE_FEATURE(kThrottleUnimportantFrameRate, base::FEATURE_ENABLED_BY_DEFAULT);|' \
+    components/performance_manager/features.cc
+
+echo "[aerium] performance_manager defaults applied"
