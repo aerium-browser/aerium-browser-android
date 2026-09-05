@@ -39,11 +39,24 @@ Legend: ✅ shipped · 🟡 partial · ❌ gap · — not applicable on this pla
 | Audio fingerprint noise (analyser reads, offline render) | ✅ | ✅ | ✅ |
 | AudioContext.baseLatency quantised to 1ms | ✅ | ✅ | ✅ |
 | navigator.connection.type reports unknown | — | — | ✅ |
+| window.queryLocalFonts() off (Local Font Access) | ✅ | ✅ | ✅ |
+| Font enumeration by text measurement | ❌ | ❌ | ❌ |
 | Safe Browsing off by default | ✅ | ✅ | ✅ |
 | Widevine off, toggleable | ✅ | ✅ | ✅ |
 | Passwords and autofill out of the menus and settings | ✅ | ✅ | ✅ |
 | Payment probing off by default | ✅ | ✅ | ✅ |
 | Preloading, optimization guide, domain reliability off | ✅ | ✅ | ✅ |
+
+Font enumeration by measurement is an open gap on every platform, and is listed
+as one rather than left off the table. A page can render text in a candidate
+family and compare widths; nothing here stops that. Cromite answers it with an
+allowlist of permitted family names, and that patch is not portable here as
+written: its list is the Windows 11 font set with an Android section and no
+Linux section at all, so on Linux it would reject nearly every real family and
+break text rather than harden anything; its Windows half reads private Skia
+internals (`src/ports/SkTypeface_win_dw.h`, `DWriteFontTypeface::fDWriteFont`);
+and its Android counterpart is 3300 lines. It wants its own pass with a list
+built for the platforms this project ships.
 
 navigator.connection: the row above is marked not-applicable on desktop rather
 than missing. `type` and `downlinkMax` are exposed only where
