@@ -236,10 +236,23 @@ sed_i '/^  \/\/ The return value is constant once this provider has been created
   const raw_ptr<PrefService> prefs_;' \
     chrome/browser/ui/autofill/autofill_client_provider.h
 
-sed_i 's|^          UsesVirtualViewStructureForAutofill(CHECK_DEREF(prefs))) {$|          UsesVirtualViewStructureForAutofill(CHECK_DEREF(prefs))),\n      prefs_(prefs) {|' \
+# The anchor is the closing line of the initialiser list, not the
+# UsesVirtualViewStructureForAutofill line above it, because Vanadium patch 0217
+# rewrites that line. Upstream ends the list with
+#
+#     UsesVirtualViewStructureForAutofill(CHECK_DEREF(prefs))) {
+#
+# and 0217 splits it, appending `&& prefs->GetBoolean(...)` inside an IS_ANDROID
+# guard and moving the close onto its own `    ) {` line. Anchoring on the
+# upstream form matched pristine Chromium and nothing in the tree the build
+# sees, which is what failed runs 146 and 148. devutils/verify-seds.sh reported
+# OK for it and also listed this file under "Targets Vanadium also patches - an
+# OK here is about pristine Chromium, not about the tree the build sees". That
+# warning is the whole answer and it was already on screen.
+sed_i 's|^    ) {$|    ),\n      prefs_(prefs) {|' \
     chrome/browser/ui/autofill/autofill_client_provider.cc
 
-sed_i 's|^  if (uses_platform_autofill()) {$|#if BUILDFLAG(IS_ANDROID)\n  // Aerium: re-ask while the answer is no. The constructor asked once, at the\n  // first tab of the session, and a framework that was not ready yet would\n  // otherwise pin every later tab to the built-in client - which in this build\n  // means no autofill at all, and no settings UI to recover with. Latches on\n  // and never off: promoting a dead state is free, demoting a working one is\n  // the flake this is meant to remove.\n  if (!uses_platform_autofill_ \&\&\n      UsesVirtualViewStructureForAutofill(CHECK_DEREF(prefs_.get()))) {\n    uses_platform_autofill_ = true;\n    // Same two side effects the constructor performs when it settles on true,\n    // so the saved package and the shared pref other apps read do not stay\n    // describing the state we just left.\n    Java_AutofillClientProviderUtils_updatePackageUsedForAutofill(\n        base::android::AttachCurrentThread(), prefs_.get(), true);\n    SetSharedPrefForSettingsContentProvider(true);\n  }\n#endif  // BUILDFLAG(IS_ANDROID)\n&|' \
+sed_i 's|^  if (uses_platform_autofill()) {$|#if BUILDFLAG(IS_ANDROID)\n  // Aerium: re-ask while the answer is no. The constructor asked once, at the\n  // first tab of the session, and a framework that was not ready yet would\n  // otherwise pin every later tab to the built-in client - which in this build\n  // means no autofill at all, and no settings UI to recover with. Latches on\n  // and never off: promoting a dead state is free, demoting a working one is\n  // the flake this is meant to remove. The pref clause mirrors Vanadium patch\n  // 0217, which ANDs the same pref into the constructor - without it a\n  // promotion here could reach a state the constructor would have refused.\n  if (!uses_platform_autofill_ \&\&\n      UsesVirtualViewStructureForAutofill(CHECK_DEREF(prefs_.get())) \&\&\n      prefs_->GetBoolean(prefs::kAutofillUsingPlatformAutofill)) {\n    uses_platform_autofill_ = true;\n    // Same two side effects the constructor performs when it settles on true,\n    // so the saved package and the shared pref other apps read do not stay\n    // describing the state we just left.\n    Java_AutofillClientProviderUtils_updatePackageUsedForAutofill(\n        base::android::AttachCurrentThread(), prefs_.get(), true);\n    SetSharedPrefForSettingsContentProvider(true);\n  }\n#endif  // BUILDFLAG(IS_ANDROID)\n&|' \
     chrome/browser/ui/autofill/autofill_client_provider.cc
 
 # --- Stop Settings crashing on open. patch.sh deletes the six autofill and
