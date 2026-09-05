@@ -5407,6 +5407,15 @@ cat > chrome/browser/aerium_flag_entries.h <<'AERIUM_FLAG_ENTRIES_EOF'
      kOsAll, FEATURE_WITH_PARAMS_VALUE_TYPE(blink::features::kAeriumTimeZone,
                                             kAeriumTimeZoneChoices,
                                             "AeriumTimeZone")},
+    {"aerium-audio-noise",
+     "Audio fingerprint deception",
+     "Scale audio a page reads back - the four AnalyserNode getters and the "
+     "result of an offline render - by a fixed factor of about a hundredth of "
+     "a percent, drawn once per site. The usual audio fingerprint renders an "
+     "oscillator through a compressor offline and hashes the result; this "
+     "changes that hash without changing anything you can hear, and none of "
+     "these paths feeds playback. On by default. Aerium flag.",
+     kOsAll, FEATURE_VALUE_TYPE(blink::features::kAeriumAudioNoise)},
 #endif  // CHROME_BROWSER_AERIUM_FLAG_ENTRIES_H_
 AERIUM_FLAG_ENTRIES_EOF
 sed_i '/^const FeatureEntry kFeatureEntries\[\] = {$/i\
@@ -5454,3 +5463,305 @@ perl -0777 -pi -e '
 ' third_party/blink/renderer/core/execution_context/navigator_base.cc
 
 echo "[aerium] hardwareConcurrency clamp applied"
+
+# --- Audio fingerprinting, and the connection type.
+#
+# The desktop repos do this as aerium-audio-noise.patch; this is the same
+# change, and the two are meant to produce byte-identical files.
+#
+# The audio fingerprint is one of the handful of signals every fingerprinting
+# library collects, CreepJS included, and the recipe is always the same: build
+# an OfflineAudioContext, run an oscillator through a DynamicsCompressor,
+# render, then sum or hash the samples. The result depends on the platform
+# float rounding and the compressor implementation, so it is stable per device
+# and per build, it survives clearing everything, and it is identical in
+# incognito. The four AnalyserNode getters are the same signal read another
+# way.
+#
+# One multiplier, drawn once per renderer process, applied to every path a page
+# can read audio back through. Three properties follow from "fixed", and each
+# is why it is fixed rather than drawn per sample the way Cromite does it:
+#
+#   * It survives averaging. Independent per-sample noise does not - render the
+#     same graph a hundred times, take the mean, and the true value returns.
+#   * It costs one random draw for the life of the process. The callers are
+#     per-sample loops a visualiser runs every frame, and two RNG calls per
+#     sample there is a real cost on a phone.
+#   * It is per process, so with Vanadium's strict site isolation it is per
+#     site: one site reads one consistent answer however often it asks, two
+#     sites read different answers, and the answer is new the next time the
+#     process is. Same reasoning as the time zone block above.
+#
+# Nothing here touches playback. The analyser getters produce visualisation
+# data and the offline path is a rendered result whose gain moves by a part in
+# ten thousand; decoded audio on its way to the speaker is in none of them.
+#
+# baseLatency is quantised to 1ms, the same way outputLatency() right below it
+# already is. Upstream mitigated one of that pair and not the other, and
+# base_latency_ is the audio hardware buffer size over its sample rate, so it
+# names the device just as squarely. It reuses Chromium's own
+# kOutputLatencyMaxPrecisionFactor rather than inventing a constant.
+#
+# NetInfoConstantType is turned on, and that is the whole of the
+# navigator.connection change. It matters more here than on desktop:
+# NetInfoDownlinkMax is stable on Android and experimental elsewhere, so this
+# is where navigator.connection.type and downlinkMax are exposed at all, and
+# whether the phone is on wifi or cellular - and which generation of cellular -
+# is a signal about the device and where it is. The rest of that interface is
+# deliberately left alone: RoundRtt and RoundMbps already bucket rtt and
+# downlink and multiply by a per-host random factor first, so two sites already
+# read different values, and pinning effectiveType would tell a phone on a bad
+# connection to fetch the high quality asset.
+#
+# All the inserted C++ lives in one file, split on a marker, for the reason the
+# DoH block gives: the text is full of braces, quotes and apostrophes, and a
+# perl program inside a shell single-quoted string is where an escaping mistake
+# hides. The perl programs below contain no quoting of their own.
+AERIUM_AUDIO_PARTS=$(mktemp)
+export AERIUM_AUDIO_PARTS
+cat > "$AERIUM_AUDIO_PARTS" <<'AERIUM_AUDIO_PARTS_EOF'
+
+  // Aerium: scale a sample a page is about to read back, so audio
+  // fingerprinting cannot recover a stable value. See base_audio_context.cc
+  // for why the factor is drawn once per renderer process. Returns the value
+  // unchanged when the mitigation is off, so callers need no check of their
+  // own.
+  static float AeriumAudioNoise(float value);
+===AERIUM-SPLIT===
+
+// static
+float BaseAudioContext::AeriumAudioNoise(float value) {
+  // One multiplier, drawn on first use and then fixed. Three properties fall
+  // out of that choice, and each of them is the reason for it.
+  //
+  // It survives averaging. Noise drawn per sample does not: a fingerprinter
+  // that renders the same graph repeatedly and takes the mean recovers the
+  // true value, because independent noise cancels and a constant factor does
+  // not.
+  //
+  // It costs one random draw for the life of the process. These callers are
+  // per-sample loops that a visualiser runs every frame, and two RNG calls per
+  // sample there - which is what the Cromite version does - is a real cost in
+  // a browser that claims efficiency as the point.
+  //
+  // It is per process, so with site isolation it is per site: one site reads
+  // one consistent answer however often it asks, two sites read different
+  // answers, and the answer is new the next time the process is. Per document
+  // would vary more, but RealtimeAnalyser has no document to hand, and an
+  // analyser that disagreed with an offline render on the same page would be a
+  // signal of its own.
+  //
+  // A part in ten thousand, either way. Inaudible, and none of these paths
+  // feeds playback: the analyser getters produce visualisation data, and the
+  // offline path is a rendered result whose gain moves by 0.01%.
+  static const float kFactor =
+      base::FeatureList::IsEnabled(features::kAeriumAudioNoise)
+          ? 1.0f + static_cast<float>((base::RandDouble() - 0.5) * 0.0002)
+          : 1.0f;
+  return value * kFactor;
+}
+===AERIUM-SPLIT===
+
+  // Aerium: scale every sample in this buffer by the process-wide audio noise
+  // factor. Called on the result of an offline render, which is the buffer an
+  // audio fingerprint is normally computed from.
+  void AeriumAddAudioNoise();
+===AERIUM-SPLIT===
+void AudioBuffer::AeriumAddAudioNoise() {
+  for (unsigned channel = 0; channel < channels_.size(); ++channel) {
+    NotShared<DOMFloat32Array> array = getChannelData(channel);
+    if (!array) {
+      continue;
+    }
+    base::span<float> samples = array->AsSpan();
+    for (float& sample : samples) {
+      sample = BaseAudioContext::AeriumAudioNoise(sample);
+    }
+  }
+}
+
+===AERIUM-SPLIT===
+
+    // Aerium: the render result is what an audio fingerprint is computed from
+    // - the usual recipe is an oscillator through a DynamicsCompressor,
+    // rendered offline, then summed or hashed. Scaling here changes that sum
+    // and leaves playback of the same buffer inaudibly different.
+    rendered_buffer->AeriumAddAudioNoise();
+===AERIUM-SPLIT===
+  // Aerium: quantised the same way outputLatency() below already is. Upstream
+  // mitigated one of this pair and not the other, and there is no reason in
+  // the code for the asymmetry: base_latency_ is the audio hardware's buffer
+  // size over its sample rate, so it names the device as squarely as the
+  // measured latency does. 1ms rather than the 8ms outputLatency uses without
+  // microphone permission, because base latency is single-digit milliseconds
+  // and 8ms would round most of it to zero - collapsing the distinct values a
+  // page can also legitimately schedule against.
+  return std::round(base_latency_ / kOutputLatencyMaxPrecisionFactor) *
+         kOutputLatencyMaxPrecisionFactor;
+===AERIUM-SPLIT===
+      // Aerium: turned on. Chromium wrote this mitigation, wired it into
+      // NetworkInformation::type() and downlinkMax(), and then left it off,
+      // so navigator.connection reports the real connection type wherever the
+      // properties are exposed at all - which is Android and ChromeOS, per
+      // NetInfoDownlinkMax below. Whether a phone is on wifi or cellular, and
+      // which generation of cellular, is a signal about the device and where
+      // it is that a page gets for free and that nothing else in this browser
+      // covers.
+      name: "NetInfoConstantType",
+      status: "stable",
+===AERIUM-SPLIT===
+BASE_FEATURE(kAeriumAudioNoise, "AeriumAudioNoise", base::FEATURE_ENABLED_BY_DEFAULT);
+===AERIUM-SPLIT===
+BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE(kAeriumAudioNoise);
+AERIUM_AUDIO_PARTS_EOF
+
+# BaseAudioContext: the declaration and the helper itself.
+perl -0777 -pi -e '
+    BEGIN { $p = do { local $/; open my $f, "<", $ENV{AERIUM_AUDIO_PARTS} or die
+            "[aerium] FATAL: cannot read the audio parts file\n"; <$f> };
+            @P = split /^===AERIUM-SPLIT===\n/m, $p; }
+    die "[aerium] FATAL: base_audio_context.h already carries the Aerium audio "
+      . "change; a second pass would duplicate it\n"
+        if m!\QAeriumAudioNoise\E!;
+    s!  bool CheckExecutionContextAndThrowIfNecessary\(ExceptionState&\);\n!  bool CheckExecutionContextAndThrowIfNecessary(ExceptionState&);\n$P[0]!
+        or die "[aerium] FATAL: no CheckExecutionContextAndThrowIfNecessary "
+             . "declaration in base_audio_context.h\n";
+' third_party/blink/renderer/modules/webaudio/base_audio_context.h
+perl -0777 -pi -e '
+    BEGIN { $p = do { local $/; open my $f, "<", $ENV{AERIUM_AUDIO_PARTS} or die
+            "[aerium] FATAL: cannot read the audio parts file\n"; <$f> };
+            @P = split /^===AERIUM-SPLIT===\n/m, $p; }
+    die "[aerium] FATAL: base_audio_context.cc already carries the Aerium audio "
+      . "change; a second pass would duplicate it\n"
+        if m!\QAeriumAudioNoise\E!;
+    s!\#include "base/metrics/histogram_functions\.h"\n!\#include "base/feature_list.h"\n\#include "base/metrics/histogram_functions.h"\n\#include "base/rand_util.h"\n!
+        or die "[aerium] FATAL: base_audio_context.cc no longer includes "
+             . "base/metrics/histogram_functions.h\n";
+    s!\#include "third_party/blink/public/mojom/devtools/console_message\.mojom-blink\.h"\n!\#include "third_party/blink/public/common/features.h"\n\#include "third_party/blink/public/mojom/devtools/console_message.mojom-blink.h"\n!
+        or die "[aerium] FATAL: base_audio_context.cc no longer includes the "
+             . "console_message mojom header\n";
+    s!(LocalDOMWindow\* BaseAudioContext::GetWindow\(\) const \{\n  return To<LocalDOMWindow>\(GetExecutionContext\(\)\);\n\}\n)!$1 . $P[1]!e
+        or die "[aerium] FATAL: BaseAudioContext::GetWindow no longer has the "
+             . "body this inserts after\n";
+' third_party/blink/renderer/modules/webaudio/base_audio_context.cc
+
+# AudioBuffer: the per-buffer pass.
+perl -0777 -pi -e '
+    BEGIN { $p = do { local $/; open my $f, "<", $ENV{AERIUM_AUDIO_PARTS} or die
+            "[aerium] FATAL: cannot read the audio parts file\n"; <$f> };
+            @P = split /^===AERIUM-SPLIT===\n/m, $p; }
+    die "[aerium] FATAL: audio_buffer.h already carries the Aerium audio "
+      . "change; a second pass would duplicate it\n"
+        if m!\QAeriumAddAudioNoise\E!;
+    s!  std::unique_ptr<SharedAudioBuffer> CreateSharedAudioBuffer\(\);\n!  std::unique_ptr<SharedAudioBuffer> CreateSharedAudioBuffer();\n$P[2]!
+        or die "[aerium] FATAL: no CreateSharedAudioBuffer declaration in "
+             . "audio_buffer.h\n";
+' third_party/blink/renderer/modules/webaudio/audio_buffer.h
+perl -0777 -pi -e '
+    BEGIN { $p = do { local $/; open my $f, "<", $ENV{AERIUM_AUDIO_PARTS} or die
+            "[aerium] FATAL: cannot read the audio parts file\n"; <$f> };
+            @P = split /^===AERIUM-SPLIT===\n/m, $p; }
+    die "[aerium] FATAL: audio_buffer.cc already carries the Aerium audio "
+      . "change; a second pass would duplicate it\n"
+        if m!\QAeriumAddAudioNoise\E!;
+    s!(NotShared<DOMFloat32Array> AudioBuffer::getChannelData\(\n    unsigned channel_index,\n    ExceptionState& exception_state\) \{)!$P[3] . $1!e
+        or die "[aerium] FATAL: no two-argument AudioBuffer::getChannelData "
+             . "definition to insert before\n";
+' third_party/blink/renderer/modules/webaudio/audio_buffer.cc
+
+# OfflineAudioContext: the render result.
+perl -0777 -pi -e '
+    BEGIN { $p = do { local $/; open my $f, "<", $ENV{AERIUM_AUDIO_PARTS} or die
+            "[aerium] FATAL: cannot read the audio parts file\n"; <$f> };
+            @P = split /^===AERIUM-SPLIT===\n/m, $p; }
+    die "[aerium] FATAL: offline_audio_context.cc already carries the Aerium audio "
+      . "change; a second pass would duplicate it\n"
+        if m!\QAeriumAddAudioNoise\E!;
+    s!\#include "third_party/blink/renderer/modules/webaudio/audio_listener\.h"\n!\#include "third_party/blink/renderer/modules/webaudio/audio_buffer.h"\n\#include "third_party/blink/renderer/modules/webaudio/audio_listener.h"\n!
+        or die "[aerium] FATAL: offline_audio_context.cc no longer includes "
+             . "audio_listener.h\n";
+    s!(    DCHECK\(rendered_buffer\);\n    if \(\!rendered_buffer\) \{\n      return;\n    \}\n)!$1 . $P[4]!e
+        or die "[aerium] FATAL: FireCompletionEvent no longer null-checks "
+             . "rendered_buffer the way this inserts after\n";
+' third_party/blink/renderer/modules/webaudio/offline_audio_context.cc
+
+# RealtimeAnalyser: the four read-back paths.
+perl -0777 -pi -e '
+    die "[aerium] FATAL: realtime_analyser.cc already carries the Aerium audio "
+      . "change; a second pass would duplicate it\n"
+        if m!\QAeriumAudioNoise\E!;
+    s!\#include "third_party/blink/renderer/platform/audio/audio_bus\.h"\n!\#include "third_party/blink/renderer/modules/webaudio/base_audio_context.h"\n\#include "third_party/blink/renderer/platform/audio/audio_bus.h"\n!
+        or die "[aerium] FATAL: realtime_analyser.cc no longer includes "
+             . "platform/audio/audio_bus.h\n";
+    s!      destination\[i\] = static_cast<float>\(db_mag\);\n!      destination[i] =\n          BaseAudioContext::AeriumAudioNoise(static_cast<float>(db_mag));\n!
+        or die "[aerium] FATAL: GetFloatFrequencyData no longer writes a plain "
+             . "static_cast<float>(db_mag)\n";
+    s!      const double scaled_value =\n          UCHAR_MAX \* \(db_mag - min_decibels\) \* range_scale_factor;\n!      const double scaled_value =\n          BaseAudioContext::AeriumAudioNoise(static_cast<float>(\n              UCHAR_MAX * (db_mag - min_decibels) * range_scale_factor));\n!
+        or die "[aerium] FATAL: GetByteFrequencyData no longer scales db_mag "
+             . "the way this expects\n";
+    s!      float value =\n          input_buffer_\[\(i \+ write_index - fft_size \+ kInputBufferSize\) %\n                        kInputBufferSize\];\n!      const float value = BaseAudioContext::AeriumAudioNoise(\n          input_buffer_[(i + write_index - fft_size + kInputBufferSize) %\n                        kInputBufferSize]);\n!
+        or die "[aerium] FATAL: GetFloatTimeDomainData no longer reads the "
+             . "input buffer the way this expects\n";
+    s!      const float value =\n          input_buffer_\[\(i \+ write_index - fft_size \+ kInputBufferSize\) %\n                        kInputBufferSize\];\n!      const float value = BaseAudioContext::AeriumAudioNoise(\n          input_buffer_[(i + write_index - fft_size + kInputBufferSize) %\n                        kInputBufferSize]);\n!
+        or die "[aerium] FATAL: GetByteTimeDomainData no longer reads the "
+             . "input buffer the way this expects\n";
+' third_party/blink/renderer/modules/webaudio/realtime_analyser.cc
+
+# AudioContext::baseLatency.
+perl -0777 -pi -e '
+    BEGIN { $p = do { local $/; open my $f, "<", $ENV{AERIUM_AUDIO_PARTS} or die
+            "[aerium] FATAL: cannot read the audio parts file\n"; <$f> };
+            @P = split /^===AERIUM-SPLIT===\n/m, $p; }
+    die "[aerium] FATAL: audio_context.cc already carries the Aerium audio "
+      . "change; a second pass would duplicate it\n"
+        if m!\Qbase_latency_ / kOutputLatencyMaxPrecisionFactor\E!;
+    s!  return base_latency_;\n!$P[5]!
+        or die "[aerium] FATAL: AudioContext::baseLatency no longer returns "
+             . "base_latency_ directly\n";
+' third_party/blink/renderer/modules/webaudio/audio_context.cc
+
+# navigator.connection.type and downlinkMax.
+perl -0777 -pi -e '
+    BEGIN { $p = do { local $/; open my $f, "<", $ENV{AERIUM_AUDIO_PARTS} or die
+            "[aerium] FATAL: cannot read the audio parts file\n"; <$f> };
+            @P = split /^===AERIUM-SPLIT===\n/m, $p; }
+    die "[aerium] FATAL: runtime_enabled_features.json5 already carries the Aerium audio "
+      . "change; a second pass would duplicate it\n"
+        if m!\QAerium: turned on\E!;
+    s!      name: "NetInfoConstantType",\n!$P[6]!
+        or die "[aerium] FATAL: no NetInfoConstantType entry in "
+             . "runtime_enabled_features.json5\n";
+' third_party/blink/renderer/platform/runtime_enabled_features.json5
+
+# The feature itself, beside the time zone one added above. perl rather than
+# sed_i, and with the same already-ran guard as everything else here: sed_i
+# only notices a substitution that changed nothing, and an "append after this
+# line" whose anchor survives its own insertion changes something every time it
+# runs. The guard is what makes a second pass fail instead of duplicating.
+perl -0777 -pi -e '
+    BEGIN { $p = do { local $/; open my $f, "<", $ENV{AERIUM_AUDIO_PARTS} or die
+            "[aerium] FATAL: cannot read the audio parts file\n"; <$f> };
+            @P = split /^===AERIUM-SPLIT===\n/m, $p; }
+    die "[aerium] FATAL: features.cc already declares kAeriumAudioNoise; a "
+      . "second pass would duplicate it\n"
+        if m!kAeriumAudioNoise!;
+    s!(kAeriumTimeZoneIdParam\{&kAeriumTimeZone, kAeriumTimeZoneId, "random"\};\n)!$1 . $P[7]!e
+        or die "[aerium] FATAL: no kAeriumTimeZoneIdParam definition in "
+             . "features.cc to declare the audio feature after\n";
+' third_party/blink/common/features.cc
+perl -0777 -pi -e '
+    BEGIN { $p = do { local $/; open my $f, "<", $ENV{AERIUM_AUDIO_PARTS} or die
+            "[aerium] FATAL: cannot read the audio parts file\n"; <$f> };
+            @P = split /^===AERIUM-SPLIT===\n/m, $p; }
+    die "[aerium] FATAL: features.h already declares kAeriumAudioNoise; a "
+      . "second pass would duplicate it\n"
+        if m!kAeriumAudioNoise!;
+    s!(BLINK_COMMON_EXPORT extern const base::FeatureParam<std::string> kAeriumTimeZoneIdParam;\n)!$1 . $P[8]!e
+        or die "[aerium] FATAL: no kAeriumTimeZoneIdParam declaration in "
+             . "features.h to declare the audio feature after\n";
+' third_party/blink/public/common/features.h
+
+rm -f "$AERIUM_AUDIO_PARTS"
+unset AERIUM_AUDIO_PARTS
+
+echo "[aerium] audio fingerprint noise applied"

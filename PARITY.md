@@ -36,11 +36,23 @@ Legend: ✅ shipped · 🟡 partial · ❌ gap · — not applicable on this pla
 | navigator.hardwareConcurrency reports 2 | ✅ | ✅ | ✅ |
 | High-entropy client hints not populated | ✅ | ✅ | ✅ |
 | Time zone override (off by default, chrome://flags) | ✅ | ✅ | ✅ |
+| Audio fingerprint noise (analyser reads, offline render) | ✅ | ✅ | ✅ |
+| AudioContext.baseLatency quantised to 1ms | ✅ | ✅ | ✅ |
+| navigator.connection.type reports unknown | — | — | ✅ |
 | Safe Browsing off by default | ✅ | ✅ | ✅ |
 | Widevine off, toggleable | ✅ | ✅ | ✅ |
 | Passwords and autofill out of the menus and settings | ✅ | ✅ | ✅ |
 | Payment probing off by default | ✅ | ✅ | ✅ |
 | Preloading, optimization guide, domain reliability off | ✅ | ✅ | ✅ |
+
+navigator.connection: the row above is marked not-applicable on desktop rather
+than missing. `type` and `downlinkMax` are exposed only where
+`NetInfoDownlinkMax` is stable, which upstream sets for Android and ChromeOS
+only, so there is nothing on desktop for the mitigation to hide — the switch is
+turned on there too, for the day that changes. The rest of that interface is
+deliberately untouched on every platform: `RoundRtt()` and `RoundMbps()` already
+bucket `rtt` and `downlink` and multiply by a per-host random factor first, so
+two sites already read different values.
 
 Fingerprinting defaults: desktop reaches these through flags seeded in
 `default-flags.patch`, so they are listed in `chrome://flags` and one click to
