@@ -891,6 +891,43 @@ sed_i 's|^                ? context.getColor(R.color.toolbar_background_incognit
 sed_i 's|^                ? context.getColor(R.color.default_bg_color_dark)$|                ? incognitoSurfaceColor(context, R.color.default_bg_color_dark)|' $CC
 sed_i 's|^            return context.getColor(R.color.default_bg_color_dark);$|            return incognitoSurfaceColor(context, R.color.default_bg_color_dark);|' $CC
 
+# The bottom bar is a different helper class, and was missed.
+#
+# Reported on issue #5: with the bottom bar on, incognito stays Chromium's dark
+# grey while everything else follows the pure black switch. The bar is not
+# themed by the block above because it does not go through ChromeColors at all.
+# BottomBarUtils.getBottomBarBackgroundColor() calls
+# IncognitoColors.getColorSurfaceContainerHigh(), and IncognitoColors is a
+# second class with exactly the same shape as ChromeColors: the non-incognito
+# branch goes through SemanticColorUtils, which resolves a theme attribute and
+# therefore picks the overlay up, while the incognito branch reaches for a fixed
+# gm3_baseline_*_dark colour resource that no overlay can reach.
+#
+# Which of its methods follow the switch is decided by a rule rather than by
+# what the reporter happened to look at: a getter follows if the attribute its
+# non-incognito branch resolves is one the overlay blackens. That is true of the
+# five surface getters below and of nothing else in the file.
+#
+# getInteractableChipBgColor is deliberately left alone even though it names the
+# same resource as getColorSurfaceContainerHigh. Its light-mode branch resolves
+# colorInteractableChipBg, which the overlay does not touch, and a chip painted
+# the same black as the surface behind it is an invisible chip. That is also why
+# the container-high substitution below is scoped to its own method instead of
+# matching the line, which appears twice.
+IC=components/browser_ui/styles/android/java/src/org/chromium/components/browser_ui/styles/IncognitoColors.java
+sed_i 's|^import android.content.res.ColorStateList;$|&\nimport android.util.TypedValue;|' $IC
+sed_i 's|^import androidx.annotation.ColorInt;$|&\nimport androidx.annotation.ColorRes;|' $IC
+sed_i 's|^public class IncognitoColors {$|&\n    /**\n     * Aerium: the incognito colour named by the pure black overlay, or {@code\n     * fallbackColorRes} when that overlay is not on this context'"'"'s theme. The\n     * same helper as the one in ChromeColors, and read just as defensively -\n     * these are called with whatever context the caller has. See theme.sh.\n     */\n    private static @ColorInt int aeriumIncognitoSurface(\n            Context context, @ColorRes int fallbackColorRes) {\n        TypedValue value = new TypedValue();\n        if (context.getTheme().resolveAttribute(R.attr.aeriumIncognitoBgColor, value, true)\n                \&\& value.type >= TypedValue.TYPE_FIRST_COLOR_INT\n                \&\& value.type <= TypedValue.TYPE_LAST_COLOR_INT) {\n            return value.data;\n        }\n        return context.getColor(fallbackColorRes);\n    }\n|' \
+    $IC
+sed_i 's|^                ? context.getColor(R.color.gm3_baseline_surface_dark)$|                ? aeriumIncognitoSurface(context, R.color.gm3_baseline_surface_dark)|' $IC
+sed_i 's|^                ? context.getColor(R.color.gm3_baseline_surface_bright_dark)$|                ? aeriumIncognitoSurface(context, R.color.gm3_baseline_surface_bright_dark)|' $IC
+sed_i 's|^                ? context.getColor(R.color.gm3_baseline_surface_container_highest_dark)$|                ? aeriumIncognitoSurface(context, R.color.gm3_baseline_surface_container_highest_dark)|' $IC
+sed_i 's|^                ? context.getColor(R.color.gm3_baseline_surface_container_low_dark)$|                ? aeriumIncognitoSurface(context, R.color.gm3_baseline_surface_container_low_dark)|' $IC
+# Scoped to getColorSurfaceContainerHigh, because the chip getter names the
+# same resource and must keep it.
+sed_i '/^    public static @ColorInt int getColorSurfaceContainerHigh(Context context, boolean isIncognito) {$/,/^    }$/s|^                ? context.getColor(R.color.gm3_baseline_surface_container_high_dark)$|                ? aeriumIncognitoSurface(context, R.color.gm3_baseline_surface_container_high_dark)|' \
+    $IC
+
 # --- The same overlay on the pre-inflated toolbar.
 #
 # There are two applyThemeOverlays in the tree. The one above, on
