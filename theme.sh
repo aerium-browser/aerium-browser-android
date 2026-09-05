@@ -5416,6 +5416,15 @@ cat > chrome/browser/aerium_flag_entries.h <<'AERIUM_FLAG_ENTRIES_EOF'
      "changes that hash without changing anything you can hear, and none of "
      "these paths feeds playback. On by default. Aerium flag.",
      kOsAll, FEATURE_VALUE_TYPE(blink::features::kAeriumAudioNoise)},
+    {"aerium-local-font-access",
+     "Local Font Access API",
+     "Let sites call window.queryLocalFonts() to read the list of fonts "
+     "installed on this computer, after asking permission. Off in Aerium: the "
+     "list is the strongest font fingerprint there is, and one prompt hands "
+     "over all of it. Firefox and Safari do not offer this API at all, and "
+     "Chrome does not offer it on Android. Turn it on if you use a design tool "
+     "in the browser that needs your fonts. Aerium flag.",
+     kOsAll, FEATURE_VALUE_TYPE(blink::features::kFontAccess)},
 #endif  // CHROME_BROWSER_AERIUM_FLAG_ENTRIES_H_
 AERIUM_FLAG_ENTRIES_EOF
 sed_i '/^const FeatureEntry kFeatureEntries\[\] = {$/i\
@@ -5765,3 +5774,60 @@ rm -f "$AERIUM_AUDIO_PARTS"
 unset AERIUM_AUDIO_PARTS
 
 echo "[aerium] audio fingerprint noise applied"
+
+# --- Take the font list away from window.queryLocalFonts().
+#
+# The desktop repos do this as aerium-local-font-access.patch. Here it changes
+# no behaviour - upstream already ships the API off on Android, which is the
+# whole point being made on the desktop side - and it is applied anyway so that
+# the two builds carry the same file and the same chrome://flags entry, and so
+# that a future upstream flip to "stable" on Android does not silently turn it
+# on here.
+#
+# The API returns every font installed on the device in one call. It is the
+# strongest font signal there is and the only one that does not have to be
+# measured a family at a time. Firefox and Safari do not implement it.
+#
+# Setting status to "" gives the generated blink::features::kFontAccess a
+# disabled default, and the json5 schema's copied_from_base_feature_if defaults
+# to "enabled_or_overridden", so the chrome://flags entry can turn the Blink
+# feature back on. That is the mechanism, not decoration.
+#
+# Not done here or on desktop: Cromite's Fonts-fingerprinting-mitigation.patch,
+# which addresses the other half - the measurement channel, where a page
+# renders text in a candidate family and compares widths. Its allowlist has no
+# Linux section, its Windows half reads private Skia internals, and its Android
+# counterpart is 3300 lines. That wants its own pass with an allowlist built
+# for the platforms this project ships, not a partial port that renders text
+# wrong.
+AERIUM_FONT_PART=$(mktemp)
+export AERIUM_FONT_PART
+cat > "$AERIUM_FONT_PART" <<'AERIUM_FONT_PART_EOF'
+      // Aerium: off, which is what Android already gets. This is
+      // window.queryLocalFonts() - the Local Font Access API - and it hands a
+      // page the complete list of fonts installed on the machine in one call,
+      // which is the strongest font signal there is and the only one that does
+      // not have to be measured a family at a time. Firefox and Safari do not
+      // implement it and upstream does not ship it on Android, so the desktop
+      // builds were the outlier among both their peers and their own siblings.
+      // Turn it back on at chrome://flags/#aerium-local-font-access; the entry
+      // exists because design tools are a real use for it.
+      name: "FontAccess",
+      status: "",
+AERIUM_FONT_PART_EOF
+perl -0777 -pi -e '
+    BEGIN { $ins = do { local $/; open my $f, "<", $ENV{AERIUM_FONT_PART} or die
+            "[aerium] FATAL: cannot read the font part file\n"; <$f> }; }
+    die "[aerium] FATAL: runtime_enabled_features.json5 already carries the "
+      . "Aerium FontAccess change; a second pass would duplicate it\n"
+        if m!aerium-local-font-access!;
+    s!      name: "FontAccess",\n      status: \{"Android": "", "default": "stable"\},\n!$ins!
+        or die "[aerium] FATAL: the FontAccess entry in "
+             . "runtime_enabled_features.json5 no longer reads as an "
+             . "Android-off, desktop-stable feature - re-read it before "
+             . "changing it\n";
+' third_party/blink/renderer/platform/runtime_enabled_features.json5
+rm -f "$AERIUM_FONT_PART"
+unset AERIUM_FONT_PART
+
+echo "[aerium] local font access disabled"

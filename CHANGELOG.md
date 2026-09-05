@@ -8,6 +8,13 @@ behind any of this.
 
 **Fingerprinting**
 
+- `window.queryLocalFonts()` is off. The Local Font Access API returns every
+  font installed on your machine in one call - the strongest font fingerprint
+  there is - and one permission click hands over all of it. Firefox and Safari
+  do not offer it at all and Chrome does not offer it on Android, so the
+  desktop builds were the odd one out. Turn it back on at
+  `chrome://flags/#aerium-local-font-access` if a design tool in your browser
+  needs your fonts.
 - New: audio fingerprint noise, on by default at
   `chrome://flags/#aerium-audio-noise`. The usual audio fingerprint builds an
   OfflineAudioContext, runs an oscillator through a compressor, renders it and
