@@ -15,18 +15,14 @@ behind any of this.
 
 **Fixed**
 
-- The launcher icon is Aerium's, and it fills the tile. Two separate things
-  were wrong. The step that puts our artwork into the build wrote it to a
-  directory the build does not read, so every release so far has shipped
-  upstream's icon rather than ours - which is why it looked unlike the rest of
-  the app, and unlike the fork Aerium is built from. And the renderer behind it
-  drew the mark at about a third of the tile's area on a white field, so even
-  once connected it would have looked small and bordered. Both are fixed: the
-  Aerium mark now covers the tile, on its own darkest navy, with no white left
-  to read as a border. Reported in
+- The launcher icon is bigger and no longer sits on a white plate. The mark is
+  a full-colour disc that is already its own tile, and it was being drawn small
+  on a second, white one - a third of the area of the tile, with the rest of it
+  white. It now fills the tile, on its own darkest navy rather than white, so
+  there is no white left to read as a border. Reported in
   [#13](https://github.com/aerium-browser/aerium-browser-android/issues/13).
-  The themed (monochrome) icon is deliberately kept small: the system tints
-  that one flat colour, so a mark filling the tile there just becomes a blob.
+  The themed (monochrome) icon is deliberately unchanged: the system tints that
+  one flat colour, so a mark filling the tile there just becomes a blob.
 - Third-party autofill can no longer be switched off for a whole session by one
   unlucky moment at startup. Aerium delegates form filling to whichever autofill
   service you picked in Android, and the check for whether that service is

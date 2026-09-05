@@ -2,50 +2,28 @@
 
 # --- Launcher icons, and native libraries left uncompressed in the APK.
 #
-# The resource directory is res_vanadium_base, and it has to be: that is the
-# name chrome/android/BUILD.gn lists, file by file, in the Vanadium branding
-# patch. This block used to write to res_aerium_base instead - a directory it
-# created itself, that nothing in BUILD.gn, any .gni, or theme.sh has ever
-# referenced. The whole block was therefore dead. The two XMLs went somewhere
-# the build does not look, and `find res_aerium_base -name '*.png'` matched
-# nothing, because the only files in there were the two XMLs that had just been
-# copied in. icons.sh has never once run.
+# res_aerium_base is the correct name and is NOT a directory this script
+# invents. build.sh rewrites the Vanadium patches before applying them -
+# `replace "$SCRIPT_DIR/vanadium/patches" "vanadium" "aerium"` and its two
+# case variants, immediately before the `git am` - so the branding patch that
+# upstream writes against chrome/android/java/res_vanadium_base creates
+# res_aerium_base in the built tree, and the entries it adds to
+# chrome/android/BUILD.gn are renamed to match. By the time this runs, the
+# directory exists and holds fifteen PNGs across five densities.
 #
-# So the launcher icon, the adaptive layers and the themed icon have all been
-# Vanadium's artwork, untouched, in every build. That is what android issue 13
-# is looking at - not an Aerium icon drawn badly, but Vanadium's icon, which is
-# also why the reporter said the sibling fork's icon "is still normal". The
-# icons.sh rewrite in the previous commit was correct and reached nothing.
+# Worth writing down because the tree and the checked-in patch disagree, and
+# grepping this repository for res_aerium_base finds only these lines: the
+# wiring lives in a patch that says res_vanadium_base right up until the moment
+# it is applied. Reading either half alone suggests this block is dead code
+# writing to a directory nothing references. It is not.
 #
-# Writing over Vanadium's files in place is what icons.sh was built for - its
-# first line calls itself a renderer of the logo "over an existing icon PNG,
-# keeping its dimensions", which only makes sense against the 15 PNGs that
-# patch creates across the five densities.
-#
-# Guarded rather than left to fail quietly again, because the failure mode here
-# is silence: a `find` that matches nothing exits 0 and prints nothing, so a
-# rename upstream or a typo here looks exactly like success. The two checks
-# below name which of the two happened. Both are skipped when the directory and
-# BUILD.gn are absent, which is the state devutils/verify-seds.sh runs in - its
-# tree holds only fetched sed targets, and chrome/android/BUILD.gn is not one.
-AERIUM_ICON_RES=chrome/android/java/res_vanadium_base
-if [ -d "$AERIUM_ICON_RES" ]; then
-    cp "$SCRIPT_DIR/res/drawable/themed_app_icon.xml" "$AERIUM_ICON_RES/drawable/themed_app_icon.xml"
-    cp "$SCRIPT_DIR/res/layered_app_icon_foreground.xml" "$AERIUM_ICON_RES/mipmap-nodpi/layered_app_icon_foreground.xml"
-    _aerium_icons=$(find "$AERIUM_ICON_RES" -type f -name '*.png' | wc -l)
-    if [ "$_aerium_icons" -eq 0 ]; then
-        echo "[aerium] FATAL: no PNGs under $AERIUM_ICON_RES - the launcher" \
-             "icon would silently stay upstream's" >&2
-        return 1
-    fi
-    for icon in $(find "$AERIUM_ICON_RES" -type f -name '*.png'); do "$SCRIPT_DIR/res/icons.sh" "$icon"; done
-    echo "[aerium] launcher icons: logo rendered over $_aerium_icons PNGs in $AERIUM_ICON_RES"
-    unset _aerium_icons
-elif [ -f chrome/android/BUILD.gn ]; then
-    echo "[aerium] FATAL: $AERIUM_ICON_RES is missing from a real tree -" \
-         "upstream renamed the icon resource directory" >&2
-    return 1
-fi
+# mkdir -p is kept for the two XML copies, which land in subdirectories the
+# branding patch does not necessarily create.
+mkdir -p chrome/android/java/res_aerium_base/drawable chrome/android/java/res_aerium_base/mipmap-nodpi
+cp $SCRIPT_DIR/res/drawable/themed_app_icon.xml chrome/android/java/res_aerium_base/drawable/themed_app_icon.xml
+cp $SCRIPT_DIR/res/layered_app_icon_foreground.xml chrome/android/java/res_aerium_base/mipmap-nodpi/layered_app_icon_foreground.xml
+for icon in $(find chrome/android/java/res_aerium_base -type f -name '*.png'); do $SCRIPT_DIR/res/icons.sh $icon; done
+echo "[aerium] launcher icons: rendered over $(find chrome/android/java/res_aerium_base -type f -name '*.png' | wc -l) PNGs"
 sed -i 's|<application |<application android:extractNativeLibs="false" |' chrome/android/java/AndroidManifest.xml
 # sed -i 's|Google LLC|jqssun, Google LLC|' chrome/browser/ui/android/strings/android_chrome_strings.grd
 
