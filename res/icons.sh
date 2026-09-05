@@ -5,35 +5,59 @@
 svg=$(dirname "$0")/aerium.svg
 w=$(identify -format %w "$1")
 
-# The field the logo sits on. White, so the colour icon reads the way the
-# themed one does: a small mark centred on a plain light tile, like the stock
-# Phone, Messages and Camera icons next to it.
+# The field behind the mark.
 #
-# White here is not the white-corner bug coming back. That bug was a logo
-# scaled to fill the whole tile, drawn on transparency, so all that showed of
-# the background was four mismatched corners - an artifact. This is one flat
-# field behind a mark that no longer reaches the edges, which is a deliberate
-# and uniform look. What matters is that the field is painted at all: a legacy
-# icon left transparent gets dropped onto whatever plate the launcher supplies,
-# which is not a choice we control.
-bg='#FFFFFF'
+# This was #FFFFFF, on the reasoning that a small mark on a plain light tile
+# reads like the stock Phone, Messages and Camera icons next to it. Reported
+# against that build (android issue 13, on a 1080x2400 / 392dpi Redmi Note
+# 11S): "make it bigger and no white border, the current one is very goofy".
+# It is the right call for a glyph - a monochrome outline needs a field to sit
+# on. aerium.svg is not a glyph. It is a full-colour disc that is already its
+# own tile, so putting it on a second tile draws a border around it, and the
+# smaller the disc the more of that border there is to see.
+#
+# Now the darkest navy of the mark itself (#111C42, the third swirl arm), so
+# the field is never a different colour from the thing on it. On a circular
+# mask the disc covers it completely and it is not visible at all; on a
+# squircle or square mask it fills the corners the disc cannot reach, in a
+# colour those corners already touch. Either way nothing white is left to
+# read as a border.
+bg='#111C42'
 
 # The logo is a circle that fills its whole 512 viewBox, so these percentages
 # are the circle's diameter as a share of the icon's width.
 #
-# 36 matches the 0.36 scale in layered_app_icon_foreground.xml. That drawable
-# is a 108dp canvas of which the launcher only shows the middle 72dp, so 36%
-# of 108dp is 38.9dp - a little over half of what you actually see.
+# An adaptive icon is a 108dp canvas of which the launcher shows the middle
+# 72dp, so a disc drawn at 72/108 = 66.7% has exactly the diameter of the
+# visible circle. That is the largest the mark can be without the mask cutting
+# into it, and it is what "bigger" means here: the previous 36% put the disc at
+# 38.9dp inside a 72dp tile, a little over half the width and just under a
+# third of the area, with the rest of the tile white.
 #
-# themed_app_icon.xml stays at 0.40 and is not rendered here. The two differ on
-# purpose: a flat tint lets the low-alpha edges of the monochrome fade into the
-# background, while the colour logo is opaque to its edge, so equal geometry
-# read as unequal size. See the comment in themed_app_icon.xml.
+# 68 rather than 66.7 so the disc passes the mask boundary by a fraction of a
+# dp instead of landing on it. Masks are antialiased and launchers do not all
+# use the same one; a disc that stops exactly at the edge can leave a hairline
+# of background, and a hairline is the artifact this is meant to remove.
+# Overshooting costs nothing, because what it clips is the outer edge of a disc
+# whose colour the background already matches.
 #
-# A legacy icon has no 108dp canvas: the whole PNG is what the launcher masks.
-# So the same on-screen size is 38.9/72 of the file, i.e. 54% rather than 36%.
-adaptive_pct=36
-legacy_pct=54
+# themed_app_icon.xml stays at 0.40 and is not rendered here. It must not
+# follow this change: the system tints that layer one flat colour, so a mark
+# filling the visible circle tints the whole tile and the icon becomes a
+# featureless blob - which is exactly what it did at 0.66 before. A monochrome
+# layer wants to be a small glyph on a field; that reasoning still holds for
+# it, and only for it. See the comment in that file.
+#
+# layered_app_icon_foreground.xml also stays at 0.36 and is likewise not
+# rendered here. Its <group> is stripped entirely when theme.sh derives the
+# search-widget drawable from it, so that scale reaches nothing that ships and
+# changing it would only break theme.sh's translateY anchor.
+#
+# A legacy icon has no 108dp canvas - the whole PNG is what the launcher masks
+# - so the equivalent of "fills the visible circle" is the full width of the
+# file.
+adaptive_pct=68
+legacy_pct=100
 
 # Draws the logo at $2 percent of the icon width, centred on background $3.
 # Pass 'none' for a transparent background.
@@ -61,9 +85,10 @@ case $(basename "$1") in
     #
     # These used to be drawn on transparency, which is what left four empty
     # corners around a circular logo and let the launcher fill them with a
-    # plate of its own choosing. They now get the same painted field as the
-    # adaptive background layer, so the two kinds of icon match and the tile
-    # is ours rather than the launcher's.
+    # plate of its own choosing. They get the painted field instead, so the
+    # corners are ours rather than the launcher's - and at 100% the disc
+    # inscribes the square exactly, so a circular mask lands on the disc edge
+    # and the field only shows in the corners of a square one.
     render_over "$1" $legacy_pct "$bg" ;;
 esac
 echo "aerium icon: $1 (${w}px)"
