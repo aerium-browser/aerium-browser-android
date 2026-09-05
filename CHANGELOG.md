@@ -4,7 +4,14 @@ Written for people using Aerium rather than for people building it. Each
 release on GitHub also links the full commit history if you want the detail
 behind any of this.
 
-## 152.0.7977.82 (next release)
+## 152.0.7977.84 (next release)
+
+**Base**
+
+- Updated to Chromium 152.0.7977.84, by way of Vanadium 152.0.7977.84.0. The
+  heading on this section previously said 152.0.7977.82, which was the version
+  the desktop builds were on - this build was on 152.0.7977.75 and is now
+  ahead of both.
 
 **Fingerprinting**
 
