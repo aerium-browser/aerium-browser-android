@@ -5182,3 +5182,238 @@ sed_i 's|^BASE_FEATURE(kThrottleUnimportantFrameRate, base::FEATURE_DISABLED_BY_
     components/performance_manager/features.cc
 
 echo "[aerium] performance_manager defaults applied"
+
+# --- Report a time zone other than the system's.
+#
+# The desktop repos do this as aerium-timezone.patch; this is the same change,
+# and the two are meant to produce byte-identical files.
+#
+# The system time zone is one of the strongest signals a page can read without
+# asking. It is stable, it survives clearing everything, it is the same in
+# incognito, and in most of the world it narrows a visitor to a handful of
+# countries before anything else has been measured.
+# Date.getTimezoneOffset() and Intl.DateTimeFormat().resolvedOptions().timeZone
+# both read it, and CreepJS builds part of its identifier from exactly that
+# pair. Bromite and Cromite both answer by lying; this is Aerium's version of
+# that answer.
+#
+# Off by default and offered in chrome://flags rather than Settings, because
+# unlike the canvas and client-rects noise above, the cost is visible: a
+# calendar, a booking site or a flight tracker will show times wrong by the
+# difference. Worth offering, not worth imposing.
+#
+# One zone per renderer process, chosen when the process starts - not per
+# navigation, which is what Cromite does. Vanadium's
+# 0123-enable-strict-site-isolation-by-default-on-Android.patch means a
+# renderer here is a site, so choosing once per process gives a site one
+# consistent answer across its frames and reloads while two sites get different
+# answers. A per-navigation reroll would give one site a time zone that moves
+# while you use it, which no real user has and which is itself a signal.
+#
+# The pool is 21 named IANA zones, one per whole-hour offset people actually
+# live on. ICU will answer "a zone at this offset" itself, via
+# createEnumerationForRawOffset(), and it is not used: for several offsets it
+# answers "Etc/GMT+5" and similar, and a browser reporting an Etc zone has
+# announced that it is lying.
+#
+# The mechanism is Chromium's own. TimeZoneController::SetTimeZoneOverride() is
+# what DevTools emulation uses, it is public, it swaps ICU's default zone and
+# notifies V8 and every worker - so Date and Intl cannot disagree and a page
+# cannot catch the browser out that way - and it returns an RAII handle.
+# Holding that handle for the life of the renderer is the whole implementation.
+# Nothing else in timezone_controller.cc changes: no locks are removed and no
+# members move, which is the part of Cromite's patch this deliberately does not
+# copy.
+#
+# It goes after the TimeZoneMonitor client is bound, not before, so a real
+# system time zone change still reaches OnTimeZoneChange and updates
+# host_timezone_id_ underneath the override - which is what makes turning the
+# flag off later restore the zone the phone is actually in.
+#
+# The inserted C++ lives in files rather than inline in the perl for the reason
+# the DoH block gives: the text is full of braces, quotes and apostrophes, and
+# a perl program inside a shell single-quoted string is where an escaping
+# mistake hides. This way the perl program contains no quoting of its own.
+AERIUM_TZ_HELPERS=$(mktemp)
+AERIUM_TZ_INIT=$(mktemp)
+export AERIUM_TZ_HELPERS AERIUM_TZ_INIT
+cat > "$AERIUM_TZ_HELPERS" <<'AERIUM_TZ_HELPERS_EOF'
+// Aerium: the pool the randomised time zone is drawn from. One populous,
+// unambiguous IANA zone per whole-hour offset, rather than whatever ICU's
+// createEnumerationForRawOffset() happens to sort first - that answers with
+// "Etc/GMT+5" and friends for several offsets, and a browser reporting an Etc
+// zone has announced that it is lying. Offsets nobody lives on are left out
+// for the same reason.
+constexpr auto kAeriumTimeZoneChoices = std::to_array<const char*>({
+    "Pacific/Honolulu",     // UTC-10
+    "America/Anchorage",    // UTC-9
+    "America/Los_Angeles",  // UTC-8
+    "America/Denver",       // UTC-7
+    "America/Chicago",      // UTC-6
+    "America/New_York",     // UTC-5
+    "America/Halifax",      // UTC-4
+    "America/Sao_Paulo",    // UTC-3
+    "Atlantic/Azores",      // UTC-1
+    "Europe/London",        // UTC+0
+    "Europe/Berlin",        // UTC+1
+    "Europe/Athens",        // UTC+2
+    "Europe/Istanbul",      // UTC+3
+    "Asia/Dubai",           // UTC+4
+    "Asia/Karachi",         // UTC+5
+    "Asia/Dhaka",           // UTC+6
+    "Asia/Bangkok",         // UTC+7
+    "Asia/Shanghai",        // UTC+8
+    "Asia/Tokyo",           // UTC+9
+    "Australia/Sydney",     // UTC+10
+    "Pacific/Auckland",     // UTC+12
+});
+
+// Aerium: which zone this renderer should claim, or a null String for none.
+String AeriumTimeZoneOverrideId() {
+  const std::string zone = features::kAeriumTimeZoneIdParam.Get();
+  if (zone.empty()) {
+    return String();
+  }
+  if (zone != "random") {
+    return String(zone);
+  }
+  return String(base::RandomChoice(kAeriumTimeZoneChoices));
+}
+
+AERIUM_TZ_HELPERS_EOF
+cat > "$AERIUM_TZ_INIT" <<'AERIUM_TZ_INIT_EOF'
+
+  // Aerium: claim a time zone that is not the system's, for the life of this
+  // renderer process. Here rather than per navigation because the answer has
+  // to be one answer: with site isolation a renderer is a site, so a zone
+  // chosen once per process is a zone that is stable for a site and differs
+  // between sites, which is the shape a real user has and a per-navigation
+  // reroll does not.
+  //
+  // The client is bound above first so a genuine system time zone change still
+  // reaches OnTimeZoneChange and updates host_timezone_id_ underneath the
+  // override, which is what makes turning the feature off mid-session restore
+  // the right zone rather than a stale one.
+  if (base::FeatureList::IsEnabled(features::kAeriumTimeZone)) {
+    const String aerium_zone = AeriumTimeZoneOverrideId();
+    if (!aerium_zone.empty()) {
+      TimeZoneOverrideResult aerium_result = SetTimeZoneOverride(aerium_zone);
+      if (aerium_result.status == TimeZoneOverrideStatus::kSuccess) {
+        // The handle is an RAII object whose destructor clears the override,
+        // so the override lasts exactly as long as something holds it. Parked
+        // in a NoDestructor because "as long as the renderer" is the intended
+        // lifetime and a static with a destructor is not allowed here.
+        [[maybe_unused]] static base::NoDestructor<
+            std::unique_ptr<TimeZoneOverride>>
+            aerium_override(std::move(aerium_result.handle));
+      } else {
+        // Not fatal: a bad zone id from the feature param should cost the user
+        // the override, not the renderer.
+        LOG(WARNING) << "Aerium: cannot use time zone override '"
+                     << aerium_zone.Utf8() << "'";
+      }
+    }
+  }
+AERIUM_TZ_INIT_EOF
+perl -0777 -pi -e '
+    BEGIN {
+        local $/;
+        open my $fh, "<", $ENV{AERIUM_TZ_HELPERS}
+            or die "[aerium] FATAL: cannot read the time zone helpers file\n";
+        $helpers = <$fh>;
+        close $fh;
+        open $fh, "<", $ENV{AERIUM_TZ_INIT}
+            or die "[aerium] FATAL: cannot read the time zone init file\n";
+        $init = <$fh>;
+        close $fh;
+    }
+    die "[aerium] FATAL: timezone_controller.cc already mentions kAeriumTimeZone "
+      . "- this block has run before; a second pass would duplicate it\n"
+        if m!kAeriumTimeZone!;
+    s!\#include "base/command_line\.h"\n\#include "base/feature_list\.h"\n!\#include <array>\n\n\#include "base/command_line.h"\n\#include "base/feature_list.h"\n\#include "base/no_destructor.h"\n\#include "base/rand_util.h"\n!
+        or die "[aerium] FATAL: timezone_controller.cc no longer opens with the "
+             . "command_line and feature_list includes - re-read it\n";
+    s!\n\}  // namespace\n\nTimeZoneController::TimeZoneController!"\n" . $helpers . "}  // namespace\n\nTimeZoneController::TimeZoneController"!e
+        or die "[aerium] FATAL: no anonymous namespace ending before the "
+             . "TimeZoneController constructor in timezone_controller.cc\n";
+    s!( {2}monitor->AddClient\(instance\(\)\.receiver_\.BindNewPipeAndPassRemote\(\)\);\n)\}!$1 . $init . "}"!e
+        or die "[aerium] FATAL: TimeZoneController::Init no longer ends by "
+             . "binding the TimeZoneMonitor client - re-read it\n";
+' third_party/blink/renderer/core/timezone/timezone_controller.cc
+rm -f "$AERIUM_TZ_HELPERS" "$AERIUM_TZ_INIT"
+unset AERIUM_TZ_HELPERS AERIUM_TZ_INIT
+
+# The feature and its parameter, beside the WebGL spoofing pair added above so
+# the two Aerium blocks stay together and the file matches the desktop one.
+sed_i '/^const base::FeatureParam<std::string> kSpoofWebGLVendorParam{\&kSpoofWebGLInfo, kSpoofWebGLVendor, " "};$/a\
+BASE_FEATURE(kAeriumTimeZone, "AeriumTimeZone", base::FEATURE_DISABLED_BY_DEFAULT);\
+const char kAeriumTimeZoneId[] = "zone";\
+const base::FeatureParam<std::string> kAeriumTimeZoneIdParam{\&kAeriumTimeZone, kAeriumTimeZoneId, "random"};' \
+    third_party/blink/common/features.cc
+sed_i '/^BLINK_COMMON_EXPORT extern const base::FeatureParam<std::string> kSpoofWebGLVendorParam;$/a\
+BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE(kAeriumTimeZone);\
+BLINK_COMMON_EXPORT extern const char kAeriumTimeZoneId[];\
+BLINK_COMMON_EXPORT extern const base::FeatureParam<std::string> kAeriumTimeZoneIdParam;' \
+    third_party/blink/public/common/features.h
+
+# chrome://flags. Two new headers rather than editing the middle of
+# about_flags.cc, so a version bump has one line of ours to reconcile in that
+# file instead of an entry wedged between upstream's. This is the same shape
+# ungoogled-chromium uses on desktop, and the files are byte-identical to the
+# ones the desktop patch adds.
+cat > chrome/browser/aerium_flag_choices.h <<'AERIUM_FLAG_CHOICES_EOF'
+// Aerium's own chrome://flags variations, kept separate from
+// ungoogled_flag_choices.h and bromite_flag_choices.h so that neither project's
+// file has to be rebased around ours.
+
+#ifndef CHROME_BROWSER_AERIUM_FLAG_CHOICES_H_
+#define CHROME_BROWSER_AERIUM_FLAG_CHOICES_H_
+const FeatureEntry::FeatureParam kAeriumTimeZone_Random[] = {
+    {blink::features::kAeriumTimeZoneId, "random"},
+};
+const FeatureEntry::FeatureParam kAeriumTimeZone_Utc[] = {
+    {blink::features::kAeriumTimeZoneId, "UTC"},
+};
+const FeatureEntry::FeatureParam kAeriumTimeZone_London[] = {
+    {blink::features::kAeriumTimeZoneId, "Europe/London"},
+};
+const FeatureEntry::FeatureParam kAeriumTimeZone_NewYork[] = {
+    {blink::features::kAeriumTimeZoneId, "America/New_York"},
+};
+const FeatureEntry::FeatureVariation kAeriumTimeZoneChoices[] = {
+    {"a different zone for each site", kAeriumTimeZone_Random, nullptr},
+    {"UTC everywhere", kAeriumTimeZone_Utc, nullptr},
+    {"Europe/London everywhere", kAeriumTimeZone_London, nullptr},
+    {"America/New_York everywhere", kAeriumTimeZone_NewYork, nullptr},
+};
+#endif  // CHROME_BROWSER_AERIUM_FLAG_CHOICES_H_
+AERIUM_FLAG_CHOICES_EOF
+cat > chrome/browser/aerium_flag_entries.h <<'AERIUM_FLAG_ENTRIES_EOF'
+// Aerium's own chrome://flags entries, kept separate from
+// ungoogled_flag_entries.h and bromite_flag_entries.h so that neither project's
+// file has to be rebased around ours.
+
+#ifndef CHROME_BROWSER_AERIUM_FLAG_ENTRIES_H_
+#define CHROME_BROWSER_AERIUM_FLAG_ENTRIES_H_
+    {"aerium-time-zone",
+     "Report a different time zone",
+     "Tell sites a time zone other than the one this computer is set to. With "
+     "the default variation each site is told a different zone, chosen when "
+     "the process for that site starts, so a site sees one consistent answer "
+     "and two sites do not see the same one. The clock itself is unaffected: "
+     "this changes what pages are told, not what the computer believes. "
+     "Expect times shown by calendars, booking sites and anything that "
+     "schedules to be wrong by the difference. Aerium flag.",
+     kOsAll, FEATURE_WITH_PARAMS_VALUE_TYPE(blink::features::kAeriumTimeZone,
+                                            kAeriumTimeZoneChoices,
+                                            "AeriumTimeZone")},
+#endif  // CHROME_BROWSER_AERIUM_FLAG_ENTRIES_H_
+AERIUM_FLAG_ENTRIES_EOF
+sed_i '/^const FeatureEntry kFeatureEntries\[\] = {$/i\
+#include "chrome/browser/aerium_flag_choices.h"' \
+    chrome/browser/about_flags.cc
+sed_i '/^const FeatureEntry kFeatureEntries\[\] = {$/a\
+#include "chrome/browser/aerium_flag_entries.h"' \
+    chrome/browser/about_flags.cc
+
+echo "[aerium] time zone override applied"
