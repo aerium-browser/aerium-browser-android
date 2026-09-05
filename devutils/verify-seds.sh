@@ -39,6 +39,13 @@
 #     in. The report now lists which targets Vanadium also touches; for those,
 #     read the patch before believing an OK.
 #
+#   * (Fixed, kept for the record.) Only `sed`/`sed_i` used to be intercepted,
+#     so every `perl -0777 -pi -e` substitution was invisible: its targets were
+#     never collected, never fetched, and perl therefore opened nothing and
+#     exited 0. theme.sh grew fifteen of them, and the report stayed clean
+#     without having looked at any. perl is intercepted the same way now.
+#     The paragraph below describes what that used to mean.
+#
 #   * Only `sed`/`sed_i` are intercepted. A `perl -0777 -pi -e` substitution
 #     (patch.sh has one, on main_preferences.xml) is invisible to this script -
 #     it runs for real against the fetched tree, but its outcome is not
@@ -127,6 +134,59 @@ sed() {
     done
     return 0
 }
+# perl -0777 -pi -e '<program>' <file> ... has the same argument shape as sed:
+# flags, then the program, then the targets. So the same positional derivation
+# works on it, and these substitutions stop being invisible here.
+#
+# They were invisible until now, and that mattered more than it used to. When
+# the header above was written patch.sh had one perl block and theme.sh had
+# none. theme.sh now has fifteen, carrying the time zone override, the audio
+# fingerprint noise, the hardwareConcurrency clamp and the Local Font Access
+# switch. None of their target files was ever collected in pass 1, so none was
+# fetched, so perl opened nothing, substituted nothing and exited 0 - and the
+# report came back clean without having looked at any of them. A clean run that
+# does not cover the newest code is worse than no run, because it is believed.
+#
+# A perl block in these scripts carries its own `or die`, so a non-zero exit is
+# the substitution telling us its anchor is gone. That message is captured and
+# reported rather than being swallowed by the harness's /dev/null, because it
+# names which anchor and why.
+perl() {
+    _idx=$((_idx + 1))
+    local -a files=()
+    mapfile -t files < <(_sed_targets "$@")
+    if [ "$LOG_ONLY" = 1 ]; then
+        local f
+        for f in "${files[@]}"; do printf 'TARGET\t%s\n' "$f" >> "$REPORT"; done
+        return 0
+    fi
+    local -a present=() sums=()
+    local f
+    for f in "${files[@]}"; do
+        if [ -f "$f" ]; then present+=("$f"); else
+            printf 'MISSING\t%s\t%s\n' "$_idx" "$f" >> "$REPORT"
+        fi
+    done
+    [ "${#present[@]}" = 0 ] && return 0
+    for f in "${present[@]}"; do sums+=("$(cksum < "$f")"); done
+    local err
+    if ! err=$(command perl "$@" 2>&1 >/dev/null); then
+        printf 'ERROR\t%s\t%s\t%s\n' "$_idx" "${present[0]}" \
+               "$(printf '%s' "$err" | tr '\n' ' ')" >> "$REPORT"
+        return 0
+    fi
+    local i=0
+    for f in "${present[@]}"; do
+        if [ "${sums[$i]}" = "$(cksum < "$f")" ]; then
+            printf 'NOOP\t%s\t%s\n' "$_idx" "$f" >> "$REPORT"
+        else
+            printf 'OK\t%s\t%s\n' "$_idx" "$f" >> "$REPORT"
+        fi
+        i=$((i + 1))
+    done
+    return 0
+}
+
 # Fallback only: theme.sh defines its own sed_i and that definition wins from
 # the moment it is sourced. This one covers any script that calls sed_i
 # without defining it, and routes it in WITH the -i flag so the override above
@@ -220,7 +280,9 @@ awk -F'\t' '/^(OK|NOOP|ERROR|MISSING)/ {c[$1]++} END {for (k in c) printf "%-8s 
 echo
 if grep -qP '^(NOOP|ERROR)' "$REPORT"; then
     echo "Substitutions that did nothing on Chromium $VERSION:"
-    grep -P '^(NOOP|ERROR)' "$REPORT" | awk -F'\t' '{printf "  %-7s #%-4s %s\n", $1, $2, $3}'
+    grep -P '^(NOOP|ERROR)' "$REPORT" \
+        | awk -F'\t' '{printf "  %-7s #%-4s %s\n", $1, $2, $3;
+                       if ($4 != "") printf "  %-7s %-5s %s\n", "", "", $4}'
     echo
 fi
 if grep -qP '^MISSING' "$REPORT"; then
