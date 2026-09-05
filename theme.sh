@@ -1478,7 +1478,7 @@ rm -f "$AERIUM_DOH_FILE"
 unset AERIUM_DOH_FILE
 
 # --- Default search engines: replace every per-country engine list with one
-# fixed privacy-focused set - Startpage (default), DuckDuckGo, Brave Search,
+# fixed privacy-focused set - DuckDuckGo (default), Startpage, Brave Search,
 # Mojeek, Qwant, Ecosia, degoog and the two DuckDuckGo no-JS variants. Brave,
 # Mojeek, Qwant and Ecosia are upstream entries already
 # (ids 109, 103, 94 and 101), so they cost a list entry each and no new
@@ -1517,9 +1517,11 @@ unset AERIUM_DOH_FILE
 #   makes the ZZ list the single list for every country.
 # - GetPrepopulatedFallbackSearch() in template_url_prepopulate_data.cc picks
 #   the engine it looks up by ID first, falling back to the list head;
-#   pointing it at startpage.id makes Startpage the out-of-the-box default
-#   (Vanadium's patch 0116 already retargeted the stock google.id lookup to
-#   duckduckgo.id, hence the dual pattern below).
+#   and it already points at duckduckgo.id here, because Vanadium's
+#   0114-set-default-search-engine-to-DuckDuckGo.patch retargets the stock
+#   google.id lookup. That is the default we want, so this script leaves it
+#   alone. The desktop repos have no Vanadium and name duckduckgo.id in their
+#   own patch instead.
 SE_DEFS=third_party/search_engines_data/resources/definitions
 sed_i '/^    "ecosia": {$/i\
     "duckduckgo_html": {\
@@ -1598,7 +1600,7 @@ sed_i '/^    "duckduckgo": {$/i\
 #
 # So: raise this whenever the engine list changes, not only when an id is
 # added. A new entry that nothing merges is invisible.
-SE_DATA_VERSION_OFFSET=43
+SE_DATA_VERSION_OFFSET=44
 SE_DATA_VERSION=
 # The engines inserted above claim ids 117-119, sitting immediately above
 # upstream's highest (116 at both 151 and 152). Unlike the data version these
@@ -1657,12 +1659,16 @@ if [ -e $SE_DEFS/prepopulated_engines.json ]; then
 fi
 sed_i 's/"kMaxPrepopulatedEngineID": [0-9]\+,/"kMaxPrepopulatedEngineID": '"$AERIUM_MAX_ENGINE_ID"',/; s/"kCurrentDataVersion": [0-9]\+/"kCurrentDataVersion": '"$((SE_DATA_VERSION + SE_DATA_VERSION_OFFSET))"'/; s/"name": "startpage",/"name": "Startpage",/' \
     $SE_DEFS/prepopulated_engines.json
-sed_i '/^    "ZZ": {$/,/^    }$/{s/^        "&google",$/        "\&startpage",\n        "\&duckduckgo",\n        "\&brave",\n        "\&mojeek",\n        "\&qwant",\n        "\&ecosia",\n        "\&degoog",\n        "\&duckduckgo_lite",\n        "\&duckduckgo_html"/; /^        "&bing",$/d; /^        "&yahoo"$/d}' \
+sed_i '/^    "ZZ": {$/,/^    }$/{s/^        "&google",$/        "\&duckduckgo",\n        "\&startpage",\n        "\&brave",\n        "\&mojeek",\n        "\&qwant",\n        "\&ecosia",\n        "\&degoog",\n        "\&duckduckgo_lite",\n        "\&duckduckgo_html"/; /^        "&bing",$/d; /^        "&yahoo"$/d}' \
     $SE_DEFS/regional_settings.json
 sed_i 's|auto iter = TemplateURLPrepopulateData::kRegionalSettings.find(country_id);|// Aerium: every country gets the same privacy-focused engine list - the\n  // "ZZ" default in regional_settings.json - instead of per-country\n  // Google-led lists.\n  auto iter = TemplateURLPrepopulateData::kRegionalSettings.find(CountryId());|' \
     components/regional_capabilities/regional_capabilities_utils.cc
-sed_i 's/^\( *\)\(google\|duckduckgo\)\.id,$/\1startpage.id,/' \
-    components/search_engines/template_url_prepopulate_data.cc
+# No sed for the default engine. Vanadium's own
+# 0114-set-default-search-engine-to-DuckDuckGo.patch already points
+# GetPrepopulatedFallbackSearch at duckduckgo.id, which is what we want, so the
+# right change here is the absence of one - an override that rewrites a value to
+# the value it already has is a sed that breaks the day upstream agrees with us.
+# The desktop repos have no Vanadium, so their patch names duckduckgo.id itself.
 
 # --- Fingerprint protection parity with Windows: canvas image-data noise,
 # canvas measureText noise, get*ClientRect*() noise, and WebGL renderer/
