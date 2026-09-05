@@ -8,6 +8,19 @@ behind any of this.
 
 **Fingerprinting**
 
+- New: audio fingerprint noise, on by default at
+  `chrome://flags/#aerium-audio-noise`. The usual audio fingerprint builds an
+  OfflineAudioContext, runs an oscillator through a compressor, renders it and
+  hashes the samples - a value that is stable per device, survives clearing
+  everything and is the same in Incognito. Aerium now scales what a page reads
+  back by a fixed factor of about a hundredth of a percent, chosen once per
+  site. Nothing you can hear changes, and none of these paths feeds playback.
+- `AudioContext.baseLatency` is now rounded to a millisecond, the way
+  `outputLatency` next to it already was. It is the audio hardware's buffer size
+  divided by its sample rate, so at full precision it names the device.
+- `navigator.connection` no longer reports whether you are on wifi or cellular,
+  or which generation of cellular. Chromium wrote that mitigation and left it
+  switched off.
 - The canvas, measureText and getClientRects noise, the WebGL vendor/renderer
   spoof and the stripping of high-entropy client hints were already on here.
   `navigator.hardwareConcurrency` now reports 2 as well, which is the last
