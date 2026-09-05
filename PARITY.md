@@ -78,6 +78,7 @@ about OLED phone panels and does not carry to a desktop monitor.
 | About page points at the project | ✅ | ✅ | ✅ |
 | Startpage default, nine privacy-first engines offered | ✅ | ✅ | ✅ |
 | Secure DNS menu: Mullvad, Quad9, NextDNS, no Google | ✅ | ✅ | ✅ |
+| Search widget shows the logo, not the launcher tile | ➖ | ➖ | ✅ |
 | "You and Google" renamed, Google-services block removed | ✅ | ✅ | — |
 
 ## Updates

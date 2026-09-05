@@ -1269,6 +1269,84 @@ sed -i 's/^  registry->RegisterListPref(prefs::kAboutFlagsEntries);$/  \/\/ Sile
                              std::move(default_flags));/' \
     components/webui/flags/pref_service_flags_storage.cc
 
+# --- The logo in the search widget.
+#
+# Reported against this build: the icon in the widget's search bar sits on a
+# white tile and looks small and off-centre inside it. Both symptoms are one
+# line. quick_action_search_widget_{medium,small,xsmall}_layout.xml all set
+#
+#     android:src="@mipmap/app_icon"
+#
+# which is the LAUNCHER icon. res/icons.sh generates that as a legacy,
+# non-adaptive icon: a flat white field with the mark drawn at 54% of the
+# file's width. Both of those are right for a launcher tile and the comments
+# in that script explain why - a legacy icon left transparent gets dropped onto
+# whatever plate the launcher supplies, which is not a choice we control. In
+# the widget neither holds. The whole bitmap is scaled into the icon slot, so
+# the white field fills the slot and the mark shrinks to just over half of it.
+#
+# Nothing about the layout is wrong, which is worth saying because "not well
+# aligned" points at the layout: the medium bar is 50dp tall with a 28dp icon
+# and 11dp margins above and below, so the slot is centred to the pixel. It is
+# the picture inside the slot that is small and surrounded by white.
+#
+# So the widget gets a drawable that is only the logo: no field, and no
+# safe-zone scaling, so the mark fills the box it is given.
+#
+# Derived from res/layered_app_icon_foreground.xml rather than written out
+# again. That file already carries the artwork as vector paths, and this repo
+# already maintains two copies of the same geometry by hand - that one and
+# themed_app_icon.xml, which differ on purpose and document why. A third would
+# be the one that quietly drifts. What has to come off is its <group>, which
+# exists only to scale the mark to 0.36 and centre it inside the 108dp adaptive
+# canvas of which a launcher shows the middle 72dp. A widget icon has no safe
+# zone to respect, so the group goes and the paths stay untouched.
+AERIUM_QAS=chrome/browser/ui/android/quickactionsearchwidget/java/res
+AERIUM_QAS_ICON=$AERIUM_QAS/drawable/aerium_widget_icon.xml
+if [ -e "$SCRIPT_DIR/res/layered_app_icon_foreground.xml" ] && [ -d "$AERIUM_QAS/drawable" ]; then
+    sed -e 's|android:width="108dp"|android:width="24dp"|' \
+        -e 's|android:height="108dp"|android:height="24dp"|' \
+        -e '/^  <group$/,/^      android:translateY="163.84">$/d' \
+        -e '/^  <\/group>$/d' \
+        "$SCRIPT_DIR/res/layered_app_icon_foreground.xml" > "$AERIUM_QAS_ICON"
+
+    # Check the outcome, not the substitution. A sed range that stops matching
+    # would leave the <group> in place and the icon would come out at 36% of
+    # its box - the same too-small mark, only now without the white field to
+    # make it obvious that something is wrong.
+    _src_paths=$(grep -c '<path' "$SCRIPT_DIR/res/layered_app_icon_foreground.xml")
+    _out_paths=$(grep -c '<path' "$AERIUM_QAS_ICON")
+    if grep -q 'group' "$AERIUM_QAS_ICON"; then
+        echo "[aerium] FATAL: the adaptive-icon <group> survived into" \
+             "$AERIUM_QAS_ICON - the widget logo would be scaled to 0.36" >&2
+        return 1
+    fi
+    if [ "$_src_paths" != "$_out_paths" ]; then
+        echo "[aerium] FATAL: $AERIUM_QAS_ICON has $_out_paths paths where" \
+             "layered_app_icon_foreground.xml has $_src_paths - the range" \
+             "delete took artwork with it" >&2
+        return 1
+    fi
+    if ! grep -q 'android:width="24dp"' "$AERIUM_QAS_ICON"; then
+        echo "[aerium] FATAL: $AERIUM_QAS_ICON kept the 108dp launcher canvas" >&2
+        return 1
+    fi
+fi
+
+# The resource list is explicit rather than a glob, so a drawable that is not
+# named here is not compiled in and R.drawable has no field for it - the same
+# trap as chrome_java_resources.gni further up this script.
+sed_i 's|^    "java/res/drawable/hairline_border.xml",$|    "java/res/drawable/aerium_widget_icon.xml",\n&|' \
+    chrome/browser/ui/android/quickactionsearchwidget/BUILD.gn
+
+# All three sizes carry the same line. Done one sed per file rather than one
+# sed over three, so that if upstream restyles one layout the failure names
+# which one.
+for _qas_layout in medium small xsmall; do
+    sed_i 's|^            android:src="@mipmap/app_icon" />$|            android:src="@drawable/aerium_widget_icon" />|' \
+        $AERIUM_QAS/layout/quick_action_search_widget_${_qas_layout}_layout.xml
+done
+
 # --- The "Select DNS provider" menu in Settings > Security.
 #
 # What that menu shows is DohProviderEntry::GetList() filtered twice, in
