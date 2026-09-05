@@ -1269,6 +1269,99 @@ sed -i 's/^  registry->RegisterListPref(prefs::kAboutFlagsEntries);$/  \/\/ Sile
                              std::move(default_flags));/' \
     components/webui/flags/pref_service_flags_storage.cc
 
+# --- The "Select DNS provider" menu in Settings > Security.
+#
+# What that menu shows is DohProviderEntry::GetList() filtered twice, in
+# secure_dns_util.cc: ProvidersForCountry keeps an entry whose display_globally
+# is true or whose display_countries names the user's country, and
+# SelectEnabledProviders then keeps the ones whose base::Feature is on. An
+# entry has to survive both. That is why two of the three changes below are one
+# word each - those entries were already present, already named, already
+# carrying a privacy policy, and still never appeared for anyone.
+#
+#   * Quad9 has ui_name "Quad9 (9.9.9.9)", a privacy policy, and
+#     display_globally already true, behind a feature that ships
+#     FEATURE_DISABLED_BY_DEFAULT. It cleared the country filter and then died
+#     at the feature filter, every time.
+#   * NextDNS ships display_globally=false with display_countries={"US"},
+#     though its endpoint - https://chromium.dns.nextdns.io - is the same one
+#     everywhere. Outside the US the entry existed and stayed invisible.
+#   * Mullvad is not in upstream's list at all.
+#
+# The Google removal is here and not in the desktop patch because Android is
+# not ungoogled-chromium: this file arrives exactly as upstream wrote it.
+# Vanadium does not touch it either - none of its patches mention
+# doh_provider_entry.cc. ungoogled's own core/ungoogled-chromium/doh-changes.patch
+# already drops both Google entries on desktop, so the desktop patch is
+# generated against a tree where they are gone. Without this block Android
+# would be the one build in the project still offering "Google (Public DNS)".
+#
+# Mullvad's endpoints, plain-53 IPs and DoT hostnames come from Mullvad's own
+# documentation at https://mullvad.net/en/help/dns-over-https-and-dns-over-tls
+# rather than from memory, and both DoH endpoints were checked to answer. Two
+# variants rather than all six: the unfiltered resolver and the ad-blocking
+# one. The plain-53 IPs are not decoration - they are the automatic upgrade
+# mapping behind kDnsOverHttpsUpgrade, which ships ENABLED on Android, so a
+# device whose system resolver is already 194.242.2.2 gets upgraded to DoH with
+# nothing configured. Desktop has that feature disabled by ungoogled, so there
+# the same IPs sit inert.
+#
+# The entries live in a file rather than inline in the perl because the text is
+# full of braces and quotes, and a perl program embedded in a shell
+# single-quoted string is exactly where an escaping mistake hides. This way the
+# perl program contains no quoting of its own and the block is a plain heredoc.
+AERIUM_DOH_FILE=$(mktemp)
+export AERIUM_DOH_FILE
+cat > "$AERIUM_DOH_FILE" <<'AERIUM_DOH_ENTRIES'
+       {
+           "Mullvad",
+           MAKE_STATIC_STORAGE_BASE_FEATURE(kDohProviderMullvad,
+                                            base::FEATURE_ENABLED_BY_DEFAULT),
+           {"194.242.2.2", "2a07:e340::2"},
+           /*dns_over_tls_hostnames=*/{"dns.mullvad.net"},
+           "https://dns.mullvad.net/dns-query",
+           /*ui_name=*/"Mullvad DNS",
+           /*privacy_policy=*/"https://mullvad.net/en/help/no-logging-data-policy",
+           /*display_globally=*/true,
+           /*display_countries=*/{},
+       },
+       {
+           "MullvadAdblock",
+           MAKE_STATIC_STORAGE_BASE_FEATURE(kDohProviderMullvadAdblock,
+                                            base::FEATURE_ENABLED_BY_DEFAULT),
+           {"194.242.2.3", "2a07:e340::3"},
+           /*dns_over_tls_hostnames=*/{"adblock.dns.mullvad.net"},
+           "https://adblock.dns.mullvad.net/dns-query",
+           /*ui_name=*/"Mullvad DNS (ad blocking)",
+           /*privacy_policy=*/"https://mullvad.net/en/help/no-logging-data-policy",
+           /*display_globally=*/true,
+           /*display_countries=*/{},
+       },
+AERIUM_DOH_ENTRIES
+perl -0777 -pi -e '
+    BEGIN {
+        local $/;
+        open my $fh, "<", $ENV{AERIUM_DOH_FILE}
+            or die "[aerium] FATAL: cannot read the Mullvad entries file\n";
+        $ins = <$fh>;
+    }
+    for my $id ("Google", "GoogleDns64") {
+        s{ {7}\{\n {11}"\Q$id\E",\n.*?\n {7}\},\n}{}s
+            or die "[aerium] FATAL: no \"$id\" entry in doh_provider_entry.cc "
+                 . "- upstream renamed or restructured the DoH provider list\n";
+    }
+    s{( {7}\{\n {11}"NextDns",\n)}{$ins$1}
+        or die "[aerium] FATAL: no NextDns entry to insert Mullvad before\n";
+    s{(/\*ui_name=\*/"NextDNS",\n {11}/\*privacy_policy=\*/"https://nextdns.io/privacy",\n {11}/\*display_globally=\*/)false(,\n {11}/\*display_countries=\*/\{)"US"(\},)}{$1 . "true" . $2 . $3}e
+        or die "[aerium] FATAL: NextDNS is no longer US-only in the way this "
+             . "expected - re-read the entry before changing it\n";
+    s{("Quad9Secure",\n {11}MAKE_STATIC_STORAGE_BASE_FEATURE\(kDohProviderQuad9Secure,\n {44}base::FEATURE_)DISABLED(_BY_DEFAULT\))}{$1 . "ENABLED" . $2}e
+        or die "[aerium] FATAL: the Quad9Secure feature is no longer disabled "
+             . "by default - upstream may have fixed this; drop the change\n";
+' net/dns/public/doh_provider_entry.cc
+rm -f "$AERIUM_DOH_FILE"
+unset AERIUM_DOH_FILE
+
 # --- Default search engines: replace every per-country engine list with one
 # fixed privacy-focused set - Startpage (default), DuckDuckGo, Brave Search,
 # Mojeek, Qwant, Ecosia, degoog and the two DuckDuckGo no-JS variants. Brave,
