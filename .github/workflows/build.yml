@@ -44,9 +44,21 @@ permissions:
 # under the comment "only the newest commit builds"; the hourly schedule tick
 # keys its checkpoint search on main's current HEAD for the same reason. Both
 # have been waiting for this flag.
+#
+# Restricted to pushes, and that restriction is load-bearing. The only other
+# thing that starts a build here is a workflow_dispatch, and auto-resume.yml
+# sends one of those every time it decides a checkpoint is worth continuing. It
+# guards against stacking by asking whether a run is already active - but that
+# question is answered several API calls before the dispatch is actually made,
+# so a push landing inside that window would be cancelled by the resume it
+# raced. That trade is backwards twice over: it kills a build of the newest
+# commit, and it replaces it with a run that restores an older commit's
+# checkpoint tree. Making a dispatch queue instead, the way everything did
+# before, costs nothing - a resume has no deadline - and leaves superseding to
+# the one event that should do it.
 concurrency:
   group: aerium-android-build
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'push' }}
 
 jobs:
   build-1:
