@@ -40,11 +40,12 @@ permissions:
   actions: write
 
 # Its own group, so an x64 build and an arm64 build can run at the same time -
-# they share no artifact name and no runner state. Within x64, a second
-# dispatch still queues behind the first rather than killing it.
+# they share no artifact name and no runner state. Within x64, the newest
+# commit wins, matching build.yml: a run still compiling older sources cannot
+# produce the APK anyone now wants.
 concurrency:
   group: aerium-android-build-x64
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build-1:

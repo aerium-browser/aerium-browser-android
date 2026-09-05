@@ -28,12 +28,25 @@ permissions:
   # harmlessly and the run simply keeps two checkpoints until they expire.
   actions: write
 
-# cancel-in-progress deliberately false: a routine push must QUEUE behind a
-# multi-day build, not kill it. To supersede a doomed run, cancel it manually
-# first.
+# Only the newest commit builds. A push supersedes whatever is in flight,
+# because a build already compiling older sources cannot produce the APK anyone
+# now wants - it would spend days to ship one that is wrong the moment it lands.
+#
+# This was false to stop routine pushes killing multi-day builds. What makes
+# that safe to flip is the paths-ignore filter above rather than the flag
+# itself: a CHANGELOG, README or fastlane push does not start a run here, so it
+# cannot cancel one either. Superseding is only ever triggered by a commit that
+# genuinely changes what would be compiled, and losing a build to one of those
+# is not a loss - its output was already stale.
+#
+# auto-resume.yml already assumed this. Its cancelled-run branch checks whether
+# the cancelled run's sha is still main's head and exits 0 when it is not,
+# under the comment "only the newest commit builds"; the hourly schedule tick
+# keys its checkpoint search on main's current HEAD for the same reason. Both
+# have been waiting for this flag.
 concurrency:
   group: aerium-android-build
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build-1:
