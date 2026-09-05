@@ -4,6 +4,36 @@ Written for people using Aerium rather than for people building it. Each
 release on GitHub also links the full commit history if you want the detail
 behind any of this.
 
+## 152.0.7977.82 (next release)
+
+**Search**
+
+- DuckDuckGo is now the default engine, with Startpage second. Existing
+  installs keep whichever engine they are already using.
+- degoog (degoog.org) replaces the SearXNG entry, and Brave Search, Mojeek,
+  Qwant and Ecosia join the list.
+
+**Secure DNS**
+
+- **Settings › Privacy and security › Use secure DNS** gains Mullvad and
+  Mullvad's ad-blocking resolver, and finally shows Quad9 and NextDNS - the
+  first was hidden behind a disabled feature flag, the second was restricted to
+  the United States.
+- Google Public DNS is gone from that menu. It was the one place in a
+  de-googled browser still offering it.
+
+**Fixes**
+
+- Fixed a crash that took the whole browser down when you closed the last
+  incognito tab using the overview button's "close tab" shortcut.
+- The bottom bar now follows the pure black switch in incognito. It was the one
+  surface still showing Chromium's dark grey.
+- The search widget shows the Aerium logo rather than the launcher icon, so it
+  no longer sits on a white tile.
+- **Access payment methods** is gone from Privacy and security. Aerium ships no
+  payment methods, so the switch offered to let sites check a store that cannot
+  exist - and it was a live switch, not a display.
+
 ## 152.0.7977.64
 
 **Security**
