@@ -7035,108 +7035,96 @@ cat > chrome/android/java/src/org/chromium/chrome/browser/ntp/AeriumNtpBackgroun
 
 package org.chromium.chrome.browser.ntp;
 
-import android.graphics.Color;
-import android.graphics.drawable.GradientDrawable;
+import android.content.ContentResolver;
+import android.content.Context;
+import android.content.res.Configuration;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
+import android.graphics.Matrix;
+import android.graphics.Paint;
+import android.graphics.drawable.BitmapDrawable;
+import android.net.Uri;
 import android.text.TextUtils;
+import android.util.DisplayMetrics;
 import android.view.View;
 
+import org.chromium.base.task.PostTask;
+import org.chromium.base.task.TaskTraits;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 
+import java.io.InputStream;
 import java.lang.ref.WeakReference;
 
 /**
- * Aerium: the new tab page background.
+ * Aerium: the new tab page background - pure black, Aerium navy, or a photo the user picked.
  *
- * <p>Deliberately self-contained, like AeriumSpeedDial beside it: two shared preferences in, a
- * colour and a drawable out, and no reach into the feed or suggestions stacks. The tables below
- * are the same colour stops the desktop new tab page uses, so the two platforms land on the same
- * backgrounds.
+ * <p>The same three choices chrome://aerium-newtab offers, and the same colours. Deliberately
+ * self-contained, like AeriumSpeedDial beside it: two shared preferences in, a colour or a
+ * drawable out, and nothing reaching into the feed or suggestions stacks.
+ *
+ * <p>The photo is read off a content:// URI the settings screen persisted a grant for. It is
+ * decoded on a worker sequence and cropped once to the screen, never on the thread that is
+ * drawing: a camera file is several thousand pixels on the long edge, and decoding one of those
+ * inline is a stutter at best.
  */
 public final class AeriumNtpBackground {
     /** Stored values, matching the desktop page's own. */
-    public static final String THEME = "theme";
-
     public static final String BLACK = "black";
+
     public static final String NAVY = "navy";
     public static final String PHOTO = "photo";
 
     /** Aerium navy, the same one res/aerium.svg and the settings palette use. */
     private static final int NAVY_COLOR = 0xFF0E1834;
 
-    // Four variants a set, each a top, middle and bottom stop lifted from the desktop page's
-    // CSS. Three stops rather than the four or five the CSS carries: GradientDrawable spaces
-    // its colours evenly, so a fourth would land in the wrong place rather than add detail.
-    private static final int[][] DUSK = {
-        {0xFF1A2D4D, 0xFF6A5570, 0xFF14121C},
-        {0xFF221A2E, 0xFF9C6A5C, 0xFF171320},
-        {0xFF10203A, 0xFF7B6A78, 0xFF1A1622},
-        {0xFF141D38, 0xFF8D6F72, 0xFF12111C},
-    };
-    private static final int[][] DEEP = {
-        {0xFF03060F, 0xFF16304F, 0xFF050A14},
-        {0xFF040A16, 0xFF0E1F3A, 0xFF071022},
-        {0xFF060D1C, 0xFF1D3C60, 0xFF060C18},
-        {0xFF02060E, 0xFF0A1729, 0xFF040810},
-    };
-    private static final int[][] STONE = {
-        {0xFF1B1B1E, 0xFF55555F, 0xFF141416},
-        {0xFF17171A, 0xFF2C2C33, 0xFF111113},
-        {0xFF141417, 0xFF46464F, 0xFF101012},
-        {0xFF131316, 0xFF26262C, 0xFF0E0E10},
-    };
-    private static final int[][] MOSS = {
-        {0xFF0B1A16, 0xFF2F5A44, 0xFF08120F},
-        {0xFF091613, 0xFF153027, 0xFF070F0D},
-        {0xFF0A1714, 0xFF376A4F, 0xFF081210},
-        {0xFF08130F, 0xFF122B22, 0xFF060D0B},
-    };
+    // "Pure black" resolves per theme, exactly as --bg does on the desktop page: black in the
+    // dark theme, where it is the point, and the pale ground in the light one, where a black
+    // page behind dark text would not be.
+    private static final int DARK_GROUND = 0xFF000000;
+    private static final int LIGHT_GROUND = 0xFFF2F7FD;
+
+    /** Hard cap on the decoded long edge, for a display larger than any phone. */
+    private static final int MAX_EDGE = 2560;
 
     // The page whose background this is. Weak because a new tab page outlives nothing and this
     // reference must not be the thing that keeps one alive.
     private static WeakReference<View> sRoot = new WeakReference<View>(null);
 
-    // Which of the four the current page drew. Chosen once a page, in baseColor(), so the
-    // colour the toolbar blends into is the colour that actually got painted.
-    private static int sVariant = -1;
+    // The decoded wallpaper, and what it was decoded from - the URI plus the size it was
+    // cropped to, so a rotation re-crops rather than stretching the old one.
+    private static Bitmap sBitmap;
+    private static String sBitmapKey = "";
+    private static boolean sDecoding;
 
     private AeriumNtpBackground() {}
 
     private static String background() {
         String value =
                 ChromeSharedPreferences.getInstance()
-                        .readString(ChromePreferenceKeys.AERIUM_NTP_BACKGROUND, THEME);
-        return TextUtils.isEmpty(value) ? THEME : value;
+                        .readString(ChromePreferenceKeys.AERIUM_NTP_BACKGROUND, BLACK);
+        return TextUtils.isEmpty(value) ? BLACK : value;
     }
 
-    private static int[][] set() {
-        String value =
-                ChromeSharedPreferences.getInstance()
-                        .readString(ChromePreferenceKeys.AERIUM_NTP_BACKGROUND_SET, "dusk");
-        if ("deep".equals(value)) return DEEP;
-        if ("stone".equals(value)) return STONE;
-        if ("moss".equals(value)) return MOSS;
-        return DUSK;
+    private static String imageUri() {
+        return ChromeSharedPreferences.getInstance()
+                .readString(ChromePreferenceKeys.AERIUM_NTP_BACKGROUND_IMAGE, "");
     }
 
-    private static int variant() {
-        if (sVariant < 0 || sVariant > 3) sVariant = (int) (Math.random() * 4.0) & 3;
-        return sVariant;
+    private static boolean isNight(Context context) {
+        return (context.getResources().getConfiguration().uiMode
+                        & Configuration.UI_MODE_NIGHT_MASK)
+                == Configuration.UI_MODE_NIGHT_YES;
     }
 
-    /**
-     * The colour behind the page, for NewTabPage.getBackgroundColor(). Falls back to whatever
-     * the theme asked for, which is what an untouched install still gets.
-     */
-    public static int baseColor(int fallback) {
-        String bg = background();
-        if (BLACK.equals(bg)) return Color.BLACK;
-        if (NAVY.equals(bg)) return NAVY_COLOR;
-        if (PHOTO.equals(bg)) {
-            sVariant = -1;
-            return set()[variant()][0];
-        }
-        return fallback;
+    private static int ground(Context context) {
+        return isNight(context) ? DARK_GROUND : LIGHT_GROUND;
+    }
+
+    /** The colour behind the page, for NewTabPage.getBackgroundColor(). */
+    public static int baseColor(Context context) {
+        return NAVY.equals(background()) ? NAVY_COLOR : ground(context);
     }
 
     /** Paints the chosen background on the page's root view and remembers it for refresh(). */
@@ -7155,24 +7143,155 @@ public final class AeriumNtpBackground {
         if (root != null) paint(root);
     }
 
+    /** Drops the cached photo, so the next paint reads whatever the settings screen just wrote. */
+    public static void invalidate() {
+        sBitmap = null;
+        sBitmapKey = "";
+    }
+
     private static void paint(View root) {
+        Context context = root.getContext();
         String bg = background();
-        if (PHOTO.equals(bg)) {
-            int[] stops = set()[variant()];
-            GradientDrawable gradient =
-                    new GradientDrawable(
-                            GradientDrawable.Orientation.TOP_BOTTOM,
-                            new int[] {stops[0], stops[1], stops[2]});
-            gradient.setGradientType(GradientDrawable.LINEAR_GRADIENT);
-            root.setBackground(gradient);
-        } else if (NAVY.equals(bg)) {
+        if (NAVY.equals(bg)) {
             root.setBackgroundColor(NAVY_COLOR);
-        } else if (BLACK.equals(bg)) {
-            root.setBackgroundColor(Color.BLACK);
-        } else {
-            // Back to the theme: clearing the drawable lets the host's own colour, which
-            // getBackgroundColor() has already put back, show through.
-            root.setBackground(null);
+            return;
+        }
+        if (!PHOTO.equals(bg)) {
+            root.setBackgroundColor(ground(context));
+            return;
+        }
+        String uri = imageUri();
+        if (TextUtils.isEmpty(uri)) {
+            // "Your photo" chosen with no photo yet behaves as the plain ground rather than as a
+            // blank screen, so the half-configured state does not read as a bug.
+            root.setBackgroundColor(ground(context));
+            return;
+        }
+        String key = key(context, uri);
+        if (sBitmap != null && key.equals(sBitmapKey)) {
+            root.setBackground(new BitmapDrawable(root.getResources(), sBitmap));
+            return;
+        }
+        root.setBackgroundColor(ground(context));
+        decode(context.getApplicationContext(), uri, key);
+    }
+
+    private static String key(Context context, String uri) {
+        DisplayMetrics metrics = context.getResources().getDisplayMetrics();
+        return uri + "|" + metrics.widthPixels + "x" + metrics.heightPixels;
+    }
+
+    private static void decode(final Context context, final String uri, final String key) {
+        if (sDecoding) return;
+        sDecoding = true;
+        PostTask.postTask(
+                TaskTraits.BEST_EFFORT_MAY_BLOCK,
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        final Bitmap decoded = read(context, uri);
+                        PostTask.postTask(
+                                TaskTraits.UI_DEFAULT,
+                                new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        sDecoding = false;
+                                        if (decoded == null) return;
+                                        sBitmap = decoded;
+                                        sBitmapKey = key;
+                                        refresh();
+                                    }
+                                });
+                    }
+                });
+    }
+
+    /**
+     * Decodes the picked image down to roughly the screen, then crops it to exactly the screen.
+     *
+     * <p>Two passes over the stream: the first reads the header alone for the dimensions, the
+     * second decodes with the sample size that gets under the cap. Cropping rather than letting
+     * the drawable stretch, because a BitmapDrawable fills its bounds and a wallpaper at the
+     * wrong aspect ratio looks broken in a way a slightly soft one does not.
+     */
+    private static Bitmap read(Context context, String uri) {
+        Uri parsed;
+        try {
+            parsed = Uri.parse(uri);
+        } catch (RuntimeException e) {
+            return null;
+        }
+        ContentResolver resolver = context.getContentResolver();
+        DisplayMetrics metrics = context.getResources().getDisplayMetrics();
+        int targetW = Math.max(1, metrics.widthPixels);
+        int targetH = Math.max(1, metrics.heightPixels);
+        int cap = Math.min(MAX_EDGE, Math.max(targetW, targetH));
+
+        BitmapFactory.Options bounds = new BitmapFactory.Options();
+        bounds.inJustDecodeBounds = true;
+        InputStream stream = null;
+        try {
+            stream = resolver.openInputStream(parsed);
+            if (stream == null) return null;
+            BitmapFactory.decodeStream(stream, null, bounds);
+        } catch (Exception e) {
+            // A revoked grant, a deleted file or a provider that is simply gone. The page keeps
+            // the plain ground it already painted.
+            return null;
+        } finally {
+            close(stream);
+        }
+
+        int longest = Math.max(bounds.outWidth, bounds.outHeight);
+        if (longest <= 0) return null;
+        BitmapFactory.Options options = new BitmapFactory.Options();
+        options.inSampleSize = 1;
+        while (longest / options.inSampleSize > cap) {
+            options.inSampleSize *= 2;
+        }
+
+        Bitmap decoded;
+        stream = null;
+        try {
+            stream = resolver.openInputStream(parsed);
+            if (stream == null) return null;
+            decoded = BitmapFactory.decodeStream(stream, null, options);
+        } catch (Exception e) {
+            return null;
+        } finally {
+            close(stream);
+        }
+        if (decoded == null) return null;
+        return crop(decoded, targetW, targetH);
+    }
+
+    private static Bitmap crop(Bitmap source, int targetW, int targetH) {
+        int width = source.getWidth();
+        int height = source.getHeight();
+        if (width <= 0 || height <= 0) return source;
+        Bitmap out;
+        try {
+            out = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888);
+        } catch (OutOfMemoryError e) {
+            // A screen-sized ARGB_8888 bitmap is a few megabytes and this is the one place it
+            // can fail on a small device. Better a stretched wallpaper than none.
+            return source;
+        }
+        float scale = Math.max((float) targetW / width, (float) targetH / height);
+        Matrix matrix = new Matrix();
+        matrix.setScale(scale, scale);
+        matrix.postTranslate((targetW - width * scale) / 2f, (targetH - height * scale) / 2f);
+        new Canvas(out).drawBitmap(source, matrix, new Paint(Paint.FILTER_BITMAP_FLAG));
+        source.recycle();
+        return out;
+    }
+
+    private static void close(InputStream stream) {
+        if (stream == null) return;
+        try {
+            stream.close();
+        } catch (java.io.IOException e) {
+            // Nothing to do.
         }
     }
 }
@@ -7182,15 +7301,15 @@ sed_i 's|^  "java/src/org/chromium/chrome/browser/ntp/NewTabPageLayout.java",$| 
     chrome/android/chrome_java_sources.gni
 
 # Same package, so no import on either side.
-sed_i 's|        mBackgroundColor = ChromeSemanticColorUtils.getHomeSurfaceBackgroundColor(activity);|        // Aerium: the chosen new tab page background, falling back to the theme. See theme.sh.\n        mBackgroundColor =\n                AeriumNtpBackground.baseColor(\n                        ChromeSemanticColorUtils.getHomeSurfaceBackgroundColor(activity));|' \
+sed_i 's|        mBackgroundColor = ChromeSemanticColorUtils.getHomeSurfaceBackgroundColor(activity);|        // Aerium: the chosen new tab page background. See theme.sh.\n        mBackgroundColor = AeriumNtpBackground.baseColor(activity);|' \
     chrome/android/java/src/org/chromium/chrome/browser/ntp/NewTabPage.java
 
 sed_i 's|        startupMetricsTracker.registerNtpViewObserver(mFeedSurfaceProvider.getView());|&\n        // Aerium: paint the background behind the whole page. See theme.sh.\n        AeriumNtpBackground.apply(mFeedSurfaceProvider.getView());|' \
     chrome/android/java/src/org/chromium/chrome/browser/ntp/NewTabPage.java
 
-sed_i 's|    public static final String AERIUM_SPEED_DIAL_ROWS = "Chrome.Aerium.SpeedDialRows";|&\n\n    /** The new tab page background: "theme", "black", "navy" or "photo". */\n    public static final String AERIUM_NTP_BACKGROUND = "Chrome.Aerium.NtpBackground";\n\n    /** Which bundled gradient set the "photo" background draws from. */\n    public static final String AERIUM_NTP_BACKGROUND_SET = "Chrome.Aerium.NtpBackgroundSet";|' \
+sed_i 's|    public static final String AERIUM_SPEED_DIAL_ROWS = "Chrome.Aerium.SpeedDialRows";|&\n\n    /** The new tab page background: "theme", "black", "navy" or "photo". */\n    public static final String AERIUM_NTP_BACKGROUND = "Chrome.Aerium.NtpBackground";\n\n    /** The content:// URI of the image the "photo" background draws. */\n    public static final String AERIUM_NTP_BACKGROUND_IMAGE = "Chrome.Aerium.NtpBackgroundImage";|' \
     $CPK
-sed_i 's|^                AERIUM_SPEED_DIAL_TILES,$|&\n                AERIUM_NTP_BACKGROUND,\n                AERIUM_NTP_BACKGROUND_SET,|' \
+sed_i 's|^                AERIUM_SPEED_DIAL_TILES,$|&\n                AERIUM_NTP_BACKGROUND,\n                AERIUM_NTP_BACKGROUND_IMAGE,|' \
     $CPK
 
 echo "[aerium] speed dial applied"
@@ -7221,9 +7340,10 @@ cat > chrome/android/java/res/xml/aerium_ntp_preferences.xml <<'AERIUM_NTP_XML'
         android:persistent="false"
         android:title="@string/aerium_ntp_background_title" />
     <Preference
-        android:key="aerium_ntp_background_set"
+        android:key="aerium_ntp_image"
         android:persistent="false"
-        android:title="@string/aerium_ntp_background_set_title" />
+        android:title="@string/aerium_ntp_image_title"
+        android:summary="@string/aerium_ntp_image_summary" />
     <Preference
         android:key="aerium_ntp_columns"
         android:persistent="false"
@@ -7255,9 +7375,12 @@ cat > chrome/android/java/src/org/chromium/chrome/browser/settings/AeriumNewTabP
 
 package org.chromium.chrome.browser.settings;
 
+import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Context;
 import android.content.DialogInterface;
+import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.text.TextUtils;
 
@@ -7270,6 +7393,7 @@ import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
+import org.chromium.chrome.browser.ntp.AeriumNtpBackground;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 import org.chromium.chrome.browser.settings.search.ChromeBaseSearchIndexProvider;
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
@@ -7289,15 +7413,19 @@ public class AeriumNewTabPageFragment extends ChromeBaseSettingsFragment {
     // Must match the keys in aerium_ntp_preferences.xml.
     private static final String PREF_SPEED_DIAL = "aerium_speed_dial";
     private static final String PREF_BACKGROUND = "aerium_ntp_background";
-    private static final String PREF_BACKGROUND_SET = "aerium_ntp_background_set";
+    private static final String PREF_IMAGE = "aerium_ntp_image";
     private static final String PREF_COLUMNS = "aerium_ntp_columns";
     private static final String PREF_ROWS = "aerium_ntp_rows";
     private static final String PREF_SHORTCUT_ROW = "aerium_speed_dial_shortcuts";
     private static final String PREF_CLEAR = "aerium_speed_dial_clear";
 
     // Must match AeriumNtpBackground, which reads the same two keys.
-    private static final String[] BACKGROUNDS = {"theme", "black", "navy", "photo"};
-    private static final String[] SETS = {"dusk", "deep", "stone", "moss"};
+    private static final String[] BACKGROUNDS = {"black", "navy", "photo"};
+
+    // Fragment.startActivityForResult rather than an ActivityResultContract: the contract API
+    // would pull androidx.activity into chrome_java, and this pair is deprecated but present in
+    // every version of the support library the browser has ever built against.
+    private static final int REQUEST_IMAGE = 4211;
 
     private final SettableMonotonicObservableSupplier<String> mPageTitle =
             ObservableSuppliers.createMonotonic();
@@ -7310,10 +7438,11 @@ public class AeriumNewTabPageFragment extends ChromeBaseSettingsFragment {
         bindSwitch(PREF_SPEED_DIAL, ChromePreferenceKeys.AERIUM_SPEED_DIAL, true);
         bindSwitch(PREF_SHORTCUT_ROW, ChromePreferenceKeys.AERIUM_SPEED_DIAL_SHORTCUTS, true);
         bindBackground();
+        bindImage();
         bindCount(PREF_COLUMNS, ChromePreferenceKeys.AERIUM_SPEED_DIAL_COLUMNS, 4, COLUMN_CHOICES);
         bindCount(PREF_ROWS, ChromePreferenceKeys.AERIUM_SPEED_DIAL_ROWS, 4, ROW_CHOICES);
         bindClear();
-        updateSetVisibility();
+        updateImageVisibility();
     }
 
     private static final int[] COLUMN_CHOICES = {3, 4, 5};
@@ -7339,22 +7468,69 @@ public class AeriumNewTabPageFragment extends ChromeBaseSettingsFragment {
                 BACKGROUNDS[0],
                 BACKGROUNDS,
                 new String[] {
-                    getString(R.string.aerium_ntp_background_theme),
                     getString(R.string.aerium_ntp_background_black),
                     getString(R.string.aerium_ntp_background_navy),
                     getString(R.string.aerium_ntp_background_photo),
                 });
-        bindChoice(
-                PREF_BACKGROUND_SET,
-                ChromePreferenceKeys.AERIUM_NTP_BACKGROUND_SET,
-                SETS[0],
-                SETS,
-                new String[] {
-                    getString(R.string.aerium_ntp_set_dusk),
-                    getString(R.string.aerium_ntp_set_deep),
-                    getString(R.string.aerium_ntp_set_stone),
-                    getString(R.string.aerium_ntp_set_moss),
+    }
+
+    /**
+     * Opens the system document picker for an image and keeps a persistable grant on what comes
+     * back. ACTION_OPEN_DOCUMENT rather than ACTION_GET_CONTENT, because only the former hands
+     * out a URI permission that survives a restart - and a wallpaper that forgets itself
+     * overnight is worse than no wallpaper.
+     */
+    private void bindImage() {
+        Preference pref = findPreference(PREF_IMAGE);
+        if (pref == null) return;
+        pref.setOnPreferenceClickListener(
+                preference -> {
+                    Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                    intent.addCategory(Intent.CATEGORY_OPENABLE);
+                    intent.setType("image/*");
+                    intent.addFlags(
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                    | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+                    try {
+                        startActivityForResult(intent, REQUEST_IMAGE);
+                    } catch (RuntimeException e) {
+                        // No document provider on the device. Nothing opens; nothing breaks.
+                    }
+                    return true;
                 });
+    }
+
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != REQUEST_IMAGE || resultCode != Activity.RESULT_OK || data == null) {
+            return;
+        }
+        Uri uri = data.getData();
+        Context context = getContext();
+        if (uri == null || context == null) return;
+        try {
+            context.getContentResolver()
+                    .takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        } catch (SecurityException e) {
+            // Some providers hand out a one-shot grant and refuse to persist it. The image still
+            // works until the process goes away, which is better than refusing the choice.
+        }
+        ChromeSharedPreferences.getInstance()
+                .writeString(ChromePreferenceKeys.AERIUM_NTP_BACKGROUND_IMAGE, uri.toString());
+        // Picking a picture is choosing to use it, so this also switches the background over
+        // rather than leaving the user to make the same decision twice.
+        ChromeSharedPreferences.getInstance()
+                .writeString(ChromePreferenceKeys.AERIUM_NTP_BACKGROUND, "photo");
+        AeriumNtpBackground.invalidate();
+        refreshBackgroundSummary();
+        updateImageVisibility();
+    }
+
+    private void refreshBackgroundSummary() {
+        Preference pref = findPreference(PREF_BACKGROUND);
+        if (pref == null) return;
+        pref.setSummary(getString(R.string.aerium_ntp_background_photo));
     }
 
     /**
@@ -7386,7 +7562,8 @@ public class AeriumNewTabPageFragment extends ChromeBaseSettingsFragment {
                                                 .writeString(sharedPrefKey, values[which]);
                                         pref.setSummary(labels[which]);
                                         dialog.dismiss();
-                                        updateSetVisibility();
+                                        AeriumNtpBackground.invalidate();
+                                        updateImageVisibility();
                                     })
                             .setNegativeButton(android.R.string.cancel, null)
                             .show();
@@ -7423,9 +7600,9 @@ public class AeriumNewTabPageFragment extends ChromeBaseSettingsFragment {
                 });
     }
 
-    /** The gradient set only means anything while the bundled gradient is the background. */
-    private void updateSetVisibility() {
-        Preference pref = findPreference(PREF_BACKGROUND_SET);
+    /** The picker only means anything while a photo is the background. */
+    private void updateImageVisibility() {
+        Preference pref = findPreference(PREF_IMAGE);
         if (pref == null) return;
         pref.setVisible(
                 "photo".equals(read(ChromePreferenceKeys.AERIUM_NTP_BACKGROUND, BACKGROUNDS[0])));
@@ -7493,7 +7670,7 @@ sed_i 's|^import org.chromium.chrome.browser.settings.AeriumMediaFragment;$|&\ni
 sed_i 's|^                    AeriumMediaFragment.SEARCH_INDEX_DATA_PROVIDER,$|&\n                    AeriumNewTabPageFragment.SEARCH_INDEX_DATA_PROVIDER,|' \
     $SIPR
 
-sed_i 's|      <message name="IDS_AERIUM_SPEED_DIAL_ADD" desc=|      <message name="IDS_AERIUM_SPEED_DIAL_BOOKMARKS" desc="Label on the new tab page button that opens bookmarks.">\n        Bookmarks\n      </message>\n      <message name="IDS_AERIUM_SPEED_DIAL_HISTORY" desc="Label on the new tab page button that opens history.">\n        History\n      </message>\n      <message name="IDS_AERIUM_SPEED_DIAL_DOWNLOADS" desc="Label on the new tab page button that opens downloads.">\n        Downloads\n      </message>\n      <message name="IDS_AERIUM_NTP_TITLE" desc="Title of the New tab page settings screen.">\n        New tab page\n      </message>\n      <message name="IDS_AERIUM_NTP_SPEED_DIAL_TITLE" desc="Title of the switch that shows the speed dial instead of the most visited tiles.">\n        Show shortcuts\n      </message>\n      <message name="IDS_AERIUM_NTP_SPEED_DIAL_SUMMARY" desc="Summary under that switch.">\n        A grid you arrange yourself, in place of the sites Aerium guesses from your history.\n      </message>\n      <message name="IDS_AERIUM_NTP_BACKGROUND_TITLE" desc="Title of the new tab page background chooser.">\n        Background\n      </message>\n      <message name="IDS_AERIUM_NTP_BACKGROUND_THEME" desc="Background choice that leaves the theme colour alone.">\n        Follow the theme\n      </message>\n      <message name="IDS_AERIUM_NTP_BACKGROUND_BLACK" desc="Background choice: black.">\n        Pure black\n      </message>\n      <message name="IDS_AERIUM_NTP_BACKGROUND_NAVY" desc="Background choice: the Aerium navy.">\n        Aerium navy\n      </message>\n      <message name="IDS_AERIUM_NTP_BACKGROUND_PHOTO" desc="Background choice: one of the gradients that ship with the browser.">\n        Bundled gradient\n      </message>\n      <message name="IDS_AERIUM_NTP_BACKGROUND_SET_TITLE" desc="Title of the chooser for which set of bundled gradients to draw from.">\n        Gradient set\n      </message>\n      <message name="IDS_AERIUM_NTP_SET_DUSK" desc="Name of a set of bundled gradients.">\n        Dusk\n      </message>\n      <message name="IDS_AERIUM_NTP_SET_DEEP" desc="Name of a set of bundled gradients.">\n        Deep water\n      </message>\n      <message name="IDS_AERIUM_NTP_SET_STONE" desc="Name of a set of bundled gradients.">\n        Stone\n      </message>\n      <message name="IDS_AERIUM_NTP_SET_MOSS" desc="Name of a set of bundled gradients.">\n        Moss\n      </message>\n      <message name="IDS_AERIUM_NTP_COLUMNS_TITLE" desc="Title of the chooser for how many shortcuts sit on a row.">\n        Shortcuts per row\n      </message>\n      <message name="IDS_AERIUM_NTP_ROWS_TITLE" desc="Title of the chooser for how many rows of shortcuts the grid holds.">\n        Rows of shortcuts\n      </message>\n      <message name="IDS_AERIUM_NTP_SHORTCUT_ROW_TITLE" desc="Title of the switch that shows the bookmarks, history and downloads row.">\n        Bookmarks, history and downloads\n      </message>\n      <message name="IDS_AERIUM_NTP_SHORTCUT_ROW_SUMMARY" desc="Summary under that switch.">\n        A row of three buttons under the shortcuts.\n      </message>\n      <message name="IDS_AERIUM_NTP_CLEAR_TITLE" desc="Title of the entry that removes every shortcut.">\n        Clear all shortcuts\n      </message>\n      <message name="IDS_AERIUM_NTP_CLEAR_SUMMARY" desc="Summary under that entry.">\n        Empties the grid. The sites themselves are not touched.\n      </message>\n&|' \
+sed_i 's|      <message name="IDS_AERIUM_SPEED_DIAL_ADD" desc=|      <message name="IDS_AERIUM_SPEED_DIAL_BOOKMARKS" desc="Label on the new tab page button that opens bookmarks.">\n        Bookmarks\n      </message>\n      <message name="IDS_AERIUM_SPEED_DIAL_HISTORY" desc="Label on the new tab page button that opens history.">\n        History\n      </message>\n      <message name="IDS_AERIUM_SPEED_DIAL_DOWNLOADS" desc="Label on the new tab page button that opens downloads.">\n        Downloads\n      </message>\n      <message name="IDS_AERIUM_NTP_TITLE" desc="Title of the New tab page settings screen.">\n        New tab page\n      </message>\n      <message name="IDS_AERIUM_NTP_SPEED_DIAL_TITLE" desc="Title of the switch that shows the speed dial instead of the most visited tiles.">\n        Show shortcuts\n      </message>\n      <message name="IDS_AERIUM_NTP_SPEED_DIAL_SUMMARY" desc="Summary under that switch.">\n        A grid you arrange yourself, in place of the sites Aerium guesses from your history.\n      </message>\n      <message name="IDS_AERIUM_NTP_BACKGROUND_TITLE" desc="Title of the new tab page background chooser.">\n        Background\n      </message>\n      <message name="IDS_AERIUM_NTP_BACKGROUND_BLACK" desc="Background choice: black.">\n        Pure black\n      </message>\n      <message name="IDS_AERIUM_NTP_BACKGROUND_NAVY" desc="Background choice: the Aerium navy.">\n        Aerium navy\n      </message>\n      <message name="IDS_AERIUM_NTP_BACKGROUND_PHOTO" desc="Background choice: an image the user picks from the device.">\n        Your photo\n      </message>\n      <message name="IDS_AERIUM_NTP_IMAGE_TITLE" desc="Title of the entry that opens the picker for a new tab page image.">\n        Choose an image\n      </message>\n      <message name="IDS_AERIUM_NTP_IMAGE_SUMMARY" desc="Summary under that entry.">\n        A picture from this device, shown behind the shortcuts.\n      </message>\n      <message name="IDS_AERIUM_NTP_COLUMNS_TITLE" desc="Title of the chooser for how many shortcuts sit on a row.">\n        Shortcuts per row\n      </message>\n      <message name="IDS_AERIUM_NTP_ROWS_TITLE" desc="Title of the chooser for how many rows of shortcuts the grid holds.">\n        Rows of shortcuts\n      </message>\n      <message name="IDS_AERIUM_NTP_SHORTCUT_ROW_TITLE" desc="Title of the switch that shows the bookmarks, history and downloads row.">\n        Bookmarks, history and downloads\n      </message>\n      <message name="IDS_AERIUM_NTP_SHORTCUT_ROW_SUMMARY" desc="Summary under that switch.">\n        A row of three buttons under the shortcuts.\n      </message>\n      <message name="IDS_AERIUM_NTP_CLEAR_TITLE" desc="Title of the entry that removes every shortcut.">\n        Clear all shortcuts\n      </message>\n      <message name="IDS_AERIUM_NTP_CLEAR_SUMMARY" desc="Summary under that entry.">\n        Empties the grid. The sites themselves are not touched.\n      </message>\n&|' \
     chrome/browser/ui/android/strings/android_chrome_strings.grd
 
 sed_i 's|    public static final String AERIUM_SPEED_DIAL_ROWS = "Chrome.Aerium.SpeedDialRows";|&\n\n    /** Whether the bookmarks, history and downloads row sits under the speed dial. */\n    public static final String AERIUM_SPEED_DIAL_SHORTCUTS = "Chrome.Aerium.SpeedDialShortcuts";|' \
