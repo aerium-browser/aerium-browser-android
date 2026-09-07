@@ -1497,6 +1497,70 @@ for _qas_layout in medium small xsmall; do
         $AERIUM_QAS/layout/quick_action_search_widget_${_qas_layout}_layout.xml
 done
 
+# --- DoH: minimal headers on the query, and a resolver that keeps working.
+#
+# Requested as android issue 17, which names two Cromite patches. This is the
+# defensible half of them; the rest is left, and why is written below.
+#
+# MINIMAL HEADERS. A DoH query is an HTTP POST carrying wire-format DNS, and
+# Chromium sends it with a Referer, a User-Agent, Accept-Encoding advertising
+# Brotli and Zstd, and an Accept-Language. RFC 8484 section 6.1 says
+# implementations SHOULD NOT set non-essential headers on these, and the reason
+# is what it sounds like: each one is a stable identifier handed to the
+# resolver on every lookup, and the resolver is the party DoH exists to stop
+# trusting. A new LOAD_MINIMAL_HEADERS load flag, set only by DnsHTTPAttempt,
+# suppresses all four.
+#
+# A CONFIG THAT SURVIVES ANDROID. Upstream builds a DNS config from overrides
+# only when DnsConfigOverrides::OverridesEverything(), so if the system DNS
+# configuration is missing or unreadable, BuildEffectiveConfig returns nullopt
+# and the resolver quietly stops using the DoH server the user chose. On
+# Android that is routine rather than exceptional - a VPN or Private DNS in the
+# path is enough. An explicit DoH server plus a secure mode is now sufficient
+# on its own. This is the half of the request that is a bug fix rather than a
+# preference.
+#
+# WHAT IS NOT TAKEN, twice over. Cromite also makes "automatic" mean "secure".
+# That is not a change of default but of failure mode: secure mode has no
+# fallback, so an unreachable DoH server means no name resolution at all with
+# nothing in the UI to explain it. Chromium picks automatic for that reason and
+# so does this; secure mode is already available by choosing a specific
+# provider. And Cromite stops Chromium disabling DoH on a device that looks
+# managed or parentally filtered - defensible for this browser to want, but it
+# does it with `if ((true)) return false;` and leaves the original body as dead
+# code. Chromium 152 compiles with -Wunreachable-code-aggressive, on line 2173
+# of build/config/compiler/BUILD.gn, and warnings are errors; clang's carve-out
+# for configuration-shaped constants is probably why Cromite gets away with it,
+# but this script already learned that lesson once - see the hardwareConcurrency
+# block, which replaces an assignment rather than adding an early return for
+# exactly this reason. Nothing added here introduces unreachable code: both new
+# conditions are runtime values.
+sed_i 's|^LOAD_FLAG(IS_MAIN_FRAME_ORIGIN_RECENTLY_ACCESSED, 1 << 19)$|&\n\n// Aerium: send only the headers a DoH query needs. RFC 8484 section 6.1:\n// "Implementations SHOULD NOT set non-essential HTTP headers in DoH client\n// requests." Ported from Cromite. See theme.sh.\nLOAD_FLAG(MINIMAL_HEADERS, 1 << 20)|' \
+    net/base/load_flags_list.h
+
+sed_i 's%^  request_->SetLoadFlags(request_->load_flags() | LOAD_DISABLE_CACHE |$%  // Aerium: LOAD_MINIMAL_HEADERS - a DoH query carries no Referer, no\n  // User-Agent and no Accept-Language. See net/base/load_flags_list.h.\n&%' \
+    net/dns/dns_http_attempt.cc
+sed_i 's%^                         LOAD_BYPASS_PROXY);$%                         LOAD_MINIMAL_HEADERS | LOAD_BYPASS_PROXY);%' \
+    net/dns/dns_http_attempt.cc
+
+sed_i 's%^  // Our consumer should have made sure that this is a safe referrer (e.g. via$%  // Aerium: a request that asked for minimal headers gets no Referer and no\n  // User-Agent. Only DoH sets that flag - see net/dns/dns_http_attempt.cc.\n  if (!(request_info_.load_flags \& LOAD_MINIMAL_HEADERS)) {\n&%' \
+    net/url_request/url_request_http_job.cc
+sed_i 's%^                                : std::string());$%&\n  }%' \
+    net/url_request/url_request_http_job.cc
+sed_i 's%^void URLRequestHttpJob::AddExtraHeaders() {$%&\n  // Aerium: and no Brotli, Zstd or Accept-Language either. A DoH response is a\n  // few hundred bytes of wire-format DNS; advertising encodings for it only\n  // adds bytes that identify the client. See net/base/load_flags_list.h.\n  const bool minimal_headers =\n      (request_info_.load_flags \& LOAD_MINIMAL_HEADERS) != 0;%' \
+    net/url_request/url_request_http_job.cc
+sed_i 's%^      request()->context()->enable_brotli(),$%      !minimal_headers \&\& request()->context()->enable_brotli(),%' \
+    net/url_request/url_request_http_job.cc
+sed_i 's%^      request()->context()->enable_zstd());$%      !minimal_headers \&\& request()->context()->enable_zstd());%' \
+    net/url_request/url_request_http_job.cc
+sed_i 's%^  if (http_user_agent_settings_) {$%  if (!minimal_headers \&\& http_user_agent_settings_) {%' \
+    net/url_request/url_request_http_job.cc
+
+sed_i 's%^    if (config_overrides_.OverridesEverything()) {$%    // Aerium: an explicit DoH server plus a secure mode is enough to build a\n    // config on its own. Upstream requires OverridesEverything(), so a device\n    // whose system DNS configuration is missing or unreadable - which on\n    // Android is routine, with a VPN or Private DNS in the way - returns\n    // nullopt here and silently stops using the DoH server the user chose.\n    // Ported from Cromite. See theme.sh.\n    if (config_overrides_.OverridesEverything() ||\n        (config_overrides_.dns_over_https_config \&\&\n         config_overrides_.secure_dns_mode)) {%' \
+    net/dns/dns_client.cc
+
+echo "[aerium] DoH hardening applied"
+
 # --- The "Select DNS provider" menu in Settings > Security.
 #
 # What that menu shows is DohProviderEntry::GetList() filtered twice, in
