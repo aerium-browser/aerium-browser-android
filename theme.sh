@@ -6400,6 +6400,7 @@ import android.view.View;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.GridLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -6631,15 +6632,58 @@ public class AeriumSpeedDial extends LinearLayout {
         rowParams.topMargin = dp(6);
         row.setLayoutParams(rowParams);
 
-        row.addView(buildShortcut(R.string.aerium_speed_dial_bookmarks, "chrome://bookmarks/", 0));
-        row.addView(buildShortcut(R.string.aerium_speed_dial_history, "chrome://history/", dp(10)));
         row.addView(
-                buildShortcut(R.string.aerium_speed_dial_downloads, "chrome://downloads/", dp(10)));
+                buildShortcut(
+                        R.string.aerium_speed_dial_bookmarks,
+                        R.drawable.aerium_ic_bookmarks,
+                        "chrome://bookmarks/",
+                        0));
+        row.addView(
+                buildShortcut(
+                        R.string.aerium_speed_dial_history,
+                        R.drawable.aerium_ic_history,
+                        "chrome://history/",
+                        dp(10)));
+        row.addView(
+                buildShortcut(
+                        R.string.aerium_speed_dial_downloads,
+                        R.drawable.aerium_ic_downloads,
+                        "chrome://downloads/",
+                        dp(10)));
         return row;
     }
 
-    private View buildShortcut(int labelRes, final String url, int startMargin) {
-        TextView pill = buildPill(getResources().getString(labelRes), startMargin);
+    /**
+     * A glyph and a label, centred together in the pill.
+     *
+     * <p>A LinearLayout rather than a TextView with a compound drawable, because a compound
+     * drawable is laid out against the view's edge and not against the text: with the label
+     * centred it would sit alone at the far left of a full-width pill.
+     */
+    private View buildShortcut(int labelRes, int iconRes, final String url, int startMargin) {
+        LinearLayout pill = new LinearLayout(getContext());
+        pill.setOrientation(HORIZONTAL);
+        pill.setGravity(Gravity.CENTER);
+        pill.setBackground(pillBackground());
+
+        ImageView icon = new ImageView(getContext());
+        icon.setImageResource(iconRes);
+        LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(18), dp(18));
+        iconParams.setMarginEnd(dp(7));
+        icon.setLayoutParams(iconParams);
+
+        TextView label = new TextView(getContext());
+        label.setText(labelRes);
+        label.setTextColor(0xFFD8E6F5);
+        label.setTextSize(12);
+
+        pill.addView(icon);
+        pill.addView(label);
+
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(44), 1f);
+        params.setMarginStart(startMargin);
+        pill.setLayoutParams(params);
+
         pill.setOnClickListener(
                 new OnClickListener() {
                     @Override
@@ -6650,21 +6694,25 @@ public class AeriumSpeedDial extends LinearLayout {
         return pill;
     }
 
+    private GradientDrawable pillBackground() {
+        GradientDrawable shape = new GradientDrawable();
+        shape.setShape(GradientDrawable.RECTANGLE);
+        shape.setCornerRadius(dp(14));
+        shape.setColor(Color.TRANSPARENT);
+        shape.setStroke(dp(1), OUTLINE);
+        return shape;
+    }
+
     private TextView buildPill(CharSequence label, int startMargin) {
         TextView pill = new TextView(getContext());
         pill.setText(label);
         pill.setTextColor(0xFFD8E6F5);
         pill.setTextSize(12);
         pill.setGravity(Gravity.CENTER);
-        GradientDrawable shape = new GradientDrawable();
-        shape.setShape(GradientDrawable.RECTANGLE);
-        shape.setCornerRadius(dp(14));
-        shape.setColor(Color.TRANSPARENT);
-        shape.setStroke(dp(1), OUTLINE);
-        pill.setBackground(shape);
+        pill.setBackground(pillBackground());
 
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(44), 1f);
-        params.leftMargin = startMargin;
+        params.setMarginStart(startMargin);
         pill.setLayoutParams(params);
         return pill;
     }
@@ -7366,6 +7414,49 @@ cat > chrome/android/java/res/xml/aerium_ntp_preferences.xml <<'AERIUM_NTP_XML'
 AERIUM_NTP_XML
 
 sed_i 's|^  "java/res/xml/aerium_media_preferences.xml",$|  "java/res/xml/aerium_ntp_preferences.xml",\n&|' \
+    chrome/android/chrome_java_resources.gni
+
+# --- Glyphs for the new tab page's bookmarks / history / downloads row.
+#
+# Drawn here rather than borrowed from Chromium's own iconset, on purpose twice
+# over. The icons upstream ships are filled Material glyphs and this design is
+# outlined - a solid glyph next to a hairline pill is the one thing on that row
+# that would look borrowed. And the ones for these three pages live in other
+# modules, which means either an R class clash with org.chromium.chrome.R or a
+# dependency this deliberately self-contained view does not have.
+#
+# Stroked paths rather than filled ones, for a related reason: the shapes below
+# are lines and arcs that can be read and checked by eye, where a filled
+# Material path is forty coordinates that either are the icon or are not. The
+# colour is the pill's own text colour, stated here so nothing tints at runtime.
+for _aerium_icon in bookmarks history downloads; do
+    case $_aerium_icon in
+        bookmarks) _aerium_path='M7,3.5 L17,3.5 L17,20.5 L12,16.5 L7,20.5 Z' ;;
+        history)   _aerium_path='M4,12 a8,8 0 1,0 16,0 a8,8 0 1,0 -16,0 M12,7 L12,12 L15.5,14' ;;
+        downloads) _aerium_path='M12,3.5 L12,14.5 M7.5,10.5 L12,15 L16.5,10.5 M4.5,19.5 L19.5,19.5' ;;
+    esac
+    cat > chrome/android/java/res/drawable/aerium_ic_${_aerium_icon}.xml <<AERIUM_ICON_XML
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright 2026 The Aerium Authors. Generated by theme.sh. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#FFD8E6F5"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="${_aerium_path}" />
+</vector>
+AERIUM_ICON_XML
+done
+
+# The resource list is explicit rather than a glob, so a drawable that is not
+# named here is not compiled in and R.drawable has no field for it.
+sed_i 's|^  "java/res/xml/aerium_ntp_preferences.xml",$|  "java/res/drawable/aerium_ic_bookmarks.xml",\n  "java/res/drawable/aerium_ic_downloads.xml",\n  "java/res/drawable/aerium_ic_history.xml",\n&|' \
     chrome/android/chrome_java_resources.gni
 
 cat > chrome/android/java/src/org/chromium/chrome/browser/settings/AeriumNewTabPageFragment.java <<'AERIUM_NTP_JAVA'
