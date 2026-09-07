@@ -767,7 +767,19 @@ sed_i 's|^      <message name="IDS_THEME_SETTINGS" desc="Title for the Theme set
 sed_i 's|    static const float kAdjustedBrightness = 18.0f / 255.0f;|    // Aerium: 0 instead of 18/255 - see theme.sh. Pure black, not Material grey.\n    static const float kAdjustedBrightness = 0.0f;|' \
     third_party/blink/renderer/platform/graphics/dark_mode_color_filter.cc
 
-# --- Blacken sites that ship their own dark theme. Off by default.
+# --- Blacken sites that ship their own dark theme. On by default.
+#
+# It shipped off, and android issue 16 is what that cost: "in Aerium every site
+# does dark grey not black ... nothing is going amoled black except The
+# Economist site". That report is the two halves of this working exactly as
+# built. The Economist is a light page, so force dark inverts it and the zeroed
+# AdjustGray floor above takes it to #000000. Every site the reporter names
+# after it ships its own dark theme, which force dark correctly declines to
+# touch - and the switch that would have folded those to black was a second,
+# separate, defaulted-off switch that nothing on the Appearance screen suggests
+# you also need. A user who turns on "Darken websites" in an OLED browser has
+# already said what they want; asking them to find a second switch to get it
+# was the wrong default.
 #
 # Force dark does not touch these sites, and that is correct: its classifiers
 # are brightness-gated (150 for foreground, 205 for background, set in
@@ -846,7 +858,7 @@ sed_i 's|^                ADAPTIVE_TOOLBAR_CUSTOMIZATION_ENABLED,$|             
 CAI=chrome/android/java/src/org/chromium/chrome/browser/ChromeApplicationImpl.java
 sed_i 's|^import org.chromium.base.CommandLine;$|&\nimport org.chromium.chrome.browser.preferences.ChromePreferenceKeys;\nimport org.chromium.chrome.browser.preferences.ChromeSharedPreferences;|' \
     $CAI
-sed_i 's|            FontPreloader.getInstance().load(getApplication());|&\n\n            // Aerium: the renderer fixes its dark-mode settings at process\n            // start, so this has to be on the command line before native\n            // comes up rather than flipped live. Merged into any existing\n            // value instead of overwriting whatever else asked for features.\n            if (ChromeSharedPreferences.getInstance()\n                    .readBoolean(ChromePreferenceKeys.AERIUM_BLACKEN_DARK_SITES, false)) {\n                CommandLine commandLine = CommandLine.getInstance();\n                String existing = commandLine.getSwitchValue("enable-features");\n                String merged =\n                        (existing == null \|\| existing.isEmpty())\n                                ? "AeriumBlackenDarkBackgrounds"\n                                : existing + ",AeriumBlackenDarkBackgrounds";\n                commandLine.appendSwitchWithValue("enable-features", merged);\n            }|' \
+sed_i 's|            FontPreloader.getInstance().load(getApplication());|&\n\n            // Aerium: the renderer fixes its dark-mode settings at process\n            // start, so this has to be on the command line before native\n            // comes up rather than flipped live. Merged into any existing\n            // value instead of overwriting whatever else asked for features.\n            if (ChromeSharedPreferences.getInstance()\n                    .readBoolean(ChromePreferenceKeys.AERIUM_BLACKEN_DARK_SITES, true)) {\n                CommandLine commandLine = CommandLine.getInstance();\n                String existing = commandLine.getSwitchValue("enable-features");\n                String merged =\n                        (existing == null \|\| existing.isEmpty())\n                                ? "AeriumBlackenDarkBackgrounds"\n                                : existing + ",AeriumBlackenDarkBackgrounds";\n                commandLine.appendSwitchWithValue("enable-features", merged);\n            }|' \
     $CAI
 
 sed_i 's|^</PreferenceScreen>$|    <org.chromium.components.browser_ui.settings.ChromeSwitchPreference\n        android:key="aerium_blacken_dark_sites"\n        android:title="@string/aerium_blacken_dark_sites_title"\n        android:summary="@string/aerium_blacken_dark_sites_summary" />\n&|' \
@@ -869,10 +881,10 @@ sed_i 's|^    private boolean mWebContentsDarkModeEnabled;$|&\n\n    // Aerium: 
     $TSF
 sed_i 's|^                    int theme = (int) newValue;$|                    updateBlackenDarkSitesEnabled();\n&|' $TSF
 
-sed_i 's|^        // TODO(crbug.com/40198953): Notify feature engagement system that settings were opened.$|        mBlackenDarkSites = (ChromeSwitchPreference) findPreference("aerium_blacken_dark_sites");\n        if (mBlackenDarkSites != null) {\n            mBlackenDarkSites.setChecked(\n                    sharedPreferencesManager.readBoolean(\n                            ChromePreferenceKeys.AERIUM_BLACKEN_DARK_SITES, false));\n            mBlackenDarkSites.setOnPreferenceChangeListener(\n                    (preference, newValue) -> {\n                        sharedPreferencesManager.writeBoolean(\n                                ChromePreferenceKeys.AERIUM_BLACKEN_DARK_SITES,\n                                (boolean) newValue);\n                        showRestartSnackbar();\n                        return true;\n                    });\n            updateBlackenDarkSitesEnabled();\n        }\n\n&|' \
+sed_i 's|^        // TODO(crbug.com/40198953): Notify feature engagement system that settings were opened.$|        mBlackenDarkSites = (ChromeSwitchPreference) findPreference("aerium_blacken_dark_sites");\n        if (mBlackenDarkSites != null) {\n            mBlackenDarkSites.setChecked(\n                    sharedPreferencesManager.readBoolean(\n                            ChromePreferenceKeys.AERIUM_BLACKEN_DARK_SITES, true));\n            mBlackenDarkSites.setOnPreferenceChangeListener(\n                    (preference, newValue) -> {\n                        sharedPreferencesManager.writeBoolean(\n                                ChromePreferenceKeys.AERIUM_BLACKEN_DARK_SITES,\n                                (boolean) newValue);\n                        showRestartSnackbar();\n                        return true;\n                    });\n            updateBlackenDarkSitesEnabled();\n        }\n\n&|' \
     $TSF
 
-sed_i 's|^      <message name="IDS_AERIUM_PURE_BLACK_TITLE" desc=|      <message name="IDS_AERIUM_BLACKEN_DARK_SITES_TITLE" desc="Title of the switch that also blackens websites which already have their own dark theme.">\n        Blacken dark sites\n      </message>\n      <message name="IDS_AERIUM_BLACKEN_DARK_SITES_SUMMARY" desc="Summary under the Blacken dark sites switch. Mentions that a restart is needed.">\n        Extend darkening to sites that ship their own dark theme, so their dark grey becomes true black too. Restart Aerium to apply.\n      </message>\n      <message name="IDS_AERIUM_BLACKEN_DARK_SITES_NEEDS_AUTO_DARK" desc="Summary shown in place of the usual one when the Blacken dark sites switch is greyed out, naming the checkbox that has to be ticked first.">\n        Turn on Darken websites above to use this.\n      </message>\n&|' \
+sed_i 's|^      <message name="IDS_AERIUM_PURE_BLACK_TITLE" desc=|      <message name="IDS_AERIUM_BLACKEN_DARK_SITES_TITLE" desc="Title of the switch that also blackens websites which already have their own dark theme.">\n        Blacken dark sites\n      </message>\n      <message name="IDS_AERIUM_BLACKEN_DARK_SITES_SUMMARY" desc="Summary under the Blacken dark sites switch. Mentions that a restart is needed.">\n        On: sites that ship their own dark theme have their dark grey taken to true black as well, not just the pages Aerium darkens itself. Restart Aerium to apply.\n      </message>\n      <message name="IDS_AERIUM_BLACKEN_DARK_SITES_NEEDS_AUTO_DARK" desc="Summary shown in place of the usual one when the Blacken dark sites switch is greyed out, naming the checkbox that has to be ticked first.">\n        Turn on Darken websites above to use this.\n      </message>\n&|' \
     chrome/browser/ui/android/strings/android_chrome_strings.grd
 
 # --- Make the blacken switch reach sites that ship their own dark theme.
