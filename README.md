@@ -61,23 +61,26 @@ What Aerium does cut is anything it isn't using — around 20 MB of Android XR a
 - `chrome://chrome-urls` lists every internal page; `chrome://flags` has the full set of experiments.
 - WebRTC IP handling lives under **Settings → Privacy and security**. If a voice service misbehaves because your IP is shielded by default, switch it to **Default public interface only** or **Default**.
 
-## More privacy flags to consider
+## Privacy protections and flags
 
-These aren't on by default — each is a deliberate tradeoff, so Aerium leaves them for you to opt into individually at `chrome://flags`:
+Most of what other builds put behind a flag, Aerium applies on Android by default. There is no switch to find because there is nothing to turn on:
 
-- `chrome://flags/#disable-search-engine-collection` — stop Chromium from scraping search engines it notices on visited pages.
-- `chrome://flags/#enable-parallel-downloading` — split downloads into multiple simultaneous requests for faster large files.
-- `chrome://flags/#fingerprinting-canvas-image-data-noise` — slightly perturb Canvas image-data readback to resist fingerprinting.
-- `chrome://flags/#fingerprinting-canvas-measuretext-noise` — add tiny random noise to Canvas measureText() output.
-- `chrome://flags/#fingerprinting-client-rects-noise` — add tiny random noise to getClientRects()/getBoundingClientRect().
-- `chrome://flags/#force-punycode-hostnames` — always show internationalized domain names as punycode, closing a homograph-spoofing vector.
-- `chrome://flags/#increase-incognito-storage-quota` — raise the storage quota for Incognito and Guest profiles.
-- `chrome://flags/#popups-to-tabs` — open popup windows as new tabs instead.
-- `chrome://flags/#reduced-system-info` — reduce system info exposed via headers/JS, and report two CPU cores regardless of the real count.
-- `chrome://flags/#remove-client-hints` — strip Client Hints headers (detailed system info sent to servers).
-- `chrome://flags/#remove-tabsearch-button` — remove the tab-search button from the tab strip.
-- `chrome://flags/#show-avatar-button` — control when the profile avatar button appears (always, only in Incognito/Guest, or never).
-- `chrome://flags/#spoof-webgl-info` — return generic WebGL renderer/vendor strings instead of your real GPU info.
+- **Canvas fingerprinting** — image-data readback and `measureText()` are both perturbed.
+- **`getClientRects()` / `getBoundingClientRect()`** — perturbed by a factor drawn once per document.
+- **WebGL renderer and vendor** — reported as generic strings rather than your real GPU.
+- **CPU core count** — reported as 2 whatever the real number is, with the User-Agent client hints reduced to match.
+
+The flags Aerium adds, at `chrome://flags`:
+
+- `chrome://flags/#aerium-audio-noise` — audio fingerprint deception. **On by default**; this is where you turn it off.
+- `chrome://flags/#aerium-time-zone` — tell sites a time zone other than the one your phone is set to. Off by default.
+- `chrome://flags/#aerium-local-font-access` — the Local Font Access API, which hands a site your installed font list. Off by default.
+
+And one upstream Chromium flag worth knowing:
+
+- `chrome://flags/#enable-parallel-downloading` — split downloads into simultaneous requests for faster large files.
+
+**If you have read the Windows or Linux README**, its longer list of `#fingerprinting-*`, `#spoof-webgl-info`, `#reduced-system-info`, `#remove-client-hints`, `#force-punycode-hostnames` and similar flags does not apply here, and searching `chrome://flags` for them will find nothing. Those builds are based on ungoogled-chromium and inherit its flag entries; the Android build is based on GrapheneOS's Vanadium, which has no equivalent mechanism. The same protections are compiled in and always on instead. A few of those flags also govern desktop-only UI — the tab-search button, the profile avatar button — which Android does not have.
 
 ## Building
 
