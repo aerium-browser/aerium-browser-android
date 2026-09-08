@@ -846,6 +846,24 @@ perl -0777 -pi -e '
              . "this block already ran\n";
 ' $DMF
 
+# The other call site, and the one that actually paints page backgrounds.
+#
+# DarkModeFilter has two entry points and the fold above only covers one of
+# them. GraphicsContext::FillRect, FillRoundedRect, FillContouredRect and
+# FillDRRect all end in DrawRect/DrawRRect/DrawPath, which wrap the flags in
+# GraphicsContext::DarkModeFlags - and that calls ApplyToFlagsIfNeeded, which
+# inlines its own copy of the invert instead of calling InvertColorIfNeeded.
+# So every box background in the document went straight past the fold.
+# InvertColorIfNeeded is left with box shadows (box_painter_base.cc) and the
+# document base colour (local_frame_view.cc), which is why white pages went
+# black - that is AdjustGray's zeroed floor doing it inside the colour filter -
+# and everything else stayed grey.
+#
+# Same condition, same helper, so the two paths cannot drift. The contrast
+# background passed on to AdjustDarkenColor below goes through
+# InvertColorIfNeeded and is therefore already folded.
+sed_i 's%  dark_mode_flags.setColor(AdjustDarkenColor(%  // Aerium: see theme.sh. This is the path every page background takes.\n  if (immutable_.blacken_dark_backgrounds \&\& role == ElementRole::kBackground) {\n    flags_color = AeriumFoldTowardBlack(flags_color);\n  }\n\n&%' $DMF
+
 # The contrast heuristic assumed #121212 behind everything, which stops being
 # true the moment the fold lands. AdjustDarkenColor uses it to decide whether a
 # border is already readable and may be darkened further; told the wrong
