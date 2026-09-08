@@ -5551,6 +5551,102 @@ sed_i 's|      <message name="IDS_AERIUM_EXTERNAL_DOWNLOAD_MANAGER_TITLE" desc=|
 echo "[aerium] bottom bar applied"
 
 
+# --- The classic tab switcher: one column of large, overlapping cards.
+#
+# Asked for as "the old Chrome tab switcher, like Kiwi". Kiwi's is three lines
+# of real code: a shared preference called active_tabswitcher, span count forced
+# to 1 when it reads "classic", and a RecyclerView.ItemDecoration that gives
+# every item a negative top offset so the cards stack instead of queueing. There
+# is no revived StackLayout behind it - that class went out of Chromium years
+# ago along with the compositor layout system it drove, and nothing in 152 could
+# host it.
+#
+# So this is the same idea, built on what 152 actually has. Three things change
+# and nothing else does: the grid becomes one column wide, consecutive tab cards
+# overlap, and the drag-to-merge threshold is put out of reach. The card layout,
+# the view binders, the thumbnail pipeline, the touch helper, the animations and
+# the whole Hub around it are untouched, which is the point - this surface is
+# reworked upstream every few milestones and a fork that rewrites it pays for
+# that every bump.
+#
+# Only the main switcher. TabListCoordinator is also the tab group dialog, the
+# tab list editor, the archived tabs dialog and the bottom tab strip; componentId
+# says which, and only TabComponentId.GRID_TAB_SWITCHER gets this. A one-column
+# tab group dialog would be a bug, not a style.
+#
+# On by default, because it is what was asked for and the grid is one switch
+# away. Both switches are read where the switcher is built, and the Hub keeps
+# that coordinator warm between openings, so the change lands on the next start
+# - hence the restart snackbar the other Appearance switches already use.
+sed_i 's|    /\*\* Whether Aerium shows the bottom bar, which also moves the tab switcher new-tab button. \*/|    /** Whether Aerium uses the classic one-column tab switcher instead of the grid. */\n    public static final String AERIUM_CLASSIC_TAB_SWITCHER = "Chrome.Aerium.ClassicTabSwitcher";\n\n&|' \
+    $CPK
+sed_i 's|^                AERIUM_BOTTOM_BAR,$|                AERIUM_CLASSIC_TAB_SWITCHER,\n&|' $CPK
+
+# The span count. getSpanCount() is the single place the grid width is decided -
+# the constructor asks it once and the orientation listener asks it again on
+# every configuration change - so returning 1 here is the whole of "one column",
+# and there is no second path that can put the second column back.
+TLM=chrome/android/features/tab_ui/java/src/org/chromium/chrome/browser/tasks/tab_management/TabListMediator.java
+sed_i 's%    int getSpanCount(int screenWidthDp) {%&\n        // Aerium: see theme.sh. One column is what makes the classic switcher\n        // classic - a card as wide as the list is what everything else follows\n        // from. mComponentId keeps this off the tab group dialog and the tab\n        // list editor, which share this mediator.\n        if (mMode == TabListMode.GRID\n                \&\& mComponentId == TabComponentId.GRID_TAB_SWITCHER\n                \&\& ChromeSharedPreferences.getInstance()\n                        .readBoolean(ChromePreferenceKeys.AERIUM_CLASSIC_TAB_SWITCHER, true)) {\n            return 1;\n        }%' \
+    $TLM
+
+TLC=chrome/android/features/tab_ui/java/src/org/chromium/chrome/browser/tasks/tab_management/TabListCoordinator.java
+sed_i 's%^import android.graphics.PointF;$%import android.content.res.Resources;\n&%' $TLC
+sed_i 's%^import org.chromium.chrome.browser.profiles.Profile;$%import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;\nimport org.chromium.chrome.browser.preferences.ChromeSharedPreferences;\n&%' $TLC
+
+# The overlap. A full-width card is about 1.18 times as tall as it is wide plus
+# the 40dp header, so on an ordinary phone one card is most of the screen and a
+# plain single column would show one and a half tabs. Pulling each card up by
+# all but a peek of the one above turns that into four or five, which is the
+# density the old switcher had.
+#
+# The peek is a fraction of the card rather than a fixed dp, so it holds up in
+# landscape and on a tablet where the card is a different shape, with a floor at
+# the header plus a slice of thumbnail - below that the card stops being
+# identifiable and the stack is just a list of title bars.
+#
+# Consecutive TAB cards only. The archived-tabs prompt and the price-tracking
+# messages span the row, and sliding a tab up over one would hide it entirely.
+sed_i 's%^    private int mAwaitingTabId = Tab.INVALID_TAB_ID;$%&\n\n    // Aerium: see theme.sh.\n    private final boolean mAeriumClassicSwitcher;\n    private @Nullable AeriumClassicStackDecoration mAeriumClassicDecoration;\n\n    /**\n     * Aerium: see theme.sh. Lifts every card over the one above it so the list\n     * reads as a stack rather than a column.\n     */\n    private class AeriumClassicStackDecoration extends RecyclerView.ItemDecoration {\n        private static final float PEEK_FRACTION = 0.3f;\n        private static final int MIN_THUMBNAIL_PEEK_DP = 48;\n\n        private int mOverlapPx;\n\n        void setCardHeight(int cardHeightPx) {\n            final Resources resources = mActivity.getResources();\n            final int minPeekPx =\n                    resources.getDimensionPixelSize(R.dimen.tab_grid_card_header_height)\n                            + 2 * resources.getDimensionPixelSize(R.dimen.tab_grid_card_margin)\n                            + Math.round(\n                                    MIN_THUMBNAIL_PEEK_DP\n                                            * resources.getDisplayMetrics().density);\n            final int peekPx = Math.max(minPeekPx, Math.round(cardHeightPx * PEEK_FRACTION));\n            mOverlapPx = Math.max(0, cardHeightPx - peekPx);\n        }\n\n        @Override\n        public void getItemOffsets(\n                Rect outRect, View view, RecyclerView parent, RecyclerView.State state) {\n            outRect.setEmpty();\n            if (mOverlapPx <= 0) return;\n            final int position = parent.getChildAdapterPosition(view);\n            if (position <= 0 || position >= mModelList.size()) return;\n            if (!TabProperties.isTabOrTabGroup(mModelList.get(position).model)) return;\n            if (!TabProperties.isTabOrTabGroup(mModelList.get(position - 1).model)) return;\n            outRect.top = -mOverlapPx;\n        }\n    }\n%' \
+    $TLC
+
+sed_i 's%^        mMode = mode;$%&\n        // Aerium: see theme.sh. Read once here rather than per frame, and only\n        // for the tab switcher itself - this coordinator is also the tab group\n        // dialog, the tab list editor and the archived tabs dialog.\n        mAeriumClassicSwitcher =\n                mode == TabListMode.GRID\n                        \&\& componentId == TabComponentId.GRID_TAB_SWITCHER\n                        \&\& ChromeSharedPreferences.getInstance()\n                                .readBoolean(\n                                        ChromePreferenceKeys.AERIUM_CLASSIC_TAB_SWITCHER, true);%' \
+    $TLC
+
+sed_i 's%^                mRecyclerView.setLayoutManager(gridLayoutManager);$%&\n                if (mAeriumClassicSwitcher) {\n                    // Aerium: see theme.sh.\n                    mAeriumClassicDecoration = new AeriumClassicStackDecoration();\n                    mRecyclerView.addItemDecoration(mAeriumClassicDecoration);\n                }%' \
+    $TLC
+
+# The decoration is told the card height from the one place that computes it.
+# Set BEFORE the early return below - that return fires whenever the size has
+# not changed, which includes the second call for a size the decoration has not
+# been given yet.
+sed_i 's%^        final Size oldDefaultSize = mMediator.getDefaultGridCardSize();$%        // Aerium: see theme.sh.\n        if (mAeriumClassicDecoration != null) {\n            mAeriumClassicDecoration.setCardHeight(cardHeightPx);\n        }\n\n&%' \
+    $TLC
+
+# Drag-to-merge has to go, and this is why. TabListRecyclerView.isOverlap
+# measures the dragged card against every other card LAID OUT WHERE IT IS - not
+# against where the finger is - and calls it a merge when the intersection
+# passes half the smaller card. Cards that already overlap by two thirds are
+# past that threshold before the drag has moved at all, so in a stacked switcher
+# every long press would offer to make a tab group. A threshold above 1 is
+# unreachable by definition, which turns the merge off without touching the
+# touch helper. Dragging to reorder and swiping to close both still work.
+sed_i 's%^                                        PERCENTAGE_AREA_OVERLAP_MERGE_THRESHOLD,$%                                        // Aerium: see theme.sh.\n                                        mAeriumClassicSwitcher\n                                                ? 2f\n                                                : PERCENTAGE_AREA_OVERLAP_MERGE_THRESHOLD,%' \
+    $TLC
+
+sed_i 's|^</PreferenceScreen>$|    <org.chromium.components.browser_ui.settings.ChromeSwitchPreference\n        android:key="aerium_classic_tab_switcher"\n        android:title="@string/aerium_classic_tab_switcher_title"\n        android:summary="@string/aerium_classic_tab_switcher_summary" />\n&|' \
+    chrome/browser/ui/android/night_mode/java/res/xml/theme_preferences.xml
+
+sed_i 's|^        // TODO(crbug.com/40198953): Notify feature engagement system that settings were opened.$|        ChromeSwitchPreference classicTabSwitcher =\n                (ChromeSwitchPreference) findPreference("aerium_classic_tab_switcher");\n        if (classicTabSwitcher != null) {\n            classicTabSwitcher.setChecked(\n                    sharedPreferencesManager.readBoolean(\n                            ChromePreferenceKeys.AERIUM_CLASSIC_TAB_SWITCHER, true));\n            classicTabSwitcher.setOnPreferenceChangeListener(\n                    (preference, newValue) -> {\n                        sharedPreferencesManager.writeBoolean(\n                                ChromePreferenceKeys.AERIUM_CLASSIC_TAB_SWITCHER,\n                                (boolean) newValue);\n                        showRestartSnackbar();\n                        return true;\n                    });\n        }\n\n&|' \
+    $TSF
+
+sed_i 's|      <message name="IDS_AERIUM_BOTTOM_BAR_TITLE" desc=|      <message name="IDS_AERIUM_CLASSIC_TAB_SWITCHER_TITLE" desc="Title of the switch that shows open tabs as one column of large overlapping cards instead of a grid.">\n        Classic tab switcher\n      </message>\n      <message name="IDS_AERIUM_CLASSIC_TAB_SWITCHER_SUMMARY" desc="Summary under the Classic tab switcher switch. Says what it looks like and that a restart is needed.">\n        Show open tabs as a single column of large, overlapping cards, the way Chrome used to. Turn this off for the two-column grid. Restart Aerium to apply.\n      </message>\n&|' \
+    chrome/browser/ui/android/strings/android_chrome_strings.grd
+
+echo "[aerium] classic tab switcher applied"
+
+
+
 # --- The Chrome Web Store, in its desktop layout.
 #
 # The store only offers the install button on its desktop pages. On a phone
