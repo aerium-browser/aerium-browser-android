@@ -1559,6 +1559,39 @@ sed_i 's%^  if (http_user_agent_settings_) {$%  if (!minimal_headers \&\& http_u
 sed_i 's%^    if (config_overrides_.OverridesEverything()) {$%    // Aerium: an explicit DoH server plus a secure mode is enough to build a\n    // config on its own. Upstream requires OverridesEverything(), so a device\n    // whose system DNS configuration is missing or unreadable - which on\n    // Android is routine, with a VPN or Private DNS in the way - returns\n    // nullopt here and silently stops using the DoH server the user chose.\n    // Ported from Cromite. See theme.sh.\n    if (config_overrides_.OverridesEverything() ||\n        (config_overrides_.dns_over_https_config \&\&\n         config_overrides_.secure_dns_mode)) {%' \
     net/dns/dns_client.cc
 
+# --- ... and stop a managed-looking device switching secure DNS off.
+#
+# The third part of issue 17. Chromium disables DoH when it detects an MDM or
+# device-owner app, or a parental-control filter, on the reasoning that those
+# exist to see and filter DNS. That does not survive contact with a browser
+# people install to stop exactly that: a work profile on the same phone should
+# not silently revoke a setting the user chose for their own browsing. On
+# Android the trigger is android_has_owner_, which any device or profile owner
+# app sets.
+#
+# Cromite does this with `if ((true)) return false;` at the top of three
+# functions, leaving the original bodies behind as dead code. That is not
+# available here: Chromium 152 compiles with -Wunreachable-code-aggressive and
+# warnings are errors, which is the same trap the hardwareConcurrency block
+# below already documents avoiding.
+#
+# So the detection functions are untouched and the two call sites that actually
+# turn DoH off are gated on a base::Feature instead. A feature keeps each
+# condition a runtime value, so nothing is provably unreachable, and it leaves a
+# way back for anyone who does want the platform's answer to win.
+#
+# The other two uses are deliberately left alone: one is inside
+# `if (record_metrics)` and only picks a histogram, so it still reports the
+# truth about the device rather than about our override, and the other is the
+# parental-controls delay timer, which only triggers a config refresh.
+SRCR=chrome/browser/net/stub_resolver_config_reader.cc
+sed_i 's|^namespace {$|&\n\n// Aerium: when enabled - which it is by default - a device that merely looks\n// managed or parentally filtered no longer switches secure DNS off.\n//\n// Chromium turns DoH off when it detects an MDM or device-owner app, or a\n// parental-control filter, on the reasoning that those exist to see and filter\n// DNS and would otherwise break. That reasoning does not survive contact with a\n// browser people install to stop exactly that: a work profile on the same phone\n// should not silently revoke a setting the user chose for their own browsing.\n//\n// A feature rather than a deletion, for two reasons. It leaves a way back for\n// anyone who does want the platform'"'"'s answer to win. And it keeps the condition\n// at each call site a runtime value: short-circuiting these with a constant\n// would leave the branch behind it unreachable, and Chromium builds with\n// -Wunreachable-code-aggressive with warnings as errors.\n//\n// The detection functions themselves are untouched, so the histogram below that\n// records whether a config was managed still reports the truth.\nBASE_FEATURE(kAeriumIgnoreManagedDnsDisable, base::FEATURE_ENABLED_BY_DEFAULT);|' \
+    $SRCR
+sed_i 's%^  if (!is_managed \&\& ShouldDisableDohForManaged()) {$%  if (!base::FeatureList::IsEnabled(kAeriumIgnoreManagedDnsDisable) \&\&\n      !is_managed \&\& ShouldDisableDohForManaged()) {%' \
+    $SRCR
+sed_i 's%^    if (ShouldDisableDohForParentalControls()) {$%    if (!base::FeatureList::IsEnabled(kAeriumIgnoreManagedDnsDisable) \&\&\n        ShouldDisableDohForParentalControls()) {%' \
+    $SRCR
+
 echo "[aerium] DoH hardening applied"
 
 # --- The "Select DNS provider" menu in Settings > Security.
