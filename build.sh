@@ -276,6 +276,26 @@ if [ -f "$ABF" ] && grep -q '::gpu::features::kAndroidSurfaceControl' "$ABF"; th
     echo "[aerium] resume hotfix: kAndroidSurfaceControl requalified in $ABF"
 fi
 
+# --- Resume hotfix (removable once a build that STARTED after 2026-09-08 goes
+# green): AeriumMediaFragment.java imported ApplicationLifetime from
+# org.chromium.chrome.browser. It is not there and has not been: it lives in
+# org.chromium.chrome.browser.lifetime, and TabbedRootUiCoordinator.java - in
+# this same chrome_java target - already imports it from there, which is why
+# no GN dep is missing and the import string was the whole bug. javac says
+# "One or more errors due to missing GN deps" for an unresolved class, which
+# points at the build files rather than at the typo.
+#
+# Run 152 died on it in stage 3, four hours and forty-four minutes in, on
+# chrome_java.javac.jar. theme.sh carries the corrected import now, but
+# theme.sh only runs during source setup, so a tree checkpointed before this
+# does not have it. Idempotent: the pattern is gone after the first
+# application, and a fresh tree written by the current theme.sh never matches.
+AMF=chrome/android/java/src/org/chromium/chrome/browser/settings/AeriumMediaFragment.java
+if [ -f "$AMF" ] && grep -q '^import org.chromium.chrome.browser.ApplicationLifetime;$' "$AMF"; then
+    sed -i 's|^import org.chromium.chrome.browser.ApplicationLifetime;$|import org.chromium.chrome.browser.lifetime.ApplicationLifetime;|' "$AMF"
+    echo "[aerium] resume hotfix: ApplicationLifetime import corrected in $AMF"
+fi
+
 # --- Resume sync for the first-run page: theme.sh only runs during source
 # setup, so a tree saved by an earlier stage keeps whatever version of the
 # page it was built with. Re-emit the header from theme.sh whenever the tree's
