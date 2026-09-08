@@ -57,8 +57,29 @@ w=$(identify -format %w "$1")
 # A legacy icon has no 108dp canvas - the whole PNG is what the launcher masks
 # - so the equivalent of "fills the visible circle" is the full width of the
 # file.
-adaptive_pct=68
-legacy_pct=100
+#
+# BACK TO 36/54, THE SIZES BEFORE 13603cc, because 68/100 shipped in b153 and
+# reads as enormous on a real phone. 68 was derived rather than looked at: the
+# adaptive mask shows a 72dp circle out of a 108dp canvas, 72/108 is 66.7%, so
+# 68 makes the disc exactly fill the visible circle. That is the largest an
+# icon can be without being clipped, not the size it should be - every icon
+# beside it in the launcher leaves a margin inside the mask, and one that does
+# not stands out as oversized rather than as bold.
+#
+# The two changes that got here were made together and only one of them was
+# wrong. 13603cc both enlarged the mark and repainted the field navy; 84538be
+# then removed the field entirely. Removing the field is what android issue 13
+# actually asked for - "no white border" - and it makes the mark read larger on
+# its own, because the border that was making it look small is gone. So the
+# size increase was solving a problem the field removal had already solved.
+#
+# Worth stating plainly: issue 13 also said "make it bigger", and this gives
+# that back. The claim is that it only looked small because of the plate around
+# it, and with the plate gone 36 is the right number. If it still reads small
+# on a device, the useful middle is around 52/72 - a visible margin inside the
+# mask without filling it - rather than a return to 68.
+adaptive_pct=36
+legacy_pct=54
 
 # Draws the logo at $2 percent of the icon width, centred on background $3.
 # Pass 'none' for a transparent background.
