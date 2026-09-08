@@ -5217,16 +5217,29 @@ echo "[aerium] view page source applied"
 # extension-mime-request-handling flag above does not help - it decides what to
 # do with a CRX MIME type, and there is not one.
 #
-# So the filename is accepted as well as the MIME type, but only from a host
-# this build already allows off-store installs from. That ordering matters. The
-# alternative - accepting any .crx by name - would send files from arbitrary
-# hosts into CrxInstaller, which refuses off-store installs it was not told to
-# allow, turning a download that used to save into an error message. This way a
-# trusted host is allowed to serve a .crx badly; it does not make new hosts
-# trusted.
+# So the filename is accepted as well as the MIME type.
+#
+# THIS USED TO BE GATED ON OffStoreInstallAllowedByPrefs, on the reasoning that
+# a trusted host should be allowed to serve a .crx badly without making new
+# hosts trusted. That gate is gone, because it was the wrong shape twice over.
+# It is true only when the extension-mime-request-handling switch is set to
+# always-prompt-for-install - the block further up patches
+# ExtensionManagement::IsOffstoreInstallAllowed to say exactly that and nothing
+# else - so "a host this build already trusts" was never about hosts at all, it
+# was one flag, for every host or none. And the objection it was protecting
+# against was already answered: CrxInstaller refuses an off-store install it was
+# not given a reason for, so the else-if below hands it one, the same reason
+# chrome://aerium-extensions uses for a file the user picked.
+#
+# What replaces it is a user gesture. A .crx only reaches the installer if the
+# download was something the user asked for, which is the property that actually
+# matters - not which host served it. A drive-by download still saves as a file.
+# ShouldDownloadAsRegularFile() is checked first, so the "Download as regular
+# file" choice on that same flag still switches all of this off.
 #
 # Nothing installs silently: CreateCrxInstaller() builds an ExtensionInstallPrompt
-# and the user still agrees to the permissions.
+# and the user still agrees to the permissions. That prompt is the gate now,
+# rather than a flag nobody finds.
 #
 # Not done here, and worth being plain about: a .crx already sitting on the
 # device still has no path in. That needs a file picker, a content:// URI copied
@@ -5234,7 +5247,10 @@ echo "[aerium] view page source applied"
 # than this, and a separate one.
 # Two source lines make up the condition, so both are pulled into the pattern
 # space and replaced together.
-sed_i '/^  if (extensions::util::IsExtensionDownload(\*item) \&\&$/{N;s%  if (extensions::util::IsExtensionDownload(\*item) \&\&\n      !extensions::WebstoreInstaller::GetAssociatedApproval(\*item)) {%  // Aerium: see theme.sh. A .crx whose host serves it as application/octet-stream\n  // rather than as an extension MIME type - which is what GitHub does for every\n  // release asset - is still a .crx, and refusing to install it means the only\n  // way to get an extension that is not on a store is no way at all.\n  //\n  // Narrow on purpose. It applies only when the host is already one this build\n  // allows off-store installs from, so this changes what a trusted host is\n  // allowed to serve, not which hosts are trusted. A .crx from anywhere else\n  // saves as a file exactly as before, rather than reaching CrxInstaller and\n  // being refused with an error where a download used to appear.\n  //\n  // The install prompt is unchanged: CreateCrxInstaller() builds one and the\n  // user still has to agree to the permissions.\n  const bool aerium_offstore_crx =\n      !extensions::util::IsExtensionDownload(*item) \&\&\n      item->GetTargetFilePath().MatchesExtension(\n          extensions::kExtensionFileExtension) \&\&\n      download_crx_util::OffStoreInstallAllowedByPrefs(profile_, *item);\n\n  if ((extensions::util::IsExtensionDownload(*item) || aerium_offstore_crx) \&\&\n      !extensions::WebstoreInstaller::GetAssociatedApproval(*item)) {%}' \
+sed_i '/^    if (download_crx_util::OffStoreInstallAllowedByPrefs(profile_, \*item)) {$/{N;N;N;s%    if (download_crx_util::OffStoreInstallAllowedByPrefs(profile_, \*item)) {\n      installer->set_off_store_install_allow_reason(\n          CrxInstaller::OffStoreInstallAllowedBecausePref);\n    }%    if (download_crx_util::OffStoreInstallAllowedByPrefs(profile_, *item)) {\n      installer->set_off_store_install_allow_reason(\n          CrxInstaller::OffStoreInstallAllowedBecausePref);\n    } else if (aerium_user_crx) {\n      // Aerium: the block above got this .crx as far as CrxInstaller. Without a\n      // reason it refuses anything that did not come from a store, so the file\n      // the user asked for would download, reach the installer and die with\n      // "can only be installed from the Chrome Web Store". Same reason\n      // chrome://aerium-extensions sets for a file the user picked: this is a\n      // download the user asked for, and the permission prompt is still what\n      // decides whether it installs.\n      installer->set_off_store_install_allow_reason(\n          CrxInstaller::OffStoreInstallAllowedFromSettingsPage);\n    }%}' \
+    chrome/browser/download/chrome_download_manager_delegate.cc
+
+sed_i '/^  if (extensions::util::IsExtensionDownload(\*item) \&\&$/{N;s%  if (extensions::util::IsExtensionDownload(\*item) \&\&\n      !extensions::WebstoreInstaller::GetAssociatedApproval(\*item)) {%  // Aerium: see theme.sh. A .crx whose host serves it as application/octet-stream\n  // rather than as an extension MIME type - which is what GitHub does for every\n  // release asset - is still a .crx, and refusing to install it means the only\n  // way to get an extension that is not on a store is no way at all.\n  //\n  // Narrow on purpose. It applies only when the host is already one this build\n  // allows off-store installs from, so this changes what a trusted host is\n  // allowed to serve, not which hosts are trusted. A .crx from anywhere else\n  // saves as a file exactly as before, rather than reaching CrxInstaller and\n  // being refused with an error where a download used to appear.\n  //\n  // The install prompt is unchanged: CreateCrxInstaller() builds one and the\n  // user still has to agree to the permissions.\n  const bool aerium_user_crx =\n      !extensions::util::ShouldDownloadAsRegularFile() \&\&\n      item->GetTargetFilePath().MatchesExtension(\n          extensions::kExtensionFileExtension) \&\&\n      item->HasUserGesture();\n\n  if ((extensions::util::IsExtensionDownload(*item) || aerium_user_crx) \&\&\n      !extensions::WebstoreInstaller::GetAssociatedApproval(*item)) {%}' \
     chrome/browser/download/chrome_download_manager_delegate.cc
 
 # --- ... and give that install prompt somewhere to appear.
