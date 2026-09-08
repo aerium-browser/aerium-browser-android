@@ -5323,7 +5323,7 @@ echo "[aerium] view page source applied"
 sed_i '/^    if (download_crx_util::OffStoreInstallAllowedByPrefs(profile_, \*item)) {$/{N;N;N;s%    if (download_crx_util::OffStoreInstallAllowedByPrefs(profile_, \*item)) {\n      installer->set_off_store_install_allow_reason(\n          CrxInstaller::OffStoreInstallAllowedBecausePref);\n    }%    if (download_crx_util::OffStoreInstallAllowedByPrefs(profile_, *item)) {\n      installer->set_off_store_install_allow_reason(\n          CrxInstaller::OffStoreInstallAllowedBecausePref);\n    } else if (aerium_user_crx) {\n      // Aerium: the block above got this .crx as far as CrxInstaller. Without a\n      // reason it refuses anything that did not come from a store, so the file\n      // the user asked for would download, reach the installer and die with\n      // "can only be installed from the Chrome Web Store". Same reason\n      // chrome://aerium-extensions sets for a file the user picked: this is a\n      // download the user asked for, and the permission prompt is still what\n      // decides whether it installs.\n      installer->set_off_store_install_allow_reason(\n          CrxInstaller::OffStoreInstallAllowedFromSettingsPage);\n    }%}' \
     chrome/browser/download/chrome_download_manager_delegate.cc
 
-sed_i '/^  if (extensions::util::IsExtensionDownload(\*item) \&\&$/{N;s%  if (extensions::util::IsExtensionDownload(\*item) \&\&\n      !extensions::WebstoreInstaller::GetAssociatedApproval(\*item)) {%  // Aerium: see theme.sh. A .crx whose host serves it as application/octet-stream\n  // rather than as an extension MIME type - which is what GitHub does for every\n  // release asset - is still a .crx, and refusing to install it means the only\n  // way to get an extension that is not on a store is no way at all.\n  //\n  // Narrow on purpose. It applies only when the host is already one this build\n  // allows off-store installs from, so this changes what a trusted host is\n  // allowed to serve, not which hosts are trusted. A .crx from anywhere else\n  // saves as a file exactly as before, rather than reaching CrxInstaller and\n  // being refused with an error where a download used to appear.\n  //\n  // The install prompt is unchanged: CreateCrxInstaller() builds one and the\n  // user still has to agree to the permissions.\n  const bool aerium_user_crx =\n      !extensions::util::ShouldDownloadAsRegularFile() \&\&\n      item->GetTargetFilePath().MatchesExtension(\n          extensions::kExtensionFileExtension) \&\&\n      item->HasUserGesture();\n\n  if ((extensions::util::IsExtensionDownload(*item) || aerium_user_crx) \&\&\n      !extensions::WebstoreInstaller::GetAssociatedApproval(*item)) {%}' \
+sed_i '/^  if (extensions::util::IsExtensionDownload(\*item) \&\&$/{N;s%  if (extensions::util::IsExtensionDownload(\*item) \&\&\n      !extensions::WebstoreInstaller::GetAssociatedApproval(\*item)) {%  // Aerium: see theme.sh. A .crx whose host serves it as application/octet-stream\n  // rather than as an extension MIME type - which is what GitHub does for every\n  // release asset - is still a .crx, and refusing to install it means the only\n  // way to get an extension that is not on a store is no way at all.\n  //\n  // The name comes from GetFileNameToReportUser() and NOT from the target path,\n  // and on Android that is the difference between this working and doing\n  // nothing. A download that lands in the shared Downloads collection - which\n  // is every ordinary download on Android 10 and up - has a target path of\n  // content://media/external/downloads/<number>. It has no extension at all, so\n  // MatchesExtension(".crx") is false and this whole branch never fires. The\n  // real filename is on the item as its display name, which is exactly what\n  // GetFileNameToReportUser() returns; it falls back to the basename of the\n  // target path when there is no display name, so the desktop-shaped case is\n  // covered by the same call.\n  //\n  // The content URI reaches the installer intact: SandboxedUnpacker copies the\n  // crx into its own temp dir before verifying it, base::CopyFile opens the\n  // source with base::File, and base::File resolves content URIs on Android.\n  //\n  // Gated on a user gesture rather than on the host. A drive-by .crx still\n  // saves as a file; one the user asked for reaches the installer. And\n  // ShouldDownloadAsRegularFile() is checked first, so the "Download as regular\n  // file" choice on the extension-mime-request-handling flag still switches all\n  // of this off.\n  //\n  // The install prompt is unchanged: CreateCrxInstaller() builds one and the\n  // user still has to agree to the permissions.\n  const bool aerium_user_crx =\n      !extensions::util::ShouldDownloadAsRegularFile() \&\&\n      item->GetFileNameToReportUser().MatchesExtension(\n          extensions::kExtensionFileExtension) \&\&\n      item->HasUserGesture();\n\n  if ((extensions::util::IsExtensionDownload(*item) || aerium_user_crx) \&\&\n      !extensions::WebstoreInstaller::GetAssociatedApproval(*item)) {%}' \
     chrome/browser/download/chrome_download_manager_delegate.cc
 
 # --- ... and give that install prompt somewhere to appear.
@@ -8154,3 +8154,62 @@ sed_i 's%^#endif  // CHROME_BROWSER_AERIUM_FLAG_ENTRIES_H_$%    {"disable-search
     chrome/browser/aerium_flag_entries.h
 
 echo "[aerium] desktop flags batch one applied"
+
+
+# --- A way in for a .crx that is already on the device.
+#
+# chrome://aerium-extensions has done the work since the block above landed - a
+# file picker, a content:// URI copied somewhere CrxInstaller can read, the
+# off-store reason set, the permission prompt - and nothing anywhere links to
+# it. A page you can only reach by typing its URL is not a feature, it is a
+# secret, and "install a .crx without hassle" is exactly what it fails.
+#
+# It goes at the TOP LEVEL of the app menu, immediately under Extensions, and
+# not in More tools where it belongs on the desktop. More tools is
+# shouldShowMoreToolsItem(), which opens with
+#
+#     if (!TabbedAppMenuPropertiesDelegate.isSubmenusEnabled(mContext)) {
+#       return false;
+#     }
+#
+# and isSubmenusEnabled() is SubmenusInAppMenu, or SubmenusInAppMenuLff on a
+# large-form-factor device. Both are FEATURE_DISABLED_BY_DEFAULT in
+# chrome_feature_list.cc at 152. So on a phone there is no More tools submenu at
+# all, and anything put in it is unreachable.
+#
+# WHICH ALSO MEANS the "View page source" row further up this script has never
+# appeared. It was added to the More tools submenu, that submenu does not exist
+# by default, and nothing said so. The second insertion below fixes that the
+# same way: when there are no submenus, view source goes in the top-level list
+# instead. When submenus are on it stays where the desktop keeps it, so nothing
+# shows twice.
+#
+# Gated on shouldShowExtensionsItem(), which is ExtensionUi.isEnabled(profile) -
+# the same test the Extensions row above it uses. A build with extensions off
+# has no use for a .crx picker.
+sed_i 's%^    <item type="id" name="view_source" />$%&\n    <!-- Aerium: see theme.sh. Opens chrome://aerium-extensions. -->\n    <item type="id" name="aerium_install_extension" />%' \
+    chrome/android/java/res/values/ids.xml
+
+TAMPD=chrome/android/java/src/org/chromium/chrome/browser/tabbed_mode/TabbedAppMenuPropertiesDelegate.java
+sed_i 's%^    private boolean shouldShowExtensionsItem() {$%    // Aerium: see theme.sh. Opens chrome://aerium-extensions, the picker for a\n    // .crx that is already on this device.\n    private ListItem buildAeriumInstallExtensionItem(boolean showIcon) {\n        return AppMenuItemUtils.createStandardListItem(\n                AppMenuItemUtils.buildModelForStandardMenuItem(\n                        mContext,\n                        getAppMenuItemTheme(),\n                        R.id.aerium_install_extension,\n                        R.string.aerium_menu_install_extension,\n                        showIcon ? R.drawable.ic_extension_24dp : Resources.ID_NULL,\n                        isMenuIconAtStart()),\n                showIcon);\n    }\n\n&%' \
+    $TAMPD
+
+sed_i '/^            modelList.add(buildExtensionsMenuItem(shouldShowIconBeforeItem));$/{N;s%            modelList.add(buildExtensionsMenuItem(shouldShowIconBeforeItem));\n        }%            modelList.add(buildExtensionsMenuItem(shouldShowIconBeforeItem));\n        }\n\n        // Aerium: see theme.sh. Install from a file, under Extensions.\n        if (shouldShowExtensionsItem()) {\n            modelList.add(buildAeriumInstallExtensionItem(shouldShowIconBeforeItem));\n        }\n\n        // Aerium: see theme.sh. View page source is built into the More tools\n        // submenu, and submenus are off by default, so without this it is in a\n        // menu nobody has. Only when there are no submenus - with them on it\n        // stays where the desktop keeps it rather than appearing twice.\n        if (!isSubmenusEnabled(mContext)\n                \&\& mMoreToolsItemBuilder.shouldShowViewSourceItem(currentTab)) {\n            modelList.add(mMoreToolsItemBuilder.buildViewSourceItem());\n        }%}' \
+    $TAMPD
+
+# The action. Modelled on openChromeManagementPage() immediately below it,
+# which is the same shape: a chrome:// page opened in a new tab from the menu.
+# Always the regular tab model, never the incognito one - an extension is
+# installed into the profile, and opening the picker in an incognito tab would
+# suggest otherwise.
+CACT=chrome/android/java/src/org/chromium/chrome/browser/app/ChromeActivity.java
+sed_i 's%^    private void openChromeManagementPage() {$%    // Aerium: see theme.sh. The menu row that opens the picker for a .crx\n    // already on the device.\n    private void openAeriumExtensionsPage() {\n        TabCreator tabCreator = getTabCreator(false);\n        if (tabCreator == null) return;\n\n        tabCreator.createNewTab(\n                new LoadUrlParams("chrome://aerium-extensions", PageTransition.AUTO_TOPLEVEL),\n                TabLaunchType.FROM_CHROME_UI,\n                getActivityTab());\n    }\n\n&%' \
+    $CACT
+
+sed_i 's%^        if (id == R.id.view_source$%        // Aerium: see theme.sh. Before the view-source arm rather than after it,\n        // because everything below this point assumes a current tab and this\n        // does not need one.\n        if (id == R.id.aerium_install_extension) {\n            openAeriumExtensionsPage();\n            return true;\n        }\n\n&%' \
+    $CACT
+
+sed_i 's|      <message name="IDS_AERIUM_MENU_VIEW_SOURCE" desc=|      <message name="IDS_AERIUM_MENU_INSTALL_EXTENSION" desc="Menu item that opens a page for installing an extension from a .crx file stored on the device. [CHAR_LIMIT=27]">\n        Install from file\n      </message>\n&|' \
+    chrome/browser/ui/android/strings/android_chrome_strings.grd
+
+echo "[aerium] install extension menu row applied"
