@@ -76,6 +76,13 @@ The flags Aerium adds, at `chrome://flags`:
 - `chrome://flags/#aerium-time-zone` — tell sites a time zone other than the one your phone is set to. Off by default.
 - `chrome://flags/#aerium-local-font-access` — the Local Font Access API, which hands a site your installed font list. Off by default.
 
+Ported from the desktop builds, same names, all off by default:
+
+- `chrome://flags/#disable-search-engine-collection` — stop Aerium adding a search engine for every site that offers one.
+- `chrome://flags/#force-punycode-hostnames` — show an internationalized domain as its punycode, so a lookalike name cannot pass for another site. Costs readability on every legitimate non-Latin domain.
+- `chrome://flags/#increase-incognito-storage-quota` — work out the incognito storage quota the way a normal profile does, which is one of the numbers a site reads to detect incognito.
+- `chrome://flags/#remove-client-hints` — stop sending client hints, and hand `navigator.userAgentData` nothing to report.
+
 And one upstream Chromium flag worth knowing:
 
 - `chrome://flags/#enable-parallel-downloading` — split downloads into simultaneous requests for faster large files.
@@ -94,15 +101,15 @@ What actually happened to each:
 | `#fingerprinting-client-rects-noise` | No flag — compiled in and always on. |
 | `#spoof-webgl-info` | No flag — compiled in and always on. |
 | `#reduced-system-info` | No flag. Two of its three effects are compiled in: two CPU cores whatever the real count, and client hints reduced to match the reduced User-Agent. |
-| `#remove-client-hints` | No flag, and the line above is not the same thing: high-entropy hints are derived from the reduced User-Agent, not stripped outright. |
+| `#remove-client-hints` | **Ported.** Not the same as the line above: that derives the hints from the reduced User-Agent, this stops sending them. |
 | `#remove-tabsearch-button` | Desktop-only UI. Android has no tab strip. |
 | `#show-avatar-button` | Desktop-only UI. Android has no avatar button. |
-| `#disable-search-engine-collection` | **Not in this build.** Chromium still records search engines it finds on sites you visit. |
-| `#force-punycode-hostnames` | **Not in this build.** |
-| `#increase-incognito-storage-quota` | **Not in this build.** |
-| `#popups-to-tabs` | **Not in this build.** |
+| `#disable-search-engine-collection` | **Ported.** |
+| `#force-punycode-hostnames` | **Ported.** |
+| `#increase-incognito-storage-quota` | **Ported.** |
+| `#popups-to-tabs` | Nothing to port. Chrome on Android has no popup windows — `window.open` with features already lands in a tab. |
 
-The four marked *not in this build* are ungoogled-chromium patches with no counterpart in the Android tree. If you want any of them, open an issue and say which — the flag mechanism the three `#aerium-*` entries above use works fine on Android, so it is the feature underneath that would need porting, not the switch.
+The four marked *ported* now carry the same flag name they have on Windows and Linux, and are off by default there and here. The rest of ungoogled-chromium's flag set is either desktop-only UI or still to come; open an issue naming one if you want it next.
 
 ## Building
 
