@@ -8308,3 +8308,110 @@ sed_i 's%^#endif  // CHROME_BROWSER_AERIUM_FLAG_ENTRIES_H_$%    {"disable-grease
     chrome/browser/aerium_flag_entries.h
 
 echo "[aerium] desktop flags batch two applied"
+
+
+# --- Desktop flags, ported to Android: batch three.
+#
+# Three, and this batch is mostly about what is NOT here. Four of the things on
+# the list turned out to be already present on Android, in better shape than the
+# flag would have been, because Vanadium had done them:
+#
+#   referrer customization  Vanadium 0166 makes cross-origin referrer behaviour
+#     a SETTING, not a flag - Privacy and security, three choices, Default /
+#     Reduce (cross-origin referrers capped to the origin) / Disable (none at
+#     all) - plumbed through NetworkContext and RendererPreferences and applied
+#     at all five of the call sites ungoogled patches. Porting the flags on top
+#     would have meant editing the same five blocks Vanadium had already
+#     rewritten, to add a second, worse control for the same thing.
+#   disable-jit             Vanadium 0214 makes JIT a per-SITE setting with a
+#     page-info toggle, plus 0202 for wasm and 0280 for JITless child
+#     processes. A global on/off flag is a step backwards from that, and
+#     ungoogled patch edits v8.gni and render_process_host_impl.cc, one of which
+#     0202 also touches.
+#   clear-data-on-exit      Aerium already ships this on Android as a Settings
+#     screen with eight data types - see the clear-on-exit block above.
+#   enforce-certificate-transparency  behaviour already on via Vanadium 0243;
+#     batch two added the entry that lets it be turned off.
+#
+# That is the lesson from this batch worth writing down: verify-seds says OK
+# against PRISTINE Chromium, and every one of those four would have reported OK.
+# The check that matters is whether Vanadium already patches the file.
+
+# --- disable-beforeunload.
+#
+# The "Leave site?" dialog. A page can put one up on every attempt to leave,
+# and on a phone that is a trap rather than a safety net.
+#
+# The switch is read in AppModalDialogManager rather than in the tab-modal one
+# that Android otherwise uses, and that is correct on purpose:
+# TabModalDialogManager::RunBeforeUnloadDialog forwards straight to
+# GetAppModalDialogManager()->RunBeforeUnloadDialogWithOptions() with a comment
+# saying beforeunload is always app-modal. So this one site covers Android too.
+#
+# It joins the existing suppress_javascript_messages_ arm, which already answers
+# the dialog with "yes, leave" rather than suppressing it silently - the page
+# still gets its callback, it just does not get to argue.
+AMDM=components/javascript_dialogs/app_modal_dialog_manager.cc
+sed_i 's%^#include "base/functional/bind.h"$%#include "base/command_line.h"\n&%' $AMDM
+perl -0777 -pi -e '
+    s%  if \(extra_data->suppress_javascript_messages_\) \{\n    // If a site harassed the user enough for them to put it on mute, then it\n    // lost its privilege to deny unloading\.\n%  // Aerium: see theme.sh - the second condition is ours.\n  if (extra_data->suppress_javascript_messages_ ||\n      base::CommandLine::ForCurrentProcess()->HasSwitch(\n          "disable-beforeunload")) {\n    // If a site harassed the user enough for them to put it on mute, then it\n    // lost its privilege to deny unloading.\n%
+        or die "[aerium] FATAL: RunBeforeUnloadDialogWithOptions in app_modal_dialog_manager.cc no longer opens with the suppress_javascript_messages_ arm\n";
+' $AMDM
+
+# --- set-ipv6-probe-false.
+#
+# Chromium probes IPv6 reachability by opening a UDP socket to a Google public
+# DNS address, and prefers IPv6 when it succeeds. Forcing the answer to "no"
+# puts IPv4 first, which is what someone on a broken or hostile IPv6 path wants.
+#
+# Written differently to ungoogled, deliberately. Their patch deletes the probe
+# outright - address constant, caching, net-log event and all - and answers
+# statically whether or not the flag is set. That is a reasonable trade on a
+# desktop with one network; on a phone that changes network several times an
+# hour it means every wrong static answer costs a connection timeout. Here the
+# probe is untouched and only its RESULT is overridden, and only when the flag
+# is on, so nothing about the default build changes.
+#
+# SetLastIPv6ProbeResult() rather than assigning the member: it also clears
+# probing_ipv6_ and stamps last_ipv6_probe_time_, which is what keeps the
+# caching layer consistent.
+sed_i 's%^namespace net::features {$%&\n\n// Aerium: see theme.sh.\nBASE_FEATURE(kAeriumSetIpv6ProbeFalse, base::FEATURE_DISABLED_BY_DEFAULT);%' \
+    net/base/features.cc
+sed_i 's%^namespace net::features {$%&\n\n// Aerium: see theme.sh.\nNET_EXPORT BASE_DECLARE_FEATURE(kAeriumSetIpv6ProbeFalse);%' \
+    net/base/features.h
+sed_i 's%^  if (target_network != handles::kInvalidNetworkHandle) {$%  // Aerium: see theme.sh. Answer "no IPv6" without probing, and leave the\n  // probe itself alone for when the flag is off.\n  if (base::FeatureList::IsEnabled(features::kAeriumSetIpv6ProbeFalse)) {\n    SetLastIPv6ProbeResult(false);\n    return OK;\n  }\n\n&%' \
+    net/dns/host_resolver_manager.cc
+
+# --- max-connections-per-host.
+#
+# Chromium allows six sockets per host; Firefox allows fifteen. On a page whose
+# subresources all come from one host - which is most pages that were not built
+# to be sharded - six is the ceiling on how fast it can load.
+#
+# Bromite exposes 15 as the single alternative and so does this. The API it goes
+# through is called set_max_sockets_per_group_for_test, which reads badly in
+# production code and is what Bromite uses; it is the only setter there is, and
+# it is a plain static that does not care who calls it.
+#
+# The switch is declared in the network_session_configurator list because that
+# is where the socket-pool switches live and where the constant has to come from
+# for the include to be worth anything.
+sed_i 's%^NETWORK_SWITCH(kEnableQuic, "enable-quic")$%&\n\n// Aerium: see theme.sh. Raises the six-sockets-per-host ceiling.\nNETWORK_SWITCH(kMaxConnectionsPerHost, "max-connections-per-host")%' \
+    components/network_session_configurator/common/network_switch_list.h
+
+sed_i 's%^    "//components/network_session_configurator/browser",$%&\n    "//components/network_session_configurator/common",%' \
+    chrome/browser/BUILD.gn
+
+BPI=chrome/browser/browser_process_impl.cc
+sed_i 's%^#include "base/synchronization/waitable_event.h"$%#include "base/strings/string_number_conversions.h"\n&%' $BPI
+sed_i 's%^#include "components/network_time/network_time_tracker.h"$%#include "components/network_session_configurator/common/network_switches.h"\n&%' $BPI
+sed_i 's%^#include "printing/buildflags/buildflags.h"$%#include "net/socket/client_socket_pool_manager.h"\n&%' $BPI
+sed_i 's%^  DCHECK(!webrtc_event_log_manager_);$%  // Aerium: see theme.sh. A bad value is ignored rather than fatal - this is a\n  // flag a person types into chrome://flags, not an internal invariant.\n  const std::string aerium_max_connections =\n      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(\n          switches::kMaxConnectionsPerHost);\n  int aerium_max_connections_value = 0;\n  if (!aerium_max_connections.empty() \&\&\n      base::StringToInt(aerium_max_connections, \&aerium_max_connections_value) \&\&\n      aerium_max_connections_value > 0) {\n    net::ClientSocketPoolManager::set_max_sockets_per_group_for_test(\n        net::HttpNetworkSession::SocketPoolType::kNormal,\n        aerium_max_connections_value);\n  }\n\n&%' $BPI
+
+sed_i 's%^#endif  // CHROME_BROWSER_AERIUM_FLAG_CHOICES_H_$%const FeatureEntry::Choice kAeriumMaxConnectionsPerHostChoices[] = {\n    {flags_ui::kGenericExperimentChoiceDefault, "", ""},\n    {"15", "max-connections-per-host", "15"},\n};\n&%' \
+    chrome/browser/aerium_flag_choices.h
+
+sed_i 's%^#endif  // CHROME_BROWSER_AERIUM_FLAG_ENTRIES_H_$%    {"disable-beforeunload",\n     "Disable beforeunload",\n     "Stop pages putting up a Leave site? dialog when you navigate away. The "\n     "page is told you chose to leave. ungoogled-chromium flag, ported to "\n     "Android by Aerium.",\n     kOsAll, SINGLE_VALUE_TYPE("disable-beforeunload")},\n    {"set-ipv6-probe-false",\n     "Assume no IPv6 connectivity",\n     "Tell the resolver IPv6 is unreachable without probing for it, which puts "\n     "IPv4 addresses first. Aerium overrides only the result; unlike the "\n     "desktop builds the probe itself is left in place for when this is off. "\n     "ungoogled-chromium flag, ported to Android by Aerium.",\n     kOsAll, FEATURE_VALUE_TYPE(net::features::kAeriumSetIpv6ProbeFalse)},\n    {"max-connections-per-host",\n     "Maximum connections per host",\n     "Raise the six simultaneous connections per host Chromium allows to "\n     "fifteen, which is what Firefox uses. Faster on pages that load "\n     "everything from one host, at the cost of memory and battery. Bromite "\n     "feature by way of ungoogled-chromium, ported to Android by Aerium.",\n     kOsAll, MULTI_VALUE_TYPE(kAeriumMaxConnectionsPerHostChoices)},\n&%' \
+    chrome/browser/aerium_flag_entries.h
+
+echo "[aerium] desktop flags batch three applied"
