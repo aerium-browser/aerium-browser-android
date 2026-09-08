@@ -87,6 +87,15 @@ Ported from the desktop builds, same names, all off by default:
 - `chrome://flags/#http-accept-header` — replace the `Accept` header sent with every navigation. Empty means the default.
 - `chrome://flags/#enforce-certificate-transparency` — already **on** here; this is how you turn it off if a certificate you trust has no SCTs.
 - `chrome://flags/#enable-low-end-device-mode` — treat this device as low-end whatever its memory: smaller caches, fewer renderer processes.
+- `chrome://flags/#disable-beforeunload` — stop pages putting up a *Leave site?* dialog when you navigate away.
+- `chrome://flags/#set-ipv6-probe-false` — tell the resolver IPv6 is unreachable without probing for it, putting IPv4 first.
+- `chrome://flags/#max-connections-per-host` — raise the six simultaneous connections per host Chromium allows to fifteen, which is what Firefox uses.
+
+Some things the desktop builds put behind a flag are **settings** here, because Vanadium built them that way and a setting is the better surface:
+
+- **Cross-origin referrers** — Settings → Privacy and security. Default, *Reduce* (cross-origin referrers capped to the origin), or *Disable* (none at all). This is what the desktop `#remove-cross-origin-referrers` and `#minimal-referrers` flags do.
+- **JavaScript JIT** — a per-site setting with a page-info toggle, rather than the desktop `#disable-jit` flag's single global switch.
+- **Delete browsing data when you close Aerium** — Settings → Privacy and security, with eight data types, in place of the desktop `#clear-data-on-exit` flag.
 
 And one upstream Chromium flag worth knowing:
 
