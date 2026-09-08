@@ -818,11 +818,33 @@ sed_i 's|  image_classifier = std::make_unique<DarkModeImageClassifier>();|&\n  
 # classifier that just declined the colour.
 sed_i 's%const size_t kMaxCacheSize = 1024u;%&\n\n// Aerium: pull a background the classifier declined to invert toward black.\n//\n// The classifier is InvertHighBrightnessColorsClassifier(205): it inverts\n// backgrounds BRIGHTER than 205 and returns everything else untouched. That\n// is the whole reason a dark site stays grey. A site at #313338 is too dark\n// to invert and too light for any near-black clamp, so both paths pass it\n// through and Discord renders exactly as it always did.\n//\n// So scale instead of clamping: new brightness = old * (old / 205), a\n// gamma-2 fold anchored where the classifier takes over. #0d1117 lands on\n// #010101, #181818 on #030303, #313338 on #0d0d0d - black to the eye - while\n// a genuinely mid-grey #787878 only reaches #464646 and stays distinguishable\n// from the black behind it. Continuous at the anchor, so nothing jumps as a\n// colour crosses 205.\n//\n// Channels are scaled together rather than the lightness being rewritten, so\n// a tinted surface keeps its tint on the way down.\nSkColor4f AeriumFoldTowardBlack(const SkColor4f\& color) {\n  const float brightness =\n      0.299f * color.fR + 0.587f * color.fG + 0.114f * color.fB;\n  constexpr float kAnchor = 205.0f / 255.0f;\n  if (brightness <= 0.0f || brightness >= kAnchor) {\n    return color;\n  }\n  const float scale = brightness / kAnchor;\n  return SkColor4f{color.fR * scale, color.fG * scale, color.fB * scale,\n                   color.fA};\n}%' $DMF
 
-# The call site: after the classifier has declined, not before it. A colour the
-# classifier DOES invert has already been sent to near-black by the LAB
-# inversion plus the zeroed AdjustGray floor above, and folding it twice would
-# take a light page's cards down with its background.
-sed_i '/^        immutable_.color_filter.get(), color);$/{N;s%^        immutable_.color_filter.get(), color);\n  }$%        immutable_.color_filter.get(), color);\n  }\n\n  // Aerium: see theme.sh. A background the classifier left alone is folded\n  // toward black rather than returned as it came in. Deliberately AFTER the\n  // classifier, not before: a colour it does invert has already been taken to\n  // near black by the LAB inversion and the zeroed AdjustGray floor above, and\n  // folding that a second time would drag a light page'"'"'s cards down with its\n  // background.\n  if (immutable_.blacken_dark_backgrounds \&\& role == ElementRole::kBackground) {\n    return AeriumFoldTowardBlack(color);\n  }%}' $DMF
+# The call site. Every BACKGROUND colour is folded, on both paths - the one the
+# classifier inverted and the one it declined - and that is a change from how
+# this first shipped.
+#
+# It used to fold only the declined path, reasoning that a colour the classifier
+# DOES indent has already been taken to near black by the LAB inversion plus the
+# zeroed AdjustGray floor above. That is true only for a page whose background is
+# actually white. AdjustGray clamps a band, (0, 32/255) after the floor change,
+# and only for neutral greys; a page at #F1F1F1 - and #F5F5F5, #FAFAFA, #EEEEEE,
+# which is most of the web - inverts to about #252525, lands outside that band,
+# and keeps it. That is the "still grey on many sites" report, and the old
+# comment here even said so out loud while calling it "their own separation".
+#
+# Folding after inversion instead sends #252525 to about #070707. Because the
+# fold is a gamma rather than a clamp it is monotonic, so what separation there
+# was survives in the ordering even though the gap closes to a few units - which
+# is the trade being made deliberately: consistency over contrast between a page
+# and the cards on it, which is what was asked for and what Kiwi does.
+#
+# Still only kBackground. Text, borders and icons are untouched, so nothing here
+# can hurt legibility - the fold only ever makes what is behind the text darker.
+perl -0777 -pi -e '
+    s!  if \(ShouldApplyToColor\(color, role\)\) \{\n    return inverted_color_cache_->GetInvertedColor\(\n        immutable_\.color_filter\.get\(\), color\);\n  \}\n\n  return color;\n\}\n!  SkColor4f aerium_result = color;\n  if (ShouldApplyToColor(color, role)) {\n    aerium_result = inverted_color_cache_->GetInvertedColor(\n        immutable_.color_filter.get(), color);\n  }\n\n  // Aerium: see theme.sh. Fold every background toward black, whether the\n  // classifier inverted it or left it alone. Inverting a near-white page lands\n  // around #252525, outside the near-black band AdjustGray clamps, which is why\n  // most of the web stayed grey with only pure-white pages going black.\n  if (immutable_.blacken_dark_backgrounds \&\& role == ElementRole::kBackground) {\n    return AeriumFoldTowardBlack(aerium_result);\n  }\n\n  return aerium_result;\n}\n!
+        or die "[aerium] FATAL: DarkModeFilter::InvertColorIfNeeded no longer "
+             . "has the shape this rewrite expects - upstream changed it, or "
+             . "this block already ran\n";
+' $DMF
 
 # The contrast heuristic assumed #121212 behind everything, which stops being
 # true the moment the fold lands. AdjustDarkenColor uses it to decide whether a
