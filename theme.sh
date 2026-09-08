@@ -8213,3 +8213,98 @@ sed_i 's|      <message name="IDS_AERIUM_MENU_VIEW_SOURCE" desc=|      <message 
     chrome/browser/ui/android/strings/android_chrome_strings.grd
 
 echo "[aerium] install extension menu row applied"
+
+
+# --- Desktop flags, ported to Android: batch two.
+#
+# Five more, same names as the desktop builds. What decided the shortlist was
+# not how useful a flag sounds but whether the READER can be shown to exist at
+# 152 - a flag whose switch nothing looks at is the bug the README table was
+# just corrected for, and shipping more of those would be worse than shipping
+# none. Each of the three code changes below carries its own reader; the two
+# entry-only flags name a reader that was read out of the tree first.
+#
+# Left out for that reason, after looking: no-pings, disable-top-sites,
+# disable-webgl and force-reduced-motion. ungoogled exposes all four as flags
+# for switches Chromium is said to already have, and at 152 hyperlink auditing
+# reads the kEnableHyperlinkAuditing PREF rather than the switch, while the
+# other three constants could not be traced to anything that reads them. They
+# may well be live somewhere this session could not fetch; until that is shown,
+# they stay out.
+#
+# Left out on their own merits, not for lack of a reader:
+#
+#   set-ipv6-probe-false - ungoogled bundles the flag with deleting the IPv6
+#     reachability probe outright, replacing it with a static answer. The probe
+#     is a connection to a Google DNS address on every network change, so
+#     removing it is tempting here, but a phone changes networks constantly and
+#     a wrong static answer costs a connection timeout every time. Worth doing
+#     deliberately, with testing, not as a rider on a flag.
+#   referrer customization - nine files including a BUILD.gn. Its own batch.
+#   max-connections-per-host, disable-jit - both edit build files (BUILD.gn,
+#     v8.gni), which is a different class of risk to a source sed.
+#   clear-data-on-exit, disable-beforeunload - need a check first that Android
+#     uses the code they patch at all.
+
+# --- disable-grease-tls.
+#
+# GREASE sends deliberately unknown values in the TLS handshake to keep servers
+# from ossifying on what they have seen. The values are random per connection,
+# so it is not a fingerprint by itself, but the fact that a client sends them at
+# all is one more bit, and some middleboxes still break on them. Off by default:
+# GREASE exists for a good reason and Chromium sends it.
+#
+# One local for both calls, so the sigalgs variant cannot drift from the main
+# one. Read in the browser process on Android, where the network service runs
+# in-process rather than as a utility process of its own.
+SSLCS=net/socket/ssl_client_socket_impl.cc
+sed_i 's%^#include "base/containers/span.h"$%#include "base/command_line.h"\n&%' $SSLCS
+sed_i 's%^    SSL_CTX_set_grease_enabled(ssl_ctx_.get(), 1);$%    // Aerium: see theme.sh.\n    const int aerium_grease =\n        base::CommandLine::ForCurrentProcess()->HasSwitch("disable-grease-tls")\n            ? 0\n            : 1;\n    SSL_CTX_set_grease_enabled(ssl_ctx_.get(), aerium_grease);%' $SSLCS
+sed_i 's%^      SSL_CTX_set_grease_sigalgs_enabled(ssl_ctx_.get(), 1);$%      SSL_CTX_set_grease_sigalgs_enabled(ssl_ctx_.get(), aerium_grease);%' $SSLCS
+
+# --- keep-old-history.
+#
+# History older than kExpireDaysThreshold - 90 days - is deleted by the expirer
+# on every startup, and there is no setting for it. Two sites: the one that
+# starts the expirer, and the one that decides whether a visit is already too
+# old to record.
+HBACK=components/history/core/browser/history_backend.cc
+sed_i 's%^#include "base/compiler_specific.h"$%#include "base/command_line.h"\n&%' $HBACK
+sed_i 's%^  expirer_.StartExpiringOldStuff(base::Days(kExpireDaysThreshold));$%  // Aerium: see theme.sh.\n  if (!base::CommandLine::ForCurrentProcess()->HasSwitch("keep-old-history")) {\n    expirer_.StartExpiringOldStuff(base::Days(kExpireDaysThreshold));\n  }%' $HBACK
+sed_i 's%^  return time < expirer_.GetCurrentExpirationTime();$%  // Aerium: see theme.sh.\n  if (base::CommandLine::ForCurrentProcess()->HasSwitch("keep-old-history")) {\n    return false;\n  }\n\n&%' $HBACK
+
+# --- http-accept-header.
+#
+# The Accept header goes out with every navigation and is one of the strings a
+# server can key on. This lets it be replaced wholesale.
+#
+# It is an ORIGIN_LIST flag rather than a plain string one because that is the
+# only about_flags value type that takes free text. The cost is that
+# flags_state runs every origin-list value through CombineAndSanitizeOriginLists
+# first, which would reduce an Accept header to nothing, so both ends of that
+# path need to let this one through - the read, and the write from the
+# chrome://flags text box.
+FAH=content/public/browser/frame_accept_header.cc
+sed_i 's%^#include "base/feature_list.h"$%#include "base/command_line.h"\n&%' $FAH
+sed_i '/^std::string FrameAcceptHeaderValue(bool allow_sxg_responses,$/{N;s%std::string FrameAcceptHeaderValue(bool allow_sxg_responses,\n                                   BrowserContext\* browser_context) {%std::string FrameAcceptHeaderValue(bool allow_sxg_responses,\n                                   BrowserContext* browser_context) {\n  // Aerium: see theme.sh. Before everything, including the signed-exchange and\n  // JXL additions below - a replacement Accept header is a replacement.\n  const base::CommandLine\& aerium_cl = *base::CommandLine::ForCurrentProcess();\n  if (aerium_cl.HasSwitch("http-accept-header")) {\n    return aerium_cl.GetSwitchValueASCII("http-accept-header");\n  }\n%}' $FAH
+
+FSTATE=components/webui/flags/flags_state.cc
+sed_i 's%^  return CombineAndSanitizeOriginLists(existing_value, new_value);$%  // Aerium: see theme.sh. An Accept header is not a list of origins and does\n  // not survive the sanitiser, so it is passed through instead. A value already\n  // on the command line wins, which is what an explicit command line should do.\n  if (command_line_switch == "http-accept-header") {\n    return existing_value.empty() ? new_value : existing_value;\n  }\n\n&%' $FSTATE
+sed_i 's%^      CombineAndSanitizeOriginLists(std::string(), value);$%      internal_name == "http-accept-header"\n          ? value\n          : CombineAndSanitizeOriginLists(std::string(), value);%' $FSTATE
+
+# --- enforce-certificate-transparency, and enable-low-end-device-mode.
+#
+# Both are entries only. Certificate transparency is already enforced here -
+# Vanadium patch 0243 deletes the GOOGLE_CHROME_BRANDING guard around
+# kCertificateTransparencyAskBeforeEnabling so it is ENABLED_BY_DEFAULT - so
+# ungoogled equivalent hunk is not applied, and this is the missing half: a way
+# to turn it OFF if a certificate that is otherwise fine has no SCTs.
+#
+# enable-low-end-device-mode is a Chromium switch, read in base/system/sys_info.cc
+# by the code behind SysInfo::IsLowEndDevice(); a phone with enough RAM to miss
+# the automatic threshold can opt into the smaller caches and lighter renderer
+# limits anyway.
+sed_i 's%^#endif  // CHROME_BROWSER_AERIUM_FLAG_ENTRIES_H_$%    {"disable-grease-tls",\n     "Disable GREASE for TLS",\n     "Stop sending GREASE - the deliberately unknown values Chromium puts in "\n     "the TLS handshake to keep servers from ossifying. The values themselves "\n     "are random per connection, but sending them at all is one more thing a "\n     "server can notice. ungoogled-chromium flag, ported to Android by Aerium.",\n     kOsAll, SINGLE_VALUE_TYPE("disable-grease-tls")},\n    {"keep-old-history",\n     "Keep old history",\n     "Stop deleting history older than 90 days. Aerium otherwise expires it on "\n     "startup, and there is no setting for that anywhere else. "\n     "ungoogled-chromium flag, ported to Android by Aerium.",\n     kOsAll, SINGLE_VALUE_TYPE("keep-old-history")},\n    {"http-accept-header",\n     "Custom HTTP Accept header",\n     "Replace the Accept header sent with every navigation. Leave empty for "\n     "the default. Example: "\n     "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8 "\n     "ungoogled-chromium flag, ported to Android by Aerium.",\n     kOsAll, ORIGIN_LIST_VALUE_TYPE("http-accept-header", "")},\n    {"enforce-certificate-transparency",\n     "Enforce Certificate Transparency",\n     "Require the certificates sites present to be logged in Certificate "\n     "Transparency. On in Aerium already; this is the way to turn it off if a "\n     "certificate you trust has no SCTs. ungoogled-chromium flag, ported to "\n     "Android by Aerium.",\n     kOsAll,\n     FEATURE_VALUE_TYPE(features::kCertificateTransparencyAskBeforeEnabling)},\n    {"enable-low-end-device-mode",\n     "Enable low-end device mode",\n     "Treat this device as low-end whatever its memory: smaller caches, fewer "\n     "renderer processes, less kept in the background. Chromium switch, "\n     "exposed as a flag by ungoogled-chromium, ported to Android by Aerium.",\n     kOsAll, SINGLE_VALUE_TYPE("enable-low-end-device-mode")},\n&%' \
+    chrome/browser/aerium_flag_entries.h
+
+echo "[aerium] desktop flags batch two applied"

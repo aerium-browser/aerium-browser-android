@@ -82,6 +82,11 @@ Ported from the desktop builds, same names, all off by default:
 - `chrome://flags/#force-punycode-hostnames` — show an internationalized domain as its punycode, so a lookalike name cannot pass for another site. Costs readability on every legitimate non-Latin domain.
 - `chrome://flags/#increase-incognito-storage-quota` — work out the incognito storage quota the way a normal profile does, which is one of the numbers a site reads to detect incognito.
 - `chrome://flags/#remove-client-hints` — stop sending client hints, and hand `navigator.userAgentData` nothing to report.
+- `chrome://flags/#disable-grease-tls` — stop sending GREASE, the deliberately unknown values Chromium puts in the TLS handshake.
+- `chrome://flags/#keep-old-history` — stop deleting history older than 90 days. There is no setting for that anywhere else.
+- `chrome://flags/#http-accept-header` — replace the `Accept` header sent with every navigation. Empty means the default.
+- `chrome://flags/#enforce-certificate-transparency` — already **on** here; this is how you turn it off if a certificate you trust has no SCTs.
+- `chrome://flags/#enable-low-end-device-mode` — treat this device as low-end whatever its memory: smaller caches, fewer renderer processes.
 
 And one upstream Chromium flag worth knowing:
 
