@@ -80,7 +80,29 @@ And one upstream Chromium flag worth knowing:
 
 - `chrome://flags/#enable-parallel-downloading` — split downloads into simultaneous requests for faster large files.
 
-**If you have read the Windows or Linux README**, its longer list of `#fingerprinting-*`, `#spoof-webgl-info`, `#reduced-system-info`, `#remove-client-hints`, `#force-punycode-hostnames` and similar flags does not apply here, and searching `chrome://flags` for them will find nothing. Those builds are based on ungoogled-chromium and inherit its flag entries; the Android build is based on GrapheneOS's Vanadium, which has no equivalent mechanism. The same protections are compiled in and always on instead. A few of those flags also govern desktop-only UI — the tab-search button, the profile avatar button — which Android does not have.
+### The list this README used to carry
+
+Earlier versions of this file listed a dozen flags under *More privacy flags to consider*. That list was copied from the desktop builds and most of it was never true here: the desktop builds are based on ungoogled-chromium and inherit its flag entries, while this one is based on GrapheneOS's Vanadium and has none of them. Searching `chrome://flags` for those names finds nothing, which is why `#enable-parallel-downloading` — the only entry that came from upstream Chromium rather than from ungoogled — was the only one anybody could find.
+
+What actually happened to each:
+
+| Old entry | On Android |
+| --- | --- |
+| `#enable-parallel-downloading` | Real. Upstream Chromium, still there. |
+| `#fingerprinting-canvas-image-data-noise` | No flag — compiled in and always on. |
+| `#fingerprinting-canvas-measuretext-noise` | No flag — compiled in and always on. |
+| `#fingerprinting-client-rects-noise` | No flag — compiled in and always on. |
+| `#spoof-webgl-info` | No flag — compiled in and always on. |
+| `#reduced-system-info` | No flag. Two of its three effects are compiled in: two CPU cores whatever the real count, and client hints reduced to match the reduced User-Agent. |
+| `#remove-client-hints` | No flag, and the line above is not the same thing: high-entropy hints are derived from the reduced User-Agent, not stripped outright. |
+| `#remove-tabsearch-button` | Desktop-only UI. Android has no tab strip. |
+| `#show-avatar-button` | Desktop-only UI. Android has no avatar button. |
+| `#disable-search-engine-collection` | **Not in this build.** Chromium still records search engines it finds on sites you visit. |
+| `#force-punycode-hostnames` | **Not in this build.** |
+| `#increase-incognito-storage-quota` | **Not in this build.** |
+| `#popups-to-tabs` | **Not in this build.** |
+
+The four marked *not in this build* are ungoogled-chromium patches with no counterpart in the Android tree. If you want any of them, open an issue and say which — the flag mechanism the three `#aerium-*` entries above use works fine on Android, so it is the feature underneath that would need porting, not the switch.
 
 ## Building
 
