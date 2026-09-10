@@ -192,7 +192,7 @@ jobs:
           if [ -n "$newest_failed" ] \
              && gh api "repos/$REPO/actions/runs/$newest_failed/artifacts" \
                   --jq '.artifacts[] | select(.expired == false) | .name' 2>/dev/null \
-                | grep -qx 'build-error-android'; then
+                | grep -qxE 'build-error-android(-arm64)?'; then
             {
               echo "## Build needs a human, not a resume"
               echo
@@ -213,7 +213,7 @@ jobs:
                                     | sort_by(.run_number) | reverse | .[].id' <<<"$runs_json"); do
             if gh api "repos/$REPO/actions/runs/$candidate/artifacts" \
                  --jq '.artifacts[] | select(.expired == false) | .name' 2>/dev/null \
-               | grep -qxE 'build-artifact-android(-b)?'; then
+               | grep -qxE 'build-artifact-android(-arm64)?(-b)?'; then
               RUN_ID="$candidate"
               break
             fi
