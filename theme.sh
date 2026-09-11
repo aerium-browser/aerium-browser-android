@@ -2757,8 +2757,10 @@ inline void AeriumExtensions::HandlePick(const base::ListValue& args) {
     return;
   }
   ui::SelectFileDialog::FileTypeInfo file_types;
+  // Aerium: slice the leading dot with substr instead of pointer arithmetic -
+  // kExtensionFileExtension + 1 is rejected by -Wunsafe-buffer-usage.
   file_types.extensions.push_back(
-      {extensions::kExtensionFileExtension + 1});
+      {std::string(extensions::kExtensionFileExtension).substr(1)});
   dialog_->SelectFile(ui::SelectFileDialog::SELECT_OPEN_FILE, std::u16string(),
                       base::FilePath(), &file_types, 0,
                       base::FilePath::StringType(),

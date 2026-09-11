@@ -319,6 +319,22 @@ if [ -f "$NTL" ] && grep -q 'AeriumSpeedDial.isEnabled()' "$NTL"; then
     echo "[aerium] resume hotfix: AeriumSpeedDial.isEnabled call renamed in $NTL"
 fi
 
+# --- Resume hotfix (removable once a build that STARTED after 2026-09-11 goes
+# green): aerium_extensions.h sliced the leading dot off kExtensionFileExtension
+# with pointer arithmetic (`kExtensionFileExtension + 1`). The unsafe-buffers
+# plugin rejects that under -Werror, and chrome_web_ui_configs.o - the only
+# translation unit that includes the header - died on it in run 34448247696
+# stage 3. theme.sh writes the substr() form now, but theme.sh only runs during
+# source setup, so a tree checkpointed before this does not have it.
+# Idempotent: the gate matches the broken code, not the fixed comment (which
+# mentions the same string), so it is gone after the first application and a
+# fresh tree written by the current theme.sh never matches.
+AEH=chrome/browser/ui/webui/aerium_extensions.h
+if [ -f "$AEH" ] && grep -q '{extensions::kExtensionFileExtension + 1}' "$AEH"; then
+    sed -i 's|{extensions::kExtensionFileExtension + 1}|{std::string(extensions::kExtensionFileExtension).substr(1)}|' "$AEH"
+    echo "[aerium] resume hotfix: kExtensionFileExtension substr in $AEH"
+fi
+
 # --- Resume sync for the first-run page: theme.sh only runs during source
 # setup, so a tree saved by an earlier stage keeps whatever version of the
 # page it was built with. Re-emit the header from theme.sh whenever the tree's
