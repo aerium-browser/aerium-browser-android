@@ -58,6 +58,34 @@ behind any of this.
   restarting the browser. The check now re-runs as tabs are created, and only
   ever changes its mind in the direction of turning autofill on.
 
+**Speed, memory and battery**
+
+- Cross-process subframes that are off-screen, or cover a small part of the
+  page and have never been touched, now run at lower priority, have their
+  frame rate halved, and have their own scripts throttled to a wake-up every
+  32 milliseconds. The first two shipped before; the third is new. That is
+  an advertising iframe, described by what it does rather than by a filter
+  list.
+- Background page-load/typing work is held off the browser's own thread
+  pool, and now off a backgrounded tab's own thread pool too, the same
+  direction as the first change but closer to the tab itself.
+- The GPU process is deprioritised while backgrounded, so it is what the
+  system reclaims first under memory pressure rather than a tab you're
+  using.
+- Idle renderer processes are now tracked for reuse instead of being
+  relaunched from scratch - desktop got this for free from Chromium's own
+  default; Android did not, until now.
+- New, off by default: a fullscreen tab's own JS timers can now slow to
+  once a second while a video plays
+  (`chrome://flags/#aerium-throttle-fullscreen-video`) - real battery saved
+  on a tab doing nothing else, but off by default because a custom video
+  player driving captions or an overlay off its own timer would slow down
+  too.
+- These, like the third-party autofill fix above, were all written by
+  Chromium and shipped switched off, waiting to be turned on from Google's
+  servers. A browser that never talks to those servers never gets the
+  message, so it is sent here instead.
+
 **Fingerprinting**
 
 - `window.queryLocalFonts()` is off. The Local Font Access API returns every

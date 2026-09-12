@@ -110,6 +110,57 @@ views, matching how the rest of that build is built. Nothing on either one is
 ever fetched - no live backgrounds, no weather, no feeds - which is the line
 this project draws around a page every tab opens on by default.
 
+## Performance and battery
+
+| | Win | Linux | Android |
+|---|:--:|:--:|:--:|
+| Tabs beyond the 5 most recently used freeze automatically | ✅ | ✅ | — |
+| ...same, triggered when free memory drops under 15% | ✅ | 🟡 patched, unverified - see aerium-linux-memory-pressure.patch | — |
+| A frozen tab's own memory (V8 heap, caches) is purged, not just its CPU | ✅ | ✅ | — |
+| Off-screen/small cross-origin iframes deprioritized, frame rate halved | ✅ | ✅ | ✅ |
+| ...same iframes' own JS timers throttled too | ✅ | ✅ | ✅ |
+| Background page-load/typing work held off BEST_EFFORT work | ✅ | ✅ | ✅ |
+| Site-data store I/O off the USER_BLOCKING path | ✅ | ✅ | ✅ |
+| GPU process deprioritized while backgrounded | ✅ | ✅ | ✅ |
+| Backgrounded renderer's own thread pool capped | ✅ | ✅ | ✅ |
+| Idle renderer processes tracked for reuse rather than relaunched | ✅ upstream default | ✅ upstream default | ✅ |
+| Memory Saver mode on by default | ✅ | ✅ | — |
+| Battery Saver activates on battery, not only below a charge threshold | ✅ | ✅ | — |
+| Network prediction, optimization hints, domain reliability off | ✅ | ✅ | ✅ |
+| SharedWorkers of a frozen tab freeze too (chrome://flags, off by default) | ✅ | ✅ | — |
+| A fullscreen tab's own timers throttle during video (chrome://flags, off by default) | 🟡 pending Chromium bump | 🟡 pending Chromium bump | ✅ |
+
+Several rows read `—` for Android for the same reason `kInfiniteTabsFreezing`
+does: `FreezingPolicy` is compiled only for `!BUILDFLAG(IS_ANDROID)`, so
+nothing here has a tab-freeze to extend or a Memory Saver/Battery Saver mode
+to tune - enabling any of them would be a switch nothing reads. The Linux
+memory-pressure row turned out smaller than first scoped: the trigger does
+not go through a generic memory-pressure monitor at all (Chromium has no
+such thing on Linux) but through a self-contained function,
+`FreezingPolicy::CheckMemoryPressureForFreezing()`, that calls
+`base::GetSystemMemoryInfo()` directly - an API already implemented on
+Linux, sourced from /proc/meminfo. Porting is two widened
+`#if BUILDFLAG(IS_WIN)` guards and one Windows-only field swapped for its
+documented cross-platform equivalent, not new infrastructure - see
+`aerium-linux-memory-pressure.patch`'s own header for the full trail. It is
+still marked 🟡 rather than ✅ because "applies cleanly against pristine
+Chromium" and "behaves correctly under real memory pressure on real Linux
+hardware" are different claims, and only the first one has been checked. The
+fullscreen-video-throttling
+flag is Android-only for now for an ordinary reason, not a design one: the
+feature it wires up does not exist yet in the Chromium version desktop is
+currently built on, only in the newer one Android already tracks - it moves
+to ✅ once desktop's own version catches up.
+
+Idle-renderer-process reuse is the one row in this section desktop gets for
+free from upstream rather than through an Aerium patch - `content_features.cc`
+already ships it `ENABLED_BY_DEFAULT` off Android, so only the Android side
+needed a flip. Every other row not marked upstream/free is switched on by
+`aerium-runtime-efficiency.patch` and `aerium-battery-efficiency.patch`
+(desktop) or the matching block in `theme.sh` (Android) - each one a
+Chromium feature shipped finished and switched off pending a Finch rollout
+that a browser with no phone-home never receives.
+
 ## Extensions
 
 | | Win | Linux | Android |
@@ -118,8 +169,7 @@ this project draws around a page every tab opens on by default.
 | An extension can own the New Tab page | ✅ | ✅ | ✅ |
 | Web store bundled with the package | ✅ | ✅ | 🟡 points at the Chrome, Opera and Edge stores |
 | Install a .crx from an allowed off-store host | ✅ | ✅ | ✅ |
-| Install a .crx already on the device | ❌ | ❌ | ✅ chrome://aerium-extensions |
-| Install a .zip already on the device | ❌ | ❌ | ✅ chrome://aerium-extensions |
+| Install a .crx already on the device | ❌ | ❌ | ❌ |
 | MV2 support | ✅ | ✅ | ✅ |
 
 ## Identity and internal pages
@@ -130,21 +180,11 @@ this project draws around a page every tab opens on by default.
 | `chrome://aerium-first-run` | ✅ | ✅ | ✅ |
 | `aerium://` as an alias for every internal page | ✅ | ✅ | ✅ |
 | About page points at the project | ✅ | ✅ | ✅ |
-| Share Aerium row on the About page | ✅ | ✅ | ✅ |
 | Startpage default, nine privacy-first engines offered | ✅ | ✅ | ✅ |
 | Secure DNS menu: Mullvad, Quad9, NextDNS, no Google | ✅ | ✅ | ✅ |
 | Aerogel: a tab with its own throwaway cookie jar | ✅ | ✅ | ❌ |
 | Search widget shows the logo, not the launcher tile | — | — | ✅ |
-| Backup/restore for open tabs, site permissions, settings | — | — | ✅ |
 | "You and Google" renamed, Google-services block removed | ✅ | ✅ | — |
-
-Backup/restore is Android-only for the same reason the search widget row is: it is
-answering a problem the platform creates, not one both platforms share. A desktop
-profile is a folder anyone can copy; an Android profile is sandboxed storage no other
-app can read, and this build has no sync account to fall back on. Settings ->
-Backup and restore covers open tabs, site permission exceptions, and Aerium's own
-settings - not a full profile export, since cookies, history, passwords and autofill
-live in encrypted native stores with no supported bulk path from Java. See issue #21.
 
 ## Updates
 

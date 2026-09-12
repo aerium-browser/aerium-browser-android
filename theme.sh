@@ -5984,7 +5984,10 @@ echo "[aerium] ntp override draw guard applied"
 # well with the freezing logic already in place in renderers" - so the feature
 # has no consumer here, and the memory-pressure variant is read only inside
 # #if BUILDFLAG(IS_WIN). Enabling a feature nothing reads is noise that later
-# reads as coverage.
+# reads as coverage. kMemoryPurgeOnFreeze, the desktop patch's complement to
+# that pair, is excluded for the same reason - it has nothing here to purge -
+# and does not need enabling regardless: Chromium already ships it
+# ENABLED_BY_DEFAULT on Android.
 #
 # The two multi-line declarations are addressed by range rather than by their
 # second line: "             base::FEATURE_DISABLED_BY_DEFAULT);" appears a
@@ -5999,6 +6002,41 @@ sed_i 's|^BASE_FEATURE(kThrottleUnimportantFrameRate, base::FEATURE_DISABLED_BY_
     components/performance_manager/features.cc
 
 echo "[aerium] performance_manager defaults applied"
+
+# --- Three more of the same shape, in files this script did not otherwise
+# touch. Found reviewing the same neighbourhoods as the block above rather
+# than assumed to be the only ones written and switched off.
+#
+# kThrottleUnimportantFrameTimers is the missing third leg of the
+# kUnimportantFramesPriority/kThrottleUnimportantFrameRate pair above - same
+# frames (small, cross-origin, no user activation), but throttles the frame's
+# own JS timer wake-ups (32ms, unchanged default) rather than paint. No
+# platform guard, so it applies here the same as on desktop.
+#
+# kReduceGpuPriorityOnBackground and kRestrictThreadPoolInBackground are both
+# in content_features.cc: internal OS-level scheduling for a backgrounded
+# renderer/GPU process, nothing page-visible to break. The first makes a
+# backgrounded tab's GPU process the first thing reclaimed under memory
+# pressure; the second caps concurrent ThreadPool tasks for a low-priority
+# renderer, the same direction as kEnableBestEffortTaskInhibitingPolicy above
+# but at the renderer's own thread pool.
+#
+# kTrackEmptyRendererProcessesForReuse is guarded the other way round from
+# the three above: `#if BUILDFLAG(IS_ANDROID) DISABLED #else ENABLED#endif` -
+# desktop already ships this on, Android is the one still off. Only the
+# IS_ANDROID branch is touched; the `,+2` range reaches exactly that line
+# (BASE_FEATURE itself, then `#if BUILDFLAG(IS_ANDROID)`, then the value) and
+# stops short of the `#else` branch's already-correct ENABLED_BY_DEFAULT.
+sed_i '/^BASE_FEATURE(kThrottleUnimportantFrameTimers,$/,+1 s|^             base::FEATURE_DISABLED_BY_DEFAULT);$|             base::FEATURE_ENABLED_BY_DEFAULT);|' \
+    third_party/blink/common/features.cc
+sed_i 's|^BASE_FEATURE(kReduceGpuPriorityOnBackground, base::FEATURE_DISABLED_BY_DEFAULT);$|BASE_FEATURE(kReduceGpuPriorityOnBackground, base::FEATURE_ENABLED_BY_DEFAULT);|' \
+    content/public/common/content_features.cc
+sed_i '/^BASE_FEATURE(kRestrictThreadPoolInBackground,$/,+1 s|^             base::FEATURE_DISABLED_BY_DEFAULT);$|             base::FEATURE_ENABLED_BY_DEFAULT);|' \
+    content/public/common/content_features.cc
+sed_i '/^BASE_FEATURE(kTrackEmptyRendererProcessesForReuse,$/,+2 s|^             base::FEATURE_DISABLED_BY_DEFAULT$|             base::FEATURE_ENABLED_BY_DEFAULT|' \
+    content/public/common/content_features.cc
+
+echo "[aerium] content_features and blink features defaults applied"
 
 # --- Report a time zone other than the system's.
 #
@@ -6252,6 +6290,26 @@ sed_i '/^const FeatureEntry kFeatureEntries\[\] = {$/a\
     chrome/browser/about_flags.cc
 
 echo "[aerium] time zone override applied"
+
+# --- Throttle a fullscreen tab's own timers while it is playing video.
+#
+# kThrottleFullscreenVideoActiveTab clamps a foreground tab's JS timers to 1Hz
+# while it contains an effectively-fullscreen video - real CPU/battery saved
+# on the one tab guaranteed to be visible and doing nothing else, which is
+# exactly why it is not force-enabled the way the performance_manager block
+# above is. Every feature there is internal scheduling with nothing
+# page-visible to break; this one can. A custom video player driving captions
+# or an overlay off its own JS timer would see that timer slow to once a
+# second the moment the player goes fullscreen - not a made-up worry, it is
+# the exact failure mode the feature name describes. Reachable at
+# chrome://flags/#aerium-throttle-fullscreen-video, off until asked for, the
+# same shape as aerium-audio-noise and aerium-time-zone above for a real but
+# page-specific risk. DISABLED_BY_DEFAULT with no platform guard in Chromium,
+# so nothing else needs changing to make the flag do something.
+sed_i 's%^#endif  // CHROME_BROWSER_AERIUM_FLAG_ENTRIES_H_$%    {"aerium-throttle-fullscreen-video",\n     "Throttle background timers during fullscreen video",\n     "Slow the JS timers of a tab down to once a second while it plays an "\n     "effectively-fullscreen video. Saves CPU and battery on a tab doing "\n     "nothing else, but a custom video player driving captions or an overlay "\n     "off its own timer will see that timer slow down too - off until turned "\n     "on for that reason. Aerium flag.",\n     kOsAll,\n     FEATURE_VALUE_TYPE(blink::features::kThrottleFullscreenVideoActiveTab)},\n&%' \
+    chrome/browser/aerium_flag_entries.h
+
+echo "[aerium] fullscreen video throttling flag added"
 
 # --- navigator.hardwareConcurrency answers 2.
 #
