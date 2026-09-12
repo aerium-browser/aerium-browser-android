@@ -94,6 +94,22 @@ check there before concluding it is missing.
 The five desktop gaps are a decision, not a backlog: AMOLED is a power argument
 about OLED phone panels and does not carry to a desktop monitor.
 
+## New tab page
+
+| | Win | Linux | Android |
+|---|:--:|:--:|:--:|
+| Own shortcuts grid, not history-derived tiles | ✅ chrome://aerium-newtab | ✅ chrome://aerium-newtab | ✅ speed dial |
+| Background: solid, Aerium navy, or a photo you pick | ✅ | ✅ | ✅ |
+| Clock and date | ✅ | ✅ | ✅ |
+| Greeting, with an optional name | ✅ | ✅ | ✅ |
+| Quote of the day, from a list built into the browser | ✅ | ✅ | ✅ |
+
+Two different pages behind one feature set, deliberately: desktop's new tab
+page is a WebUI page whatever we do, so it is one there; Android's is native
+views, matching how the rest of that build is built. Nothing on either one is
+ever fetched - no live backgrounds, no weather, no feeds - which is the line
+this project draws around a page every tab opens on by default.
+
 ## Extensions
 
 | | Win | Linux | Android |
