@@ -10,8 +10,8 @@
 [![released](https://img.shields.io/github/release-date/aerium-browser/aerium-browser-android?label=released)](https://github.com/aerium-browser/aerium-browser-android/releases/latest)
 [![downloads](https://img.shields.io/github/downloads/aerium-browser/aerium-browser-android/total?label=downloads)](https://github.com/aerium-browser/aerium-browser-android/releases)
 [![license](https://img.shields.io/badge/License-GPLv2-blue.svg)](LICENSE)
-[![Donate XMR](https://img.shields.io/badge/XMR-Donate-FF6600?logo=monero&logoColor=white)](#support-aerium)
-[![Donate LTC](https://img.shields.io/badge/LTC-Donate-345D9D?logo=litecoin&logoColor=white)](#support-aerium)
+[![Donate XMR](https://img.shields.io/badge/XMR-Donate-FF6600?logo=monero&logoColor=white)](monero:49TPHGjCk52cr6f8LWwDrwAvCWmXWfVPy5DUt7KTEnLBfsm6xa9bUgaAVV5xYU6LH5WcoRNYZZSBuAjHFuVHFUDpRm6tKFA)
+[![Donate LTC](https://img.shields.io/badge/LTC-Donate-345D9D?logo=litecoin&logoColor=white)](litecoin:ltc1q8cpevsanzlmuc0ja8d0eltj72qk55nu7dty59v)
 
 ### Support Aerium
 
@@ -22,7 +22,7 @@ Aerium runs on donations and spare time: no ads, no data sales. Scan or copy an 
 <img src="donate/xmr-qr.png" width="120" height="120" alt="Monero donation QR code">
 <br><b>Monero (XMR)</b>
 </a>
-<br><code>49TPHGjCk52cr6f8LWwDrwAvCWmXWfVPy5DUt7KTEnLBfsm6xa9bUgaAVV5xYU6LH5WcoRNYZZSBuAjHFuVHFUDpRm6tKFA</code>
+<br><a href="monero:49TPHGjCk52cr6f8LWwDrwAvCWmXWfVPy5DUt7KTEnLBfsm6xa9bUgaAVV5xYU6LH5WcoRNYZZSBuAjHFuVHFUDpRm6tKFA"><code>49TPHGjCk52cr6f8LWwDrwAvCWmXWfVPy5DUt7KTEnLBfsm6xa9bUgaAVV5xYU6LH5WcoRNYZZSBuAjHFuVHFUDpRm6tKFA</code></a>
 </p>
 
 <p align="center">
@@ -30,7 +30,7 @@ Aerium runs on donations and spare time: no ads, no data sales. Scan or copy an 
 <img src="donate/ltc-qr.png" width="120" height="120" alt="Litecoin donation QR code">
 <br><b>Litecoin (LTC)</b>
 </a>
-<br><code>ltc1q8cpevsanzlmuc0ja8d0eltj72qk55nu7dty59v</code>
+<br><a href="litecoin:ltc1q8cpevsanzlmuc0ja8d0eltj72qk55nu7dty59v"><code>ltc1q8cpevsanzlmuc0ja8d0eltj72qk55nu7dty59v</code></a>
 </p>
 
 Aerium is a browser for people who'd rather their browser stayed out of the way. No telemetry calling home, no ad platform baked into the settings page. Extensions, including Manifest V2, install straight from the Chrome Web Store, something most Android browsers still can't do.
