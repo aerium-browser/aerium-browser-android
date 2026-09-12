@@ -27,6 +27,9 @@ behind any of this.
   sideloaded install with no sync account otherwise makes tedious to redo by
   hand. Addresses
   [#21](https://github.com/aerium-browser/aerium-browser-android/issues/21).
+- **Share Aerium**, next to Support Aerium on the About screen. Opens the
+  ordinary system share sheet with a one-line pitch and the download link -
+  nothing tracked, nothing sent anywhere until you pick where it goes.
 
 **Fixed**
 

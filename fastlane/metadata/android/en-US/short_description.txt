@@ -1,1 +1,1 @@
-Aerium: a private, space-themed Chromium browser with extension support
+De-googled Chromium browser with real Chrome extensions on Android

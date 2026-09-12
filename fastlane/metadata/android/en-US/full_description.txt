@@ -1,13 +1,15 @@
-Aerium is an open-source, Chromium-based browser for Android built on Vanadium (GrapheneOS), with extension support and a deep-navy space theme.
+Aerium is a de-googled, privacy-hardened Chromium browser for Android, built on GrapheneOS's Vanadium. Its standout feature: full Chrome Web Store extension support, including Manifest V2, on a phone - something almost no other Android browser offers now that Kiwi Browser has stopped receiving updates.
 
-- Extensions: Navigate to the Chrome Web Store, enable "Desktop site", and install as normal. Manifest V2 (MV2) extensions are supported, along with Opera and Microsoft Edge add-on stores. Unpacked extensions can also be loaded manually via Developer mode.
+Extensions: open the Chrome Web Store, switch on "Desktop site" from the menu, and install as normal - the permissions prompt still shows before anything installs. Opera and Microsoft Edge add-on stores work too, and .crx or .zip files already on the device can be installed directly from chrome://aerium-extensions, or from an allowed off-store host like a GitHub release. Pin an extension's icon to the toolbar from the menu next to it in the extensions list to reach its popup, and allow one in Incognito from Manage extensions > Details.
 
-- Using extensions: Pin an extension's icon to the toolbar from the menu next to it in the extensions list to access its popup. To allow an extension in Incognito, go to "Manage extensions", select "Details", and enable "Allow in Incognito".
+Privacy: Safe Browsing is off by default, since it is the one Android feature that reports every page you visit to Google. Canvas, text-measurement and WebGL fingerprinting resistance, Global Privacy Control, and HTTPS-First Balanced Mode are all on out of the box, no toggle needed. DRM (Widevine) stays unregistered until you turn it on yourself in Settings.
 
-- Autofill: Android's platform autofill is used by default, so third-party password managers fill web forms natively.
+Search and DNS: DuckDuckGo is the default search engine, with Startpage, Brave Search, Mojeek, Qwant, Ecosia and others ready to pick in Settings. Secure DNS offers Mullvad, Quad9 and NextDNS, with no Google Public DNS option.
 
-- Privacy: Safe Browsing is off by default (toggleable in Settings), and the browser avoids unnecessary background traffic.
+Autofill: Android's own platform autofill is used by default, so Bitwarden and similar password managers fill forms natively instead of relying on accessibility-service workarounds.
 
-- Debug URLs: use "chrome://chrome-urls" to view them.
+Appearance and battery: a true-black dark mode for OLED screens, with separate switches for the browser chrome and for web pages. Audio and video keep playing when you leave the browser or turn the screen off, including sites like YouTube that otherwise pause themselves.
 
-- WebRTC IP policy: available under "Privacy and security" in Settings.
+Data control: per-site rules under Settings > Privacy and security let you keep, keep-until-close, or clear-on-last-tab-close for each site individually, plus a global "clear everything except this list" mode. Settings > Backup and restore can save and reload your open tabs, site permissions and Aerium's own settings as one file.
+
+Free and open source, built in public on GitHub Actions. No telemetry, no bundled Google services, no ad platform in the settings page.
