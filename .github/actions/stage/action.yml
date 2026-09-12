@@ -79,74 +79,37 @@ runs:
         RESTORE_RUN_ID: ${{ inputs.restore_run_id }}
       run: bash ./.github/scripts/checkpoint-slot.sh restore
 
-    # The restore is the load-bearing step of the whole chain, and it used to
-    # be two continue-on-error download steps whose only failure handling was
-    # to ignore the failure, plus an Unpack step that trusted any file that
-    # existed. That turns a transient artifact-CDN error into something much
-    # worse than a failed stage: download-artifact leaves a PARTIAL
-    # artifacts.tar.zst behind, Unpack saw the file exists and handed it to
-    # tar, and tar died mid-extract with exit 2 - no tree, no checkpoint used,
-    # five hours of stage-1 work orphaned. (Run 34380651230 build-2:
-    # "Artifact download failed after 5 retries" after 21 minutes, then tar
-    # exit 2 on the truncated remainder.)
-    #
-    # So restore is one step that owns the whole path and refuses to continue
-    # past a bad download:
-    #   - `gh run download` reuses gh's artifact auth and redirect handling
-    #     (its temp file is why TMPDIR is pointed INTO the build volume first:
-    #     the ~20 GB download is staged in $TMPDIR, and /tmp lives on the
-    #     small root fs that maximize-build-space deliberately starves);
-    #   - the archive is integrity-tested with `zstd -t` before tar ever sees
-    #     it, so a truncated download can never masquerade as a build tree;
-    #   - download+verify+extract is retried three times, and if every
-    #     attempt fails the stage FAILS rather than starting fresh. Failing is
-    #     the point: the checkpoint is untouched, and auto-resume re-dispatches
-    #     with resume_run_id so a fresh runner tries the download again.
-    #     Silently starting over would throw away about a day of compiling
-    #     over a five-minute CDN hiccup.
-    - name: Restore build tree
-      if: inputs.finished != 'true' && inputs.from_artifact != 'never'
+    - name: Restore build tree (best effort)
+      if: inputs.finished != 'true' && inputs.from_artifact != 'never' && inputs.restore_run_id == ''
+            && steps.restore-slot.outputs.name != ''
+      uses: actions/download-artifact@v8
+      continue-on-error: true
+      with:
+        name: ${{ steps.restore-slot.outputs.name }}
+        path: ${{ github.workspace }}/chromium
+
+    - name: Restore build tree from another run (best effort)
+      if: inputs.finished != 'true' && inputs.from_artifact != 'never' && inputs.restore_run_id != ''
+            && steps.restore-slot.outputs.name != ''
+      uses: actions/download-artifact@v8
+      continue-on-error: true
+      with:
+        name: ${{ steps.restore-slot.outputs.name }}
+        path: ${{ github.workspace }}/chromium
+        run-id: ${{ inputs.restore_run_id }}
+        github-token: ${{ github.token }}
+
+    - name: Unpack build tree
+      if: inputs.finished != 'true'
       shell: bash
-      env:
-        GH_TOKEN: ${{ github.token }}
-        NAME: ${{ steps.restore-slot.outputs.name }}
-        # Cross-run resume reads another run's artifact; a same-run restore
-        # (build-2 onward) reads this run's own.
-        RID: ${{ inputs.restore_run_id != '' && inputs.restore_run_id || github.run_id }}
       run: |
-        set -euo pipefail
         cd "$GITHUB_WORKSPACE"
-        if [ -z "$NAME" ]; then
+        if [ -f chromium/artifacts.tar.zst ]; then
+          echo "Resuming from saved build tree"
+          tar -x -I 'zstd -T0' -f chromium/artifacts.tar.zst
+          rm -f chromium/artifacts.tar.zst
+        else
           echo "No saved build tree; starting fresh"
-          df -h /
-          exit 0
-        fi
-        STAGE="$PWD/chromium/_restore"
-        export TMPDIR="$STAGE/tmp"
-        restored=""
-        for attempt in 1 2 3; do
-          rm -rf "$STAGE"
-          mkdir -p "$TMPDIR" "$STAGE/data"
-          echo "Restore attempt $attempt/3: downloading $NAME from run $RID"
-          if gh run download "$RID" -n "$NAME" -D "$STAGE/data" \
-             && [ -f "$STAGE/data/artifacts.tar.zst" ] \
-             && zstd -q -t "$STAGE/data/artifacts.tar.zst"; then
-            tar -x -I 'zstd -T0' -f "$STAGE/data/artifacts.tar.zst" -C "$GITHUB_WORKSPACE"
-            rm -rf "$STAGE"
-            restored=yes
-            break
-          fi
-          echo "Attempt $attempt failed (download, missing archive, or corrupt archive); cleaning up"
-          rm -rf "$STAGE"
-          if [ "$attempt" -lt 3 ]; then
-            sleep 60
-          fi
-        done
-        if [ -z "$restored" ]; then
-          echo "Restore failed after 3 attempts." >&2
-          echo "The checkpoint artifact is untouched; failing this stage so the" >&2
-          echo "next dispatch retries the download on a fresh runner." >&2
-          exit 1
         fi
         df -h /
 

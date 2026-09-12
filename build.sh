@@ -296,45 +296,6 @@ if [ -f "$AMF" ] && grep -q '^import org.chromium.chrome.browser.ApplicationLife
     echo "[aerium] resume hotfix: ApplicationLifetime import corrected in $AMF"
 fi
 
-# --- Resume hotfix (removable once a build that STARTED after 2026-09-09 goes
-# green): AeriumSpeedDial.java declared a static isEnabled() while extending
-# LinearLayout. View already declares an instance isEnabled(), a static method
-# with the same signature in a subclass is a compile error in Java rather than
-# a shadow, and chrome_java died on it the moment javac reached the class.
-# theme.sh renames it to speedDialEnabled() now, but theme.sh only runs during
-# source setup, so a tree checkpointed before this does not have the fix in
-# either file that calls it. Two files: the class itself (definition and the
-# rebuild() call) and NewTabPageLayout.java (the tiles-visibility call).
-# Idempotent both ways: the broken pattern is gone after the first application,
-# and a fresh tree written by the current theme.sh never matches it.
-ASD=chrome/android/java/src/org/chromium/chrome/browser/ntp/AeriumSpeedDial.java
-if [ -f "$ASD" ] && grep -q 'public static boolean isEnabled()' "$ASD"; then
-    sed -i 's|public static boolean isEnabled() {|public static boolean speedDialEnabled() {|' "$ASD"
-    sed -i 's|if (!isEnabled()) {|if (!speedDialEnabled()) {|' "$ASD"
-    echo "[aerium] resume hotfix: AeriumSpeedDial.isEnabled renamed in $ASD"
-fi
-NTL=chrome/android/java/src/org/chromium/chrome/browser/ntp/NewTabPageLayout.java
-if [ -f "$NTL" ] && grep -q 'AeriumSpeedDial.isEnabled()' "$NTL"; then
-    sed -i 's|AeriumSpeedDial.isEnabled() ? View.GONE : View.VISIBLE);|AeriumSpeedDial.speedDialEnabled() ? View.GONE : View.VISIBLE);|' "$NTL"
-    echo "[aerium] resume hotfix: AeriumSpeedDial.isEnabled call renamed in $NTL"
-fi
-
-# --- Resume hotfix (removable once a build that STARTED after 2026-09-11 goes
-# green): aerium_extensions.h sliced the leading dot off kExtensionFileExtension
-# with pointer arithmetic (`kExtensionFileExtension + 1`). The unsafe-buffers
-# plugin rejects that under -Werror, and chrome_web_ui_configs.o - the only
-# translation unit that includes the header - died on it in run 34448247696
-# stage 3. theme.sh writes the substr() form now, but theme.sh only runs during
-# source setup, so a tree checkpointed before this does not have it.
-# Idempotent: the gate matches the broken code, not the fixed comment (which
-# mentions the same string), so it is gone after the first application and a
-# fresh tree written by the current theme.sh never matches.
-AEH=chrome/browser/ui/webui/aerium_extensions.h
-if [ -f "$AEH" ] && grep -q '{extensions::kExtensionFileExtension + 1}' "$AEH"; then
-    sed -i 's|{extensions::kExtensionFileExtension + 1}|{std::string(extensions::kExtensionFileExtension).substr(1)}|' "$AEH"
-    echo "[aerium] resume hotfix: kExtensionFileExtension substr in $AEH"
-fi
-
 # --- Resume sync for the first-run page: theme.sh only runs during source
 # setup, so a tree saved by an earlier stage keeps whatever version of the
 # page it was built with. Re-emit the header from theme.sh whenever the tree's
