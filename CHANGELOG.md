@@ -20,6 +20,13 @@ behind any of this.
   "Load unpacked" does upstream - no manual extraction, no permission prompt.
   Closes
   [#23](https://github.com/aerium-browser/aerium-browser-android/issues/23).
+- Settings → Backup and restore. Save or bring back your open tabs, site
+  permission exceptions, and Aerium's own settings as a single JSON file
+  through the ordinary system file picker. Not a full profile export -
+  passwords, history and cookies aren't in it - but the three things a
+  sideloaded install with no sync account otherwise makes tedious to redo by
+  hand. Addresses
+  [#21](https://github.com/aerium-browser/aerium-browser-android/issues/21).
 
 **Fixed**
 

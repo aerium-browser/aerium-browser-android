@@ -118,7 +118,16 @@ about OLED phone panels and does not carry to a desktop monitor.
 | Secure DNS menu: Mullvad, Quad9, NextDNS, no Google | ✅ | ✅ | ✅ |
 | Aerogel: a tab with its own throwaway cookie jar | ✅ | ✅ | ❌ |
 | Search widget shows the logo, not the launcher tile | — | — | ✅ |
+| Backup/restore for open tabs, site permissions, settings | — | — | ✅ |
 | "You and Google" renamed, Google-services block removed | ✅ | ✅ | — |
+
+Backup/restore is Android-only for the same reason the search widget row is: it is
+answering a problem the platform creates, not one both platforms share. A desktop
+profile is a folder anyone can copy; an Android profile is sandboxed storage no other
+app can read, and this build has no sync account to fall back on. Settings ->
+Backup and restore covers open tabs, site permission exceptions, and Aerium's own
+settings - not a full profile export, since cookies, history, passwords and autofill
+live in encrypted native stores with no supported bulk path from Java. See issue #21.
 
 ## Updates
 

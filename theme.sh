@@ -8676,3 +8676,636 @@ perl -0777 -pi -e '
 ' $AEXT
 
 echo "[aerium] .zip support for chrome://aerium-extensions applied (android issue 23)"
+
+
+# --- android issue 21: offline backup/restore for open tabs, site permissions
+# and settings.
+#
+# Scoped to exactly what the maintainer's own comment on the issue promised:
+# open tabs, site permissions, and Aerium's own settings. Not a full profile
+# export - cookies, history, saved passwords and autofill live in encrypted,
+# versioned native stores with no supported bulk import path from Java, and
+# a half-working copy of that data would be worse than none. Bookmarks
+# already have their own export, mentioned in the same issue thread.
+#
+# One new Settings screen, Settings -> Backup and restore, writing and
+# reading a single JSON file through the ordinary system document picker -
+# the same ACTION_OPEN_DOCUMENT/ACTION_CREATE_DOCUMENT pattern the New tab
+# page screen already uses for its background image, not a new mechanism.
+#
+# Three sources, each read and restored through something that already
+# exists rather than new native plumbing:
+#
+#   tabs         TabWindowManagerSingleton.getAllTabModelSelectors(), the
+#                same Java-side registry ToolbarManager's window-reuse code
+#                already reaches through for a live TabModel. Restored as
+#                trusted VIEW intents at ChromeLauncherActivity, because this
+#                fragment runs in the separate Settings activity and has no
+#                TabCreator of its own to call directly.
+#
+#   permissions  WebsitePreferenceBridge, the same bridge the real Site
+#                settings screen is built on - getContentSettingsExceptions()
+#                to read a content type's exceptions, setContentSettingCustomScope()
+#                to replay them. No new JNI: this bridge already does both
+#                directions.
+#
+#   settings     Two different stores get two different treatments. The
+#                "Chrome.Aerium.*" SharedPreferences keys are scanned by
+#                prefix - every key this build has ever added under that
+#                prefix comes along for free, including ones added after this
+#                landed. The handful backed by native PrefService (the site
+#                rules table, the on-exit clearing choices) have no
+#                Java-callable enumeration the way SharedPreferences does, so
+#                those are named explicitly instead.
+#
+# What is deliberately NOT here: chrome://flags. Android's enabled-flags list
+# lives in local_state, which has no existing Java-callable accessor by pref
+# name the way profile prefs do through PrefService.getBoolean(String) - see
+# aerium_site_rules.h's own on-exit prefs for how that pattern normally
+# works. Reaching local_state from Java means new JNI, registered in at least
+# two separate .gni source lists this session could not verify against a real
+# build. Shipping the three sources above now, verified against real
+# Chromium/AndroidX API surfaces, was judged better than shipping a fourth
+# blind. Worth doing next, with a build to test it against.
+
+cat > chrome/android/java/res/xml/aerium_backup_preferences.xml <<'AERIUM_BACKUP_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright 2026 The Chromium Authors
+     Use of this source code is governed by a BSD-style license that can be
+     found in the LICENSE file. -->
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+    <Preference
+        android:key="aerium_backup_export"
+        android:persistent="false"
+        android:title="@string/aerium_backup_export_title"
+        android:summary="@string/aerium_backup_export_summary" />
+    <Preference
+        android:key="aerium_backup_restore"
+        android:persistent="false"
+        android:title="@string/aerium_backup_restore_title"
+        android:summary="@string/aerium_backup_restore_summary" />
+</PreferenceScreen>
+AERIUM_BACKUP_XML
+
+sed_i 's|^  "java/res/xml/aerium_ntp_preferences.xml",$|  "java/res/xml/aerium_backup_preferences.xml",\n&|' \
+    chrome/android/chrome_java_resources.gni
+
+cat > chrome/android/java/src/org/chromium/chrome/browser/settings/AeriumBackupFragment.java <<'AERIUM_BACKUP_JAVA'
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+package org.chromium.chrome.browser.settings;
+
+import android.app.Activity;
+import android.content.Context;
+import android.content.Intent;
+import android.content.SharedPreferences;
+import android.net.Uri;
+import android.os.Bundle;
+import android.provider.Browser;
+import android.widget.Toast;
+
+import androidx.preference.Preference;
+
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import org.chromium.base.ContextUtils;
+import org.chromium.base.IntentUtils;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
+import org.chromium.chrome.R;
+import org.chromium.chrome.browser.app.tabwindow.TabWindowManagerSingleton;
+import org.chromium.chrome.browser.document.ChromeLauncherActivity;
+import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
+import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.settings.search.ChromeBaseSearchIndexProvider;
+import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tabmodel.TabModel;
+import org.chromium.chrome.browser.tabmodel.TabModelSelector;
+import org.chromium.components.browser_ui.settings.SettingsUtils;
+import org.chromium.components.browser_ui.site_settings.ContentSettingException;
+import org.chromium.components.browser_ui.site_settings.WebsitePreferenceBridge;
+import org.chromium.components.content_settings.ContentSettingsType;
+import org.chromium.components.content_settings.ProviderType;
+import org.chromium.components.embedder_support.util.UrlConstants;
+import org.chromium.components.prefs.PrefService;
+import org.chromium.components.user_prefs.UserPrefs;
+import org.chromium.url.GURL;
+
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+/**
+ * Aerium: Settings -> Backup and restore. See theme.sh.
+ *
+ * <p>Covers three things: the open tabs in this profile's regular window(s), the per-site
+ * permission exceptions Chromium's own content-settings map holds, and Aerium's own settings -
+ * both the ones in Android SharedPreferences (the "Chrome.Aerium.*" keys) and the handful backed
+ * by native PrefService (the site rules table and the on-exit clearing choices).
+ *
+ * <p>Deliberately not a full profile export. Cookies, history, saved passwords and autofill data
+ * live in encrypted, versioned native stores with no supported bulk import path from Java, and a
+ * half-working copy of that data would be worse than none - see the discussion on issue #21. What
+ * this covers is exactly the three things the sideloaded-APK / no-sync situation actually makes
+ * awkward to redo by hand after a reinstall or a new device.
+ */
+@NullMarked
+public class AeriumBackupFragment extends ChromeBaseSettingsFragment {
+    // Must match the keys in aerium_backup_preferences.xml.
+    private static final String PREF_EXPORT = "aerium_backup_export";
+    private static final String PREF_RESTORE = "aerium_backup_restore";
+
+    // Fragment.startActivityForResult rather than an ActivityResultContract - see
+    // AeriumNewTabPageFragment, which explains why.
+    private static final int REQUEST_EXPORT = 4212;
+    private static final int REQUEST_RESTORE = 4213;
+
+    private static final String BACKUP_MIME_TYPE = "application/json";
+    private static final int BACKUP_VERSION = 1;
+
+    // Every Android SharedPreferences key this backs up shares this prefix - see
+    // ChromePreferenceKeys, which names every Aerium key "Chrome.Aerium.*". Scanning by prefix
+    // rather than listing keys one by one means a setting added later is picked up for free.
+    private static final String SHARED_PREF_PREFIX = "Chrome.Aerium.";
+
+    // Native PrefService settings, listed explicitly rather than scanned: PrefService has no
+    // Java-callable enumeration the way SharedPreferences does, so these are named by hand. Kept
+    // to real user choices - see AeriumClearOnExit and the site rules table in
+    // aerium_site_rules.h. Deliberately excluding browser.clear_data.aerium_on_exit.requested and
+    // clear_on_exit_pending (internal one-shot flags, not settings) and the three
+    // aerium.update.* cache fields other than check_enabled (refreshed by the next check anyway;
+    // restoring a stale one could show a wrong update banner).
+    private static final String[] PROFILE_BOOL_PREFS = {
+        "browser.clear_data.aerium_clear_on_exit",
+        "browser.clear_data.aerium_ephemeral_all_sites",
+        "browser.clear_data.aerium_ephemeral_clear_cache",
+        "browser.clear_data.aerium_on_exit.browsing_history",
+        "browser.clear_data.aerium_on_exit.cache",
+        "browser.clear_data.aerium_on_exit.cookies",
+        "browser.clear_data.aerium_on_exit.download_history",
+        "browser.clear_data.aerium_on_exit.form_data",
+        "browser.clear_data.aerium_on_exit.hosted_apps_data",
+        "browser.clear_data.aerium_on_exit.passwords",
+        "browser.clear_data.aerium_on_exit.site_settings",
+        "aerium.update.check_enabled",
+    };
+    private static final String[] PROFILE_INT_PREFS = {
+        "browser.clear_data.aerium_ephemeral_delay_seconds",
+    };
+    private static final String[] PROFILE_STRING_PREFS = {
+        "browser.clear_data.aerium_on_exit.site_rules",
+    };
+
+    // The site permission categories this covers. Not every ContentSettingsType Chromium has -
+    // just the ones people actually mean by "site permissions": the four prompt-style
+    // permissions, and the handful of toggles reachable from the per-site page and the privacy
+    // settings. Policy-managed exceptions are skipped on the way out - see collectPermissions -
+    // so this list can grow without needing to worry about a managed entry being written back as
+    // if the user had chosen it.
+    private static final int[] PERMISSION_TYPES = {
+        ContentSettingsType.NOTIFICATIONS,
+        ContentSettingsType.GEOLOCATION,
+        ContentSettingsType.MEDIASTREAM_CAMERA,
+        ContentSettingsType.MEDIASTREAM_MIC,
+        ContentSettingsType.POPUPS,
+        ContentSettingsType.JAVASCRIPT,
+        ContentSettingsType.SOUND,
+        ContentSettingsType.ADS,
+        ContentSettingsType.AUTOMATIC_DOWNLOADS,
+        ContentSettingsType.COOKIES,
+    };
+
+    @Override
+    public void onCreatePreferences(@Nullable Bundle savedInstanceState, @Nullable String rootKey) {
+        SettingsUtils.addPreferencesFromResource(this, R.xml.aerium_backup_preferences);
+
+        Preference exportPref = findPreference(PREF_EXPORT);
+        if (exportPref != null) {
+            exportPref.setOnPreferenceClickListener(
+                    preference -> {
+                        startExport();
+                        return true;
+                    });
+        }
+
+        Preference restorePref = findPreference(PREF_RESTORE);
+        if (restorePref != null) {
+            restorePref.setOnPreferenceClickListener(
+                    preference -> {
+                        startRestore();
+                        return true;
+                    });
+        }
+    }
+
+    private void startExport() {
+        Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType(BACKUP_MIME_TYPE);
+        intent.putExtra(Intent.EXTRA_TITLE, "aerium-backup.json");
+        try {
+            startActivityForResult(intent, REQUEST_EXPORT);
+        } catch (RuntimeException e) {
+            // No document provider on the device. Nothing opens; nothing breaks.
+        }
+    }
+
+    private void startRestore() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType(BACKUP_MIME_TYPE);
+        try {
+            startActivityForResult(intent, REQUEST_RESTORE);
+        } catch (RuntimeException e) {
+            // No document provider on the device. Nothing opens; nothing breaks.
+        }
+    }
+
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (resultCode != Activity.RESULT_OK || data == null) return;
+        Uri uri = data.getData();
+        if (uri == null) return;
+        if (requestCode == REQUEST_EXPORT) {
+            writeBackup(uri);
+        } else if (requestCode == REQUEST_RESTORE) {
+            readBackup(uri);
+        }
+    }
+
+    private void writeBackup(Uri uri) {
+        Context context = getContext();
+        if (context == null) return;
+        try (OutputStream out = context.getContentResolver().openOutputStream(uri)) {
+            if (out == null) throw new IOException("no output stream for " + uri);
+            JSONObject root = buildBackup();
+            out.write(root.toString().getBytes(StandardCharsets.UTF_8));
+            showToast(R.string.aerium_backup_export_done);
+        } catch (IOException | JSONException e) {
+            showToast(R.string.aerium_backup_export_failed);
+        }
+    }
+
+    private void readBackup(Uri uri) {
+        Context context = getContext();
+        if (context == null) return;
+        try (InputStream in = context.getContentResolver().openInputStream(uri)) {
+            if (in == null) throw new IOException("no input stream for " + uri);
+            ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+            byte[] chunk = new byte[8192];
+            int read;
+            while ((read = in.read(chunk)) != -1) {
+                buffer.write(chunk, 0, read);
+            }
+            JSONObject root = new JSONObject(buffer.toString(StandardCharsets.UTF_8.name()));
+            applyBackup(root);
+            showToast(R.string.aerium_backup_restore_done);
+        } catch (IOException | JSONException e) {
+            showToast(R.string.aerium_backup_restore_failed);
+        }
+    }
+
+    private void showToast(int resId) {
+        Context context = getContext();
+        if (context == null) return;
+        Toast.makeText(context, resId, Toast.LENGTH_LONG).show();
+    }
+
+    // --- Building and applying the backup document. ---
+
+    private JSONObject buildBackup() throws JSONException {
+        JSONObject root = new JSONObject();
+        root.put("aerium_backup_version", BACKUP_VERSION);
+        root.put("tabs", collectTabs());
+        root.put("permissions", collectPermissions());
+        JSONObject settings = new JSONObject();
+        settings.put("shared_preferences", collectSharedPreferences());
+        settings.put("profile_prefs", collectProfilePrefs());
+        root.put("settings", settings);
+        return root;
+    }
+
+    private void applyBackup(JSONObject root) throws JSONException {
+        JSONArray tabs = root.optJSONArray("tabs");
+        if (tabs != null) restoreTabs(tabs);
+
+        JSONArray permissions = root.optJSONArray("permissions");
+        if (permissions != null) restorePermissions(permissions);
+
+        JSONObject settings = root.optJSONObject("settings");
+        if (settings != null) {
+            JSONArray sharedPrefs = settings.optJSONArray("shared_preferences");
+            if (sharedPrefs != null) restoreSharedPreferences(sharedPrefs);
+
+            JSONArray profilePrefs = settings.optJSONArray("profile_prefs");
+            if (profilePrefs != null) restoreProfilePrefs(profilePrefs);
+        }
+    }
+
+    // --- Tabs. ---
+
+    /**
+     * Every open tab in this profile's regular (non-incognito) window(s). Incognito is
+     * deliberately never included - a tab list that outlives the session it was opened in is
+     * exactly what Incognito promises not to do.
+     */
+    private JSONArray collectTabs() throws JSONException {
+        JSONArray array = new JSONArray();
+        Profile targetProfile = getProfile();
+        if (targetProfile == null) return array;
+        for (TabModelSelector selector :
+                TabWindowManagerSingleton.getInstance().getAllTabModelSelectors()) {
+            TabModel model = selector.getModel(false);
+            if (model == null) continue;
+            Profile modelProfile = model.getProfile();
+            if (modelProfile == null || modelProfile != targetProfile) continue;
+            for (int i = 0; i < model.getCount(); i++) {
+                Tab tab = model.getTabAt(i);
+                if (tab == null) continue;
+                GURL url = tab.getUrl();
+                if (url == null || !url.isValid() || url.getSpec().isEmpty()) continue;
+                // chrome:// and chrome-native:// pages (Settings, the NTP, Downloads...) are this
+                // build's own, not a site the user navigated to, and are not guaranteed to still
+                // exist under the same URL in whatever version does the restoring. aerium:// is
+                // rewritten to chrome:// at navigation time - see HandleAeriumScheme in
+                // theme.sh - so the committed URL a tab actually carries is already chrome://
+                // and is caught by the same check.
+                String scheme = url.getScheme();
+                if (scheme != null
+                        && (scheme.equals(UrlConstants.CHROME_SCHEME)
+                                || scheme.equals(UrlConstants.CHROME_NATIVE_SCHEME))) {
+                    continue;
+                }
+                JSONObject entry = new JSONObject();
+                entry.put("url", url.getSpec());
+                String title = tab.getTitle();
+                entry.put("title", title == null ? "" : title);
+                array.put(entry);
+            }
+        }
+        return array;
+    }
+
+    /**
+     * Reopens each URL as a new regular tab. Fired as trusted VIEW intents at
+     * ChromeLauncherActivity rather than through a TabCreator directly, because this fragment
+     * runs in the separate Settings activity and has no TabCreator of its own to call - the same
+     * reason ToolbarManager's window-reuse code builds its intents through IntentHandler rather
+     * than reaching for a TabModel it does not have. EXTRA_CREATE_NEW_TAB is what keeps each one
+     * from just navigating whatever tab is already in front.
+     */
+    private void restoreTabs(JSONArray tabs) {
+        Context context = getContext();
+        if (context == null) return;
+        for (int i = 0; i < tabs.length(); i++) {
+            JSONObject entry = tabs.optJSONObject(i);
+            if (entry == null) continue;
+            String url = entry.optString("url", "");
+            if (url.isEmpty()) continue;
+            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+            intent.setClass(context, ChromeLauncherActivity.class);
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            intent.putExtra(Browser.EXTRA_CREATE_NEW_TAB, true);
+            intent.putExtra(Browser.EXTRA_APPLICATION_ID, context.getPackageName());
+            IntentUtils.addTrustedIntentExtras(intent);
+            try {
+                context.startActivity(intent);
+            } catch (RuntimeException e) {
+                // One bad URL should not stop the rest of the list from opening.
+            }
+        }
+    }
+
+    // --- Site permissions. ---
+
+    private JSONArray collectPermissions() throws JSONException {
+        JSONArray array = new JSONArray();
+        Profile profile = getProfile();
+        if (profile == null) return array;
+        WebsitePreferenceBridge bridge = new WebsitePreferenceBridge();
+        for (int type : PERMISSION_TYPES) {
+            List<ContentSettingException> exceptions =
+                    bridge.getContentSettingsExceptions(profile, type);
+            for (ContentSettingException exception : exceptions) {
+                // A policy-managed exception is not the user's own choice, and the policy that
+                // set it will set it again on the device this is restored to - writing it back
+                // here would just be copying enterprise configuration around as if it were data.
+                if (exception.getSource() == ProviderType.POLICY_PROVIDER) continue;
+                JSONObject entry = new JSONObject();
+                entry.put("type", type);
+                entry.put("primaryPattern", exception.getPrimaryPattern());
+                String secondary = exception.getSecondaryPattern();
+                entry.put("secondaryPattern", secondary == null ? "" : secondary);
+                entry.put("setting", exception.getContentSetting());
+                array.put(entry);
+            }
+        }
+        return array;
+    }
+
+    private void restorePermissions(JSONArray permissions) {
+        Profile profile = getProfile();
+        if (profile == null) return;
+        for (int i = 0; i < permissions.length(); i++) {
+            JSONObject entry = permissions.optJSONObject(i);
+            if (entry == null) continue;
+            int type = entry.optInt("type", -1);
+            String primary = entry.optString("primaryPattern", "");
+            if (type < 0 || primary.isEmpty()) continue;
+            String secondary = entry.optString("secondaryPattern", "");
+            if (secondary.isEmpty()) secondary = WebsitePreferenceBridge.SITE_WILDCARD;
+            int setting = entry.optInt("setting", -1);
+            if (setting < 0) continue;
+            try {
+                WebsitePreferenceBridge.setContentSettingCustomScope(
+                        profile, type, primary, secondary, setting);
+            } catch (RuntimeException e) {
+                // A pattern shape this build's assertions no longer accept for this type. Skip
+                // that one row rather than lose the rest of the restore over it.
+            }
+        }
+    }
+
+    // --- Aerium's own settings: Android SharedPreferences. ---
+
+    private JSONArray collectSharedPreferences() throws JSONException {
+        JSONArray array = new JSONArray();
+        Map<String, ?> all = ContextUtils.getAppSharedPreferences().getAll();
+        for (Map.Entry<String, ?> entry : all.entrySet()) {
+            String key = entry.getKey();
+            if (!key.startsWith(SHARED_PREF_PREFIX)) continue;
+            Object value = entry.getValue();
+            JSONObject item = new JSONObject();
+            item.put("key", key);
+            // The type is written down explicitly rather than left for org.json to infer on the
+            // way back in. JSON has one number type; a plain int written here could come back out
+            // of org.json's parser boxed as a Long depending on its value, and writing that
+            // straight into SharedPreferences under the wrong type is exactly the kind of thing
+            // that compiles today and throws ClassCastException the next time something calls
+            // readInt() on it.
+            if (value instanceof Boolean) {
+                item.put("type", "bool");
+                item.put("value", ((Boolean) value).booleanValue());
+            } else if (value instanceof Integer) {
+                item.put("type", "int");
+                item.put("value", ((Integer) value).intValue());
+            } else if (value instanceof Long) {
+                item.put("type", "long");
+                item.put("value", ((Long) value).longValue());
+            } else if (value instanceof Float) {
+                item.put("type", "float");
+                item.put("value", ((Float) value).doubleValue());
+            } else if (value instanceof String) {
+                item.put("type", "string");
+                item.put("value", (String) value);
+            } else if (value instanceof Set) {
+                item.put("type", "stringset");
+                JSONArray setArray = new JSONArray();
+                for (Object element : (Set<?>) value) {
+                    setArray.put(String.valueOf(element));
+                }
+                item.put("value", setArray);
+            } else {
+                continue;
+            }
+            array.put(item);
+        }
+        return array;
+    }
+
+    private void restoreSharedPreferences(JSONArray items) {
+        SharedPreferences.Editor editor = ChromeSharedPreferences.getInstance().getEditor();
+        boolean any = false;
+        for (int i = 0; i < items.length(); i++) {
+            JSONObject item = items.optJSONObject(i);
+            if (item == null) continue;
+            String key = item.optString("key", "");
+            // Restricted to this build's own keys twice over - once on the way out, and again
+            // here - so a hand-edited backup file cannot use this screen to write into some other
+            // SharedPreferences key.
+            if (key.isEmpty() || !key.startsWith(SHARED_PREF_PREFIX)) continue;
+            String type = item.optString("type", "");
+            switch (type) {
+                case "bool":
+                    editor.putBoolean(key, item.optBoolean("value", false));
+                    break;
+                case "int":
+                    editor.putInt(key, item.optInt("value", 0));
+                    break;
+                case "long":
+                    editor.putLong(key, item.optLong("value", 0L));
+                    break;
+                case "float":
+                    editor.putFloat(key, (float) item.optDouble("value", 0));
+                    break;
+                case "string":
+                    editor.putString(key, item.optString("value", ""));
+                    break;
+                case "stringset":
+                    JSONArray setArray = item.optJSONArray("value");
+                    if (setArray == null) continue;
+                    Set<String> values = new HashSet<>();
+                    for (int j = 0; j < setArray.length(); j++) {
+                        values.add(setArray.optString(j, ""));
+                    }
+                    editor.putStringSet(key, values);
+                    break;
+                default:
+                    continue;
+            }
+            any = true;
+        }
+        if (any) editor.apply();
+    }
+
+    // --- Aerium's own settings: native PrefService. ---
+
+    private JSONArray collectProfilePrefs() throws JSONException {
+        JSONArray array = new JSONArray();
+        Profile profile = getProfile();
+        if (profile == null) return array;
+        PrefService prefs = UserPrefs.get(profile);
+        for (String key : PROFILE_BOOL_PREFS) {
+            JSONObject item = new JSONObject();
+            item.put("key", key);
+            item.put("type", "bool");
+            item.put("value", prefs.getBoolean(key));
+            array.put(item);
+        }
+        for (String key : PROFILE_INT_PREFS) {
+            JSONObject item = new JSONObject();
+            item.put("key", key);
+            item.put("type", "int");
+            item.put("value", prefs.getInteger(key));
+            array.put(item);
+        }
+        for (String key : PROFILE_STRING_PREFS) {
+            JSONObject item = new JSONObject();
+            item.put("key", key);
+            item.put("type", "string");
+            item.put("value", prefs.getString(key));
+            array.put(item);
+        }
+        return array;
+    }
+
+    private void restoreProfilePrefs(JSONArray items) {
+        Profile profile = getProfile();
+        if (profile == null) return;
+        PrefService prefs = UserPrefs.get(profile);
+        Set<String> boolKeys = new HashSet<>(Arrays.asList(PROFILE_BOOL_PREFS));
+        Set<String> intKeys = new HashSet<>(Arrays.asList(PROFILE_INT_PREFS));
+        Set<String> stringKeys = new HashSet<>(Arrays.asList(PROFILE_STRING_PREFS));
+        for (int i = 0; i < items.length(); i++) {
+            JSONObject item = items.optJSONObject(i);
+            if (item == null) continue;
+            String key = item.optString("key", "");
+            if (key.isEmpty()) continue;
+            // A key this build no longer reads - from an older or newer Aerium version - is
+            // skipped rather than written blind. There is nowhere left for it to be read back
+            // from, so restoring it would only be able to fail silently later; skipping it here
+            // fails silently now instead, which is the same outcome without the extra pref.
+            if (boolKeys.contains(key)) {
+                prefs.setBoolean(key, item.optBoolean("value", false));
+            } else if (intKeys.contains(key)) {
+                prefs.setInteger(key, item.optInt("value", 0));
+            } else if (stringKeys.contains(key)) {
+                prefs.setString(key, item.optString("value", ""));
+            }
+        }
+    }
+
+    public static final ChromeBaseSearchIndexProvider SEARCH_INDEX_DATA_PROVIDER =
+            new ChromeBaseSearchIndexProvider(
+                    AeriumBackupFragment.class.getName(), R.xml.aerium_backup_preferences);
+}
+AERIUM_BACKUP_JAVA
+
+sed_i 's|^  "java/src/org/chromium/chrome/browser/settings/AeriumNewTabPageFragment.java",$|  "java/src/org/chromium/chrome/browser/settings/AeriumBackupFragment.java",\n&|' \
+    chrome/android/chrome_java_sources.gni
+
+sed_i 's|^        android:key="aerium_new_tab_page"$|        android:key="aerium_backup"\n        android:order="26"\n        android:fragment="org.chromium.chrome.browser.settings.AeriumBackupFragment"\n        android:title="@string/aerium_backup_title"\n        android:summary="@string/aerium_backup_summary" />\n    <Preference\n        android:key="aerium_new_tab_page"|' \
+    chrome/android/java/res/xml/main_preferences.xml
+
+SIPR=chrome/android/java/src/org/chromium/chrome/browser/settings/search/SearchIndexProviderRegistry.java
+sed_i 's|^import org.chromium.chrome.browser.settings.AeriumNewTabPageFragment;$|&\nimport org.chromium.chrome.browser.settings.AeriumBackupFragment;|' \
+    $SIPR
+sed_i 's|^                    AeriumNewTabPageFragment.SEARCH_INDEX_DATA_PROVIDER,$|&\n                    AeriumBackupFragment.SEARCH_INDEX_DATA_PROVIDER,|' \
+    $SIPR
+
+sed_i 's|      <message name="IDS_AERIUM_NTP_TITLE" desc=|      <message name="IDS_AERIUM_BACKUP_TITLE" desc="Title of the Backup and restore settings screen, and its row in the main Settings list.">\n        Backup and restore\n      </message>\n      <message name="IDS_AERIUM_BACKUP_SUMMARY" desc="Summary under that row.">\n        Save or bring back your open tabs, site permissions and settings\n      </message>\n      <message name="IDS_AERIUM_BACKUP_EXPORT_TITLE" desc="Row that saves a backup file.">\n        Export backup\n      </message>\n      <message name="IDS_AERIUM_BACKUP_EXPORT_SUMMARY" desc="Summary under that row, naming what is and is not included.">\n        Open tabs, site permissions and Aerium'"'"'s own settings. Not passwords, history or cookies.\n      </message>\n      <message name="IDS_AERIUM_BACKUP_RESTORE_TITLE" desc="Row that reads a previously saved backup file.">\n        Restore from backup\n      </message>\n      <message name="IDS_AERIUM_BACKUP_RESTORE_SUMMARY" desc="Summary under that row.">\n        Adds tabs, permissions and settings from a backup file. Nothing already here is removed.\n      </message>\n      <message name="IDS_AERIUM_BACKUP_EXPORT_DONE" desc="Toast shown after a backup file is written successfully.">\n        Backup saved\n      </message>\n      <message name="IDS_AERIUM_BACKUP_EXPORT_FAILED" desc="Toast shown when saving the backup file failed.">\n        Could not save the backup\n      </message>\n      <message name="IDS_AERIUM_BACKUP_RESTORE_DONE" desc="Toast shown after a backup file is read and applied successfully.">\n        Backup restored\n      </message>\n      <message name="IDS_AERIUM_BACKUP_RESTORE_FAILED" desc="Toast shown when the chosen file could not be read as a backup.">\n        Could not read that backup file\n      </message>\n&|' \
+    chrome/browser/ui/android/strings/android_chrome_strings.grd
+
+echo "[aerium] backup/restore settings screen registered"
