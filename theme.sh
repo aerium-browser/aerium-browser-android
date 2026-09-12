@@ -6715,11 +6715,40 @@ public class AeriumSpeedDial extends LinearLayout {
     // Aerium navy, matching res/aerium.svg and the settings palette. Literal rather than a theme
     // attribute because the pure black overlay blackens every surface role but leaves outlines
     // alone - an outline is the only separator that survives it. See theme.sh.
+    //
+    // ACCENT does not get a photo counterpart, matching the desktop page's own body.photo rule,
+    // which leaves --accent alone too - only the outline and label roles need to change over a
+    // busy photo. The other four do, through the instance methods below rather than staying
+    // constants, because which one applies now depends on AeriumNtpBackground's current state.
+    private static final int ACCENT = 0xFF7FC4E4;
     private static final int OUTLINE = 0xFF22376E;
     private static final int OUTLINE_DIM = 0xFF1B2A57;
-    private static final int ACCENT = 0xFF7FC4E4;
     private static final int LABEL = 0xFF8FA3C4;
     private static final int LABEL_DIM = 0xFF5B7099;
+    private static final int OUTLINE_PHOTO = 0x47D8E6F5;
+    private static final int OUTLINE_DIM_PHOTO = 0x33D8E6F5;
+    private static final int LABEL_PHOTO = 0xFFDCE8F6;
+    private static final int LABEL_DIM_PHOTO = 0xFFC2D2E6;
+
+    // The same translucent backing plate body.photo gives .face and #row a on the desktop page,
+    // so a tile or pill still reads as a shape rather than dissolving into whatever is behind it.
+    private static final int FACE_FILL_PHOTO = 0x7A060B16;
+
+    private int outline() {
+        return AeriumNtpBackground.isPhotoActive() ? OUTLINE_PHOTO : OUTLINE;
+    }
+
+    private int outlineDim() {
+        return AeriumNtpBackground.isPhotoActive() ? OUTLINE_DIM_PHOTO : OUTLINE_DIM;
+    }
+
+    private int label() {
+        return AeriumNtpBackground.isPhotoActive() ? LABEL_PHOTO : LABEL;
+    }
+
+    private int labelDim() {
+        return AeriumNtpBackground.isPhotoActive() ? LABEL_DIM_PHOTO : LABEL_DIM;
+    }
 
     private boolean mEditing;
 
@@ -6966,8 +6995,8 @@ public class AeriumSpeedDial extends LinearLayout {
         GradientDrawable shape = new GradientDrawable();
         shape.setShape(GradientDrawable.RECTANGLE);
         shape.setCornerRadius(dp(14));
-        shape.setColor(Color.TRANSPARENT);
-        shape.setStroke(dp(1), OUTLINE);
+        shape.setColor(AeriumNtpBackground.isPhotoActive() ? FACE_FILL_PHOTO : Color.TRANSPARENT);
+        shape.setStroke(dp(1), outline());
         return shape;
     }
 
@@ -7010,11 +7039,11 @@ public class AeriumSpeedDial extends LinearLayout {
         GradientDrawable shape = new GradientDrawable();
         shape.setShape(GradientDrawable.RECTANGLE);
         shape.setCornerRadius(dp(18));
-        shape.setColor(Color.TRANSPARENT);
+        shape.setColor(AeriumNtpBackground.isPhotoActive() ? FACE_FILL_PHOTO : Color.TRANSPARENT);
         if (dashed) {
-            shape.setStroke(dp(1), OUTLINE_DIM, dp(4), dp(3));
+            shape.setStroke(dp(1), outlineDim(), dp(4), dp(3));
         } else {
-            shape.setStroke(dp(1), OUTLINE);
+            shape.setStroke(dp(1), outline());
         }
         return shape;
     }
@@ -7027,6 +7056,11 @@ public class AeriumSpeedDial extends LinearLayout {
         label.setGravity(Gravity.CENTER_HORIZONTAL);
         label.setMaxLines(2);
         label.setEllipsize(TextUtils.TruncateAt.END);
+        // Matches body.photo .label's text-shadow on the desktop page: a label sits directly on
+        // the photo with no backing plate of its own, unlike the face above it.
+        if (AeriumNtpBackground.isPhotoActive()) {
+            label.setShadowLayer(dp(3), 0, dp(1), 0xC0000000);
+        }
         LinearLayout.LayoutParams params =
                 new LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT);
         params.topMargin = dp(8);
@@ -7091,7 +7125,7 @@ public class AeriumSpeedDial extends LinearLayout {
         }
 
         cell.addView(stack);
-        cell.addView(buildLabel(displayTitle(entry), mEditing ? ACCENT : LABEL));
+        cell.addView(buildLabel(displayTitle(entry), mEditing ? ACCENT : label()));
 
         cell.setOnClickListener(
                 new OnClickListener() {
@@ -7159,14 +7193,14 @@ public class AeriumSpeedDial extends LinearLayout {
         TextView face = new TextView(getContext());
         face.setBackground(tileBackground(true));
         face.setGravity(Gravity.CENTER);
-        face.setTextColor(LABEL_DIM);
+        face.setTextColor(labelDim());
         face.setTextSize(24);
         face.setText("+");
         int side = dp(56);
         face.setLayoutParams(new LinearLayout.LayoutParams(side, side));
 
         cell.addView(face);
-        cell.addView(buildLabel(getResources().getString(R.string.aerium_speed_dial_add), LABEL_DIM));
+        cell.addView(buildLabel(getResources().getString(R.string.aerium_speed_dial_add), labelDim()));
         cell.setOnClickListener(
                 new OnClickListener() {
                     @Override
@@ -7463,6 +7497,18 @@ public final class AeriumNtpBackground {
     public static void invalidate() {
         sBitmap = null;
         sBitmapKey = "";
+    }
+
+    /**
+     * Whether a photo is actually showing behind the page right now - the choice is "photo" and
+     * something has been decoded, not merely requested. AeriumSpeedDial and AeriumNtpWidgets read
+     * this to switch to the lighter, higher-contrast palette a photo needs, the way body.photo
+     * does on the desktop page. False during the brief window between choosing a photo and its
+     * first decode finishing is correct, not a gap: paint() is still painting the plain ground for
+     * that same window, so the un-adapted colours are what is actually behind the text.
+     */
+    public static boolean isPhotoActive() {
+        return PHOTO.equals(background()) && sBitmap != null;
     }
 
     private static void paint(View root) {
@@ -8075,6 +8121,7 @@ import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 
 import java.text.DateFormat;
 import java.util.Calendar;
+import java.util.Random;
 
 /**
  * Aerium: the clock, greeting and quote of the day above the speed dial. See theme.sh.
@@ -8178,11 +8225,13 @@ public class AeriumNtpWidgets extends LinearLayout {
     private static final long TICK_MILLIS = 30_000;
 
     private final Handler mHandler = new Handler(Looper.getMainLooper());
+    // Only the clock and greeting, not rebuild() - a full rebuild would reset the quote to the
+    // day's pick every 30 seconds and undo a tap on it within half a minute.
     private final Runnable mTick =
             new Runnable() {
                 @Override
                 public void run() {
-                    rebuild();
+                    updateClockAndGreeting();
                     scheduleTick();
                 }
             };
@@ -8217,39 +8266,141 @@ public class AeriumNtpWidgets extends LinearLayout {
                 .readString(ChromePreferenceKeys.AERIUM_NTP_GREETING_NAME, "");
     }
 
+    /**
+     * Which entry in QUOTES today's pick is offset by. Generated once, the first time a quote is
+     * ever shown, and kept from then on - without it, the plain (day-of-year + year) formula would
+     * put every install in the world on the same quote on the same day. -1 reads as "never
+     * generated" rather than defaulting to 0, so that install is not silently pinned to whichever
+     * quote a fresh profile happens to start on.
+     */
+    private static int quoteOffset() {
+        ChromeSharedPreferences prefs = ChromeSharedPreferences.getInstance();
+        int offset = prefs.readInt(ChromePreferenceKeys.AERIUM_NTP_QUOTE_OFFSET, -1);
+        if (offset < 0) {
+            offset = new Random().nextInt(QUOTES.length);
+            prefs.writeInt(ChromePreferenceKeys.AERIUM_NTP_QUOTE_OFFSET, offset);
+        }
+        return offset;
+    }
+
+    private static int dailyQuoteIndex() {
+        Calendar now = Calendar.getInstance();
+        int sum = now.get(Calendar.DAY_OF_YEAR) + now.get(Calendar.YEAR) + quoteOffset();
+        return sum % QUOTES.length;
+    }
+
     private int dp(float value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
     }
 
+    private int label() {
+        return AeriumNtpBackground.isPhotoActive() ? LABEL_PHOTO : LABEL;
+    }
+
+    private int labelDim() {
+        return AeriumNtpBackground.isPhotoActive() ? LABEL_DIM_PHOTO : LABEL_DIM;
+    }
+
+    // Set by rebuild(), read by updateClockAndGreeting() and the quote click listener - null
+    // whenever the row it belongs to is switched off, which both of those check for before use.
+    private TextView mClockText;
+    private TextView mDateText;
+    private TextView mGreetingText;
+    private TextView mQuoteText;
+    private TextView mQuoteAuthor;
+    private int mQuoteIndex;
+
     private void rebuild() {
         removeAllViews();
+        mClockText = null;
+        mDateText = null;
+        mGreetingText = null;
+        mQuoteText = null;
+        mQuoteAuthor = null;
+
         if (!showClock() && !showGreeting() && !showQuote()) {
             setVisibility(GONE);
             return;
         }
         setVisibility(VISIBLE);
 
-        Calendar now = Calendar.getInstance();
-        int hour = now.get(Calendar.HOUR_OF_DAY);
-
         if (showClock()) {
-            TextView clock = new TextView(getContext());
-            clock.setTextColor(ACCENT);
-            clock.setTextSize(40);
-            clock.setText(DateFormat.getTimeInstance(DateFormat.SHORT).format(now.getTime()));
-            addView(clock);
+            mClockText = new TextView(getContext());
+            mClockText.setTextColor(ACCENT);
+            mClockText.setTextSize(40);
+            addView(mClockText);
 
-            TextView date = new TextView(getContext());
-            date.setTextColor(LABEL);
-            date.setTextSize(13);
-            date.setText(DateFormat.getDateInstance(DateFormat.FULL).format(now.getTime()));
+            mDateText = new TextView(getContext());
+            mDateText.setTextColor(label());
+            mDateText.setTextSize(13);
             LayoutParams dateParams =
                     new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT);
             dateParams.topMargin = dp(2);
-            addView(date, dateParams);
+            addView(mDateText, dateParams);
         }
 
         if (showGreeting()) {
+            mGreetingText = new TextView(getContext());
+            mGreetingText.setTextColor(label());
+            mGreetingText.setTextSize(16);
+            LayoutParams greetingParams =
+                    new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT);
+            greetingParams.topMargin = dp(showClock() ? 10 : 0);
+            addView(mGreetingText, greetingParams);
+        }
+
+        if (showQuote()) {
+            mQuoteIndex = dailyQuoteIndex();
+
+            mQuoteText = new TextView(getContext());
+            mQuoteText.setTextColor(label());
+            mQuoteText.setTextSize(13);
+            mQuoteText.setGravity(Gravity.CENTER_HORIZONTAL);
+            mQuoteText.setMaxWidth(dp(320));
+            LayoutParams textParams =
+                    new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT);
+            textParams.topMargin = dp(showClock() || showGreeting() ? 14 : 0);
+            addView(mQuoteText, textParams);
+
+            mQuoteAuthor = new TextView(getContext());
+            mQuoteAuthor.setTextColor(labelDim());
+            mQuoteAuthor.setTextSize(11);
+            LayoutParams authorParams =
+                    new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT);
+            authorParams.topMargin = dp(2);
+            addView(mQuoteAuthor, authorParams);
+
+            // Either line reshuffles - the two together are one unit, not a headline and a
+            // caption with different jobs. A tap flashes the tapped line so the change reads as a
+            // response to the touch rather than the text simply having been different all along.
+            OnClickListener reshuffle =
+                    v -> {
+                        v.animate()
+                                .alpha(0.3f)
+                                .setDuration(80)
+                                .withEndAction(
+                                        () -> v.animate().alpha(1f).setDuration(150).start())
+                                .start();
+                        mQuoteIndex = (mQuoteIndex + 1) % QUOTES.length;
+                        renderQuote();
+                    };
+            mQuoteText.setOnClickListener(reshuffle);
+            mQuoteAuthor.setOnClickListener(reshuffle);
+        }
+
+        updateClockAndGreeting();
+        renderQuote();
+    }
+
+    /** The parts of rebuild() worth redoing every 30 seconds without touching the quote. */
+    private void updateClockAndGreeting() {
+        Calendar now = Calendar.getInstance();
+        if (mClockText != null) {
+            mClockText.setText(DateFormat.getTimeInstance(DateFormat.SHORT).format(now.getTime()));
+            mDateText.setText(DateFormat.getDateInstance(DateFormat.FULL).format(now.getTime()));
+        }
+        if (mGreetingText != null) {
+            int hour = now.get(Calendar.HOUR_OF_DAY);
             String name = greetingName();
             String base =
                     getResources()
@@ -8259,51 +8410,24 @@ public class AeriumNtpWidgets extends LinearLayout {
                                             : hour < 18
                                                     ? R.string.aerium_ntp_greeting_afternoon
                                                     : R.string.aerium_ntp_greeting_evening);
-            TextView greeting = new TextView(getContext());
-            greeting.setTextColor(LABEL);
-            greeting.setTextSize(16);
-            greeting.setText(TextUtils.isEmpty(name) ? base : base + ", " + name);
-            LayoutParams greetingParams =
-                    new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT);
-            greetingParams.topMargin = dp(showClock() ? 10 : 0);
-            addView(greeting, greetingParams);
-        }
-
-        if (showQuote()) {
-            // Stable for the day, so the page does not flicker between quotes on every reload -
-            // and changes across years rather than repeating on the same calendar day each time.
-            int index =
-                    (now.get(Calendar.DAY_OF_YEAR) + now.get(Calendar.YEAR)) % QUOTES.length;
-            Quote quote = QUOTES[index];
-
-            TextView text = new TextView(getContext());
-            text.setTextColor(LABEL);
-            text.setTextSize(13);
-            text.setGravity(Gravity.CENTER_HORIZONTAL);
-            text.setMaxWidth(dp(320));
-            text.setText("“" + quote.text + "”");
-            LayoutParams textParams =
-                    new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT);
-            textParams.topMargin = dp(showClock() || showGreeting() ? 14 : 0);
-            addView(text, textParams);
-
-            TextView author = new TextView(getContext());
-            author.setTextColor(LABEL_DIM);
-            author.setTextSize(11);
-            author.setText("— " + quote.author);
-            LayoutParams authorParams =
-                    new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT);
-            authorParams.topMargin = dp(2);
-            addView(author, authorParams);
+            mGreetingText.setText(TextUtils.isEmpty(name) ? base : base + ", " + name);
         }
     }
 
-    // Same palette as AeriumSpeedDial. Literal rather than a theme attribute for the same reason
-    // stated there: the pure black overlay blackens every surface role and these three still need
-    // to read against it.
+    private void renderQuote() {
+        if (mQuoteText == null) return;
+        Quote quote = QUOTES[mQuoteIndex];
+        mQuoteText.setText("“" + quote.text + "”");
+        mQuoteAuthor.setText("— " + quote.author);
+    }
+
+    // ACCENT does not get a photo counterpart, matching AeriumSpeedDial and the desktop page's own
+    // body.photo rule - only the outline and label roles need to change over a busy photo.
     private static final int ACCENT = 0xFF7FC4E4;
     private static final int LABEL = 0xFF8FA3C4;
     private static final int LABEL_DIM = 0xFF5B7099;
+    private static final int LABEL_PHOTO = 0xFFDCE8F6;
+    private static final int LABEL_DIM_PHOTO = 0xFFC2D2E6;
 }
 AERIUM_NTP_WIDGETS_JAVA
 
@@ -8313,9 +8437,9 @@ sed_i 's|^  "java/src/org/chromium/chrome/browser/ntp/NewTabPageLayout.java",$| 
 sed_i 's|    <!-- Aerium: the speed dial. See theme.sh. -->|    <!-- Aerium: the clock, greeting and quote of the day. See theme.sh. -->\n    <org.chromium.chrome.browser.ntp.AeriumNtpWidgets\n        android:id="@+id/aerium_ntp_widgets"\n        android:layout_width="match_parent"\n        android:layout_height="wrap_content"\n        android:layout_marginTop="@dimen/ntp_section_top_margin"\n        android:orientation="vertical" />\n\n    &|' \
     chrome/android/java/res/layout/new_tab_page_layout.xml
 
-sed_i 's|    public static final String AERIUM_NTP_BACKGROUND_IMAGE = "Chrome.Aerium.NtpBackgroundImage";|&\n\n    /** Whether the clock and date show above the greeting. */\n    public static final String AERIUM_NTP_WIDGET_CLOCK = "Chrome.Aerium.NtpWidgetClock";\n\n    /** Whether the time-of-day greeting shows. */\n    public static final String AERIUM_NTP_WIDGET_GREETING = "Chrome.Aerium.NtpWidgetGreeting";\n\n    /** Whether a quote of the day shows. */\n    public static final String AERIUM_NTP_WIDGET_QUOTE = "Chrome.Aerium.NtpWidgetQuote";\n\n    /** The optional name the greeting adds after "Good morning" and similar. */\n    public static final String AERIUM_NTP_GREETING_NAME = "Chrome.Aerium.NtpGreetingName";|' \
+sed_i 's|    public static final String AERIUM_NTP_BACKGROUND_IMAGE = "Chrome.Aerium.NtpBackgroundImage";|&\n\n    /** Whether the clock and date show above the greeting. */\n    public static final String AERIUM_NTP_WIDGET_CLOCK = "Chrome.Aerium.NtpWidgetClock";\n\n    /** Whether the time-of-day greeting shows. */\n    public static final String AERIUM_NTP_WIDGET_GREETING = "Chrome.Aerium.NtpWidgetGreeting";\n\n    /** Whether a quote of the day shows. */\n    public static final String AERIUM_NTP_WIDGET_QUOTE = "Chrome.Aerium.NtpWidgetQuote";\n\n    /** The optional name the greeting adds after "Good morning" and similar. */\n    public static final String AERIUM_NTP_GREETING_NAME = "Chrome.Aerium.NtpGreetingName";\n\n    /** Which quote in AeriumNtpWidgets.QUOTES today'"'"'s pick is offset by, generated once per\n     * install so the whole install base does not open on the same quote on the same day. */\n    public static final String AERIUM_NTP_QUOTE_OFFSET = "Chrome.Aerium.NtpQuoteOffset";|' \
     $CPK
-sed_i 's|^                AERIUM_NTP_BACKGROUND_IMAGE,$|&\n                AERIUM_NTP_WIDGET_CLOCK,\n                AERIUM_NTP_WIDGET_GREETING,\n                AERIUM_NTP_WIDGET_QUOTE,\n                AERIUM_NTP_GREETING_NAME,|' \
+sed_i 's|^                AERIUM_NTP_BACKGROUND_IMAGE,$|&\n                AERIUM_NTP_WIDGET_CLOCK,\n                AERIUM_NTP_WIDGET_GREETING,\n                AERIUM_NTP_WIDGET_QUOTE,\n                AERIUM_NTP_GREETING_NAME,\n                AERIUM_NTP_QUOTE_OFFSET,|' \
     $CPK
 
 sed_i 's|        android:summary="@string/aerium_ntp_clear_summary" />|&\n    <org.chromium.components.browser_ui.settings.ChromeSwitchPreference\n        android:key="aerium_ntp_clock"\n        android:persistent="false"\n        android:title="@string/aerium_ntp_clock_title"\n        android:summary="@string/aerium_ntp_clock_summary" />\n    <org.chromium.components.browser_ui.settings.ChromeSwitchPreference\n        android:key="aerium_ntp_greeting"\n        android:persistent="false"\n        android:title="@string/aerium_ntp_greeting_title"\n        android:summary="@string/aerium_ntp_greeting_summary" />\n    <Preference\n        android:key="aerium_ntp_greeting_name"\n        android:persistent="false"\n        android:title="@string/aerium_ntp_greeting_name_title" />\n    <org.chromium.components.browser_ui.settings.ChromeSwitchPreference\n        android:key="aerium_ntp_quote"\n        android:persistent="false"\n        android:title="@string/aerium_ntp_quote_title"\n        android:summary="@string/aerium_ntp_quote_summary" />|' \
