@@ -8783,6 +8783,8 @@ import org.json.JSONObject;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.IntentUtils;
+import org.chromium.base.task.PostTask;
+import org.chromium.base.task.TaskTraits;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.R;
@@ -8954,36 +8956,80 @@ public class AeriumBackupFragment extends ChromeBaseSettingsFragment {
         }
     }
 
+    // Building the JSON (buildBackup) and applying it (applyBackup) touch Profile, PrefService
+    // and WebsitePreferenceBridge - native objects this codebase only ever calls from the UI
+    // thread - so only the ContentResolver stream I/O itself moves to a background task. That is
+    // also the only part slow enough to matter: a document-provider backend (a cloud-synced
+    // provider, for instance) can block on openOutputStream/openInputStream or the read/write
+    // loop for long enough to trip StrictMode or freeze the Settings screen, where collecting or
+    // applying even a few hundred tabs/permissions/prefs in memory is not.
     private void writeBackup(Uri uri) {
         Context context = getContext();
         if (context == null) return;
-        try (OutputStream out = context.getContentResolver().openOutputStream(uri)) {
-            if (out == null) throw new IOException("no output stream for " + uri);
-            JSONObject root = buildBackup();
-            out.write(root.toString().getBytes(StandardCharsets.UTF_8));
-            showToast(R.string.aerium_backup_export_done);
-        } catch (IOException | JSONException e) {
+        byte[] bytes;
+        try {
+            bytes = buildBackup().toString().getBytes(StandardCharsets.UTF_8);
+        } catch (JSONException e) {
             showToast(R.string.aerium_backup_export_failed);
+            return;
         }
+        PostTask.postTask(
+                TaskTraits.BEST_EFFORT_MAY_BLOCK,
+                () -> {
+                    boolean ok;
+                    try (OutputStream out = context.getContentResolver().openOutputStream(uri)) {
+                        if (out == null) throw new IOException("no output stream for " + uri);
+                        out.write(bytes);
+                        ok = true;
+                    } catch (IOException e) {
+                        ok = false;
+                    }
+                    boolean success = ok;
+                    PostTask.postTask(
+                            TaskTraits.UI_DEFAULT,
+                            () ->
+                                    showToast(
+                                            success
+                                                    ? R.string.aerium_backup_export_done
+                                                    : R.string.aerium_backup_export_failed));
+                });
     }
 
     private void readBackup(Uri uri) {
         Context context = getContext();
         if (context == null) return;
-        try (InputStream in = context.getContentResolver().openInputStream(uri)) {
-            if (in == null) throw new IOException("no input stream for " + uri);
-            ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-            byte[] chunk = new byte[8192];
-            int read;
-            while ((read = in.read(chunk)) != -1) {
-                buffer.write(chunk, 0, read);
-            }
-            JSONObject root = new JSONObject(buffer.toString(StandardCharsets.UTF_8.name()));
-            applyBackup(root);
-            showToast(R.string.aerium_backup_restore_done);
-        } catch (IOException | JSONException e) {
-            showToast(R.string.aerium_backup_restore_failed);
-        }
+        PostTask.postTask(
+                TaskTraits.BEST_EFFORT_MAY_BLOCK,
+                () -> {
+                    String json = null;
+                    try (InputStream in = context.getContentResolver().openInputStream(uri)) {
+                        if (in == null) throw new IOException("no input stream for " + uri);
+                        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+                        byte[] chunk = new byte[8192];
+                        int read;
+                        while ((read = in.read(chunk)) != -1) {
+                            buffer.write(chunk, 0, read);
+                        }
+                        json = buffer.toString(StandardCharsets.UTF_8.name());
+                    } catch (IOException e) {
+                        // json stays null; handled on the UI thread below.
+                    }
+                    String finalJson = json;
+                    PostTask.postTask(
+                            TaskTraits.UI_DEFAULT,
+                            () -> {
+                                if (finalJson == null) {
+                                    showToast(R.string.aerium_backup_restore_failed);
+                                    return;
+                                }
+                                try {
+                                    applyBackup(new JSONObject(finalJson));
+                                    showToast(R.string.aerium_backup_restore_done);
+                                } catch (JSONException e) {
+                                    showToast(R.string.aerium_backup_restore_failed);
+                                }
+                            });
+                });
     }
 
     private void showToast(int resId) {
@@ -9083,7 +9129,18 @@ public class AeriumBackupFragment extends ChromeBaseSettingsFragment {
             if (entry == null) continue;
             String url = entry.optString("url", "");
             if (url.isEmpty()) continue;
-            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+            Uri parsedUrl = Uri.parse(url);
+            // Same check collectTabs applies on the way out, re-applied here since a backup
+            // file is a plain JSON a person can hand-edit: this build's own internal pages
+            // should never round-trip through this screen, whether or not this exact file
+            // produced them.
+            String scheme = parsedUrl.getScheme();
+            if (scheme != null
+                    && (scheme.equals(UrlConstants.CHROME_SCHEME)
+                            || scheme.equals(UrlConstants.CHROME_NATIVE_SCHEME))) {
+                continue;
+            }
+            Intent intent = new Intent(Intent.ACTION_VIEW, parsedUrl);
             intent.setClass(context, ChromeLauncherActivity.class);
             intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             intent.putExtra(Browser.EXTRA_CREATE_NEW_TAB, true);
@@ -9206,33 +9263,39 @@ public class AeriumBackupFragment extends ChromeBaseSettingsFragment {
             // SharedPreferences key.
             if (key.isEmpty() || !key.startsWith(SHARED_PREF_PREFIX)) continue;
             String type = item.optString("type", "");
-            switch (type) {
-                case "bool":
-                    editor.putBoolean(key, item.optBoolean("value", false));
-                    break;
-                case "int":
-                    editor.putInt(key, item.optInt("value", 0));
-                    break;
-                case "long":
-                    editor.putLong(key, item.optLong("value", 0L));
-                    break;
-                case "float":
-                    editor.putFloat(key, (float) item.optDouble("value", 0));
-                    break;
-                case "string":
-                    editor.putString(key, item.optString("value", ""));
-                    break;
-                case "stringset":
-                    JSONArray setArray = item.optJSONArray("value");
-                    if (setArray == null) continue;
-                    Set<String> values = new HashSet<>();
-                    for (int j = 0; j < setArray.length(); j++) {
-                        values.add(setArray.optString(j, ""));
-                    }
-                    editor.putStringSet(key, values);
-                    break;
-                default:
-                    continue;
+            try {
+                switch (type) {
+                    case "bool":
+                        editor.putBoolean(key, item.optBoolean("value", false));
+                        break;
+                    case "int":
+                        editor.putInt(key, item.optInt("value", 0));
+                        break;
+                    case "long":
+                        editor.putLong(key, item.optLong("value", 0L));
+                        break;
+                    case "float":
+                        editor.putFloat(key, (float) item.optDouble("value", 0));
+                        break;
+                    case "string":
+                        editor.putString(key, item.optString("value", ""));
+                        break;
+                    case "stringset":
+                        JSONArray setArray = item.optJSONArray("value");
+                        if (setArray == null) continue;
+                        Set<String> values = new HashSet<>();
+                        for (int j = 0; j < setArray.length(); j++) {
+                            values.add(setArray.optString(j, ""));
+                        }
+                        editor.putStringSet(key, values);
+                        break;
+                    default:
+                        continue;
+                }
+            } catch (RuntimeException e) {
+                // Same reasoning as restorePermissions: skip this one row rather than lose
+                // the rest of the restore over it.
+                continue;
             }
             any = true;
         }
