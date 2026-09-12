@@ -8465,10 +8465,79 @@ sed_i 's|^        <org.chromium.chrome.browser.toolbar.top.ToggleTabStackButton$
     $TPX
 
 TM=chrome/android/java/src/org/chromium/chrome/browser/toolbar/ToolbarManager.java
-sed_i 's|^        mToolbarLongPressMenuHandler =$|        // Aerium: the Normal/Private toggle button. See theme.sh.\n        ChromeImageButton aeriumIncognitoToggle =\n                mControlContainer.findViewById(R.id.aerium_incognito_toggle);\n        if (aeriumIncognitoToggle != null) {\n            boolean aeriumIsIncognitoWindow = mIncognitoStateProvider.isIncognitoSelected();\n            aeriumIncognitoToggle.setContentDescription(\n                    mActivity.getString(\n                            aeriumIsIncognitoWindow\n                                    ? R.string.aerium_switch_to_normal_window\n                                    : R.string.aerium_switch_to_private_window));\n            if (aeriumIsIncognitoWindow) {\n                android.graphics.drawable.GradientDrawable aeriumToggleBg =\n                        new android.graphics.drawable.GradientDrawable();\n                aeriumToggleBg.setShape(android.graphics.drawable.GradientDrawable.OVAL);\n                aeriumToggleBg.setColor(0x407FC4E4);\n                aeriumIncognitoToggle.setBackground(aeriumToggleBg);\n            }\n            aeriumIncognitoToggle.setOnClickListener(\n                    v -> {\n                        int aeriumTargetType =\n                                aeriumIsIncognitoWindow\n                                        ? PersistedInstanceType.REGULAR\n                                        : PersistedInstanceType.OFF_THE_RECORD;\n                        android.content.Intent aeriumToggleIntent =\n                                IntentHandler.createTrustedOpenNewWindowIntent(\n                                        mActivity, !aeriumIsIncognitoWindow);\n                        for (int aeriumCandidateId :\n                                MultiWindowUtils.getUsableInstanceIds(\n                                        PersistedInstanceType.ACTIVE \| aeriumTargetType)) {\n                            if (MultiWindowUtils.launchIntentInInstance(\n                                    aeriumToggleIntent, aeriumCandidateId)) {\n                                return;\n                            }\n                        }\n                        mActivity.startActivity(aeriumToggleIntent);\n                    });\n        }\n\n&|' \
+sed_i 's|^        mToolbarLongPressMenuHandler =$|        // Aerium: the Normal/Private toggle button. See theme.sh.\n        ChromeImageButton aeriumIncognitoToggle =\n                mControlContainer.findViewById(R.id.aerium_incognito_toggle);\n        if (aeriumIncognitoToggle != null) {\n            if (org.chromium.chrome.browser.preferences.ChromeSharedPreferences.getInstance().readBoolean(org.chromium.chrome.browser.preferences.ChromePreferenceKeys.AERIUM_SEAMLESS_INCOGNITO, false)) {\n                aeriumIncognitoToggle.setVisibility(View.GONE);\n            } else {\n            boolean aeriumIsIncognitoWindow = mIncognitoStateProvider.isIncognitoSelected();\n            aeriumIncognitoToggle.setContentDescription(\n                    mActivity.getString(\n                            aeriumIsIncognitoWindow\n                                    ? R.string.aerium_switch_to_normal_window\n                                    : R.string.aerium_switch_to_private_window));\n            if (aeriumIsIncognitoWindow) {\n                android.graphics.drawable.GradientDrawable aeriumToggleBg =\n                        new android.graphics.drawable.GradientDrawable();\n                aeriumToggleBg.setShape(android.graphics.drawable.GradientDrawable.OVAL);\n                aeriumToggleBg.setColor(0x407FC4E4);\n                aeriumIncognitoToggle.setBackground(aeriumToggleBg);\n            }\n            aeriumIncognitoToggle.setOnClickListener(\n                    v -> {\n                        int aeriumTargetType =\n                                aeriumIsIncognitoWindow\n                                        ? PersistedInstanceType.REGULAR\n                                        : PersistedInstanceType.OFF_THE_RECORD;\n                        android.content.Intent aeriumToggleIntent =\n                                IntentHandler.createTrustedOpenNewWindowIntent(\n                                        mActivity, !aeriumIsIncognitoWindow);\n                        for (int aeriumCandidateId :\n                                MultiWindowUtils.getUsableInstanceIds(\n                                        PersistedInstanceType.ACTIVE \| aeriumTargetType)) {\n                            if (MultiWindowUtils.launchIntentInInstance(\n                                    aeriumToggleIntent, aeriumCandidateId)) {\n                                return;\n                            }\n                        }\n                        mActivity.startActivity(aeriumToggleIntent);\n                    });\n            }\n        }\n\n&|' \
     $TM
 
 sed_i 's|      <message name="IDS_AERIUM_EXTERNAL_DOWNLOAD_MANAGER_TITLE" desc=|      <message name="IDS_AERIUM_SWITCH_TO_PRIVATE_WINDOW" desc="Content description of the toolbar button that opens Aerium'"'"'s Private window.">\n        Switch to Private window\n      </message>\n      <message name="IDS_AERIUM_SWITCH_TO_NORMAL_WINDOW" desc="Content description of the toolbar button that opens Aerium'"'"'s Normal window, shown while already in the Private one.">\n        Switch to Normal window\n      </message>\n&|' \
     chrome/browser/ui/android/strings/android_chrome_strings.grd
 
 echo "[aerium] incognito toggle button applied"
+
+
+# --- Settings > Seamless Incognito: merge Private into this window instead
+# of opening a separate one for it.
+#
+# The mechanism this switches on is stock, not new. ChromeTabbedActivity's
+# initHub() already registers both TAB_SWITCHER and INCOGNITO_TAB_SWITCHER in
+# one window whenever IncognitoUtils.shouldOpenIncognitoAsWindow() is false -
+# a prior patch (see patch.sh, "extensions in incognito, and incognito as its
+# own window") even taught that registration to recognise
+# SupportedProfileType.MIXED, which is exactly what
+# MultiWindowUtils.readProfileType() hands back once that method returns
+# false. None of that had a way to be reached; this pref is that way. Once it
+# is on, the Hub's own pane switcher - the same rounded pill this project
+# never had to build - is what does the switching, so the toolbar toggle
+# button a few sections above hides itself rather than duplicating it.
+#
+# Off by default. patch.sh's process_manager.cc change - the one that lets
+# extensions work in a separate Incognito window - stays exactly as it is in
+# both positions of this switch, on purpose: read the comment beside it there
+# for why undoing it is not this patch's call to make on the strength of
+# source-reading alone. Nothing about that has been run on a device, which is
+# the whole reason this ships behind a switch that defaults off rather than
+# replacing the tested behaviour outright.
+sed_i 's|    public static final String AERIUM_CLASSIC_TAB_SWITCHER = "Chrome.Aerium.ClassicTabSwitcher";|&\n\n    /** Whether Private tabs share this window instead of opening their own. */\n    public static final String AERIUM_SEAMLESS_INCOGNITO = "Chrome.Aerium.SeamlessIncognito";|' \
+    $CPK
+sed_i 's|^                AERIUM_CLASSIC_TAB_SWITCHER,$|&\n                AERIUM_SEAMLESS_INCOGNITO,|' $CPK
+
+sed_i 's|^</PreferenceScreen>$|    <org.chromium.components.browser_ui.settings.ChromeSwitchPreference\n        android:key="aerium_seamless_incognito"\n        android:title="@string/aerium_seamless_incognito_title"\n        android:summary="@string/aerium_seamless_incognito_summary" />\n&|' \
+    chrome/browser/ui/android/night_mode/java/res/xml/theme_preferences.xml
+
+sed_i 's|^        // TODO(crbug.com/40198953): Notify feature engagement system that settings were opened.$|        ChromeSwitchPreference seamlessIncognito =\n                (ChromeSwitchPreference) findPreference("aerium_seamless_incognito");\n        if (seamlessIncognito != null) {\n            seamlessIncognito.setChecked(\n                    sharedPreferencesManager.readBoolean(\n                            ChromePreferenceKeys.AERIUM_SEAMLESS_INCOGNITO, false));\n            seamlessIncognito.setOnPreferenceChangeListener(\n                    (preference, newValue) -> {\n                        sharedPreferencesManager.writeBoolean(\n                                ChromePreferenceKeys.AERIUM_SEAMLESS_INCOGNITO,\n                                (boolean) newValue);\n                        showRestartSnackbar();\n                        return true;\n                    });\n        }\n\n&|' \
+    $TSF
+
+sed_i 's|      <message name="IDS_AERIUM_CLASSIC_TAB_SWITCHER_TITLE" desc=|      <message name="IDS_AERIUM_SEAMLESS_INCOGNITO_TITLE" desc="Title of the switch that keeps Private tabs in the same window as Normal ones.">\n        Seamless Incognito\n      </message>\n      <message name="IDS_AERIUM_SEAMLESS_INCOGNITO_SUMMARY" desc="Summary under the Seamless Incognito switch. Says what it does, that it is new, and that a restart is needed.">\n        Keep Private tabs in this window, with a switch at the top of the tab switcher, instead of opening a separate window for them. New and less tested than the default. Restart Aerium to apply.\n      </message>\n&|' \
+    chrome/browser/ui/android/strings/android_chrome_strings.grd
+
+echo "[aerium] seamless incognito switch applied"
+
+
+# --- Hide the New Tab Page's vertical scrollbar.
+#
+# The regular NTP's scroll container is FeedSurfaceCoordinator's RecyclerView
+# (mFeedSurfaceProvider.getView(), which AeriumNtpBackground.apply() already
+# paints - see theme.sh), not NewTabPageScrollView, which upstream's own
+# comment says is Incognito-only. setId() is the one line this file already
+# runs on that RecyclerView right after obtaining it, so the new line rides
+# beside it rather than opening a second seam into the same method.
+sed_i 's|        view.setId(R.id.feed_stream_recycler_view);|&\n        // Aerium: no visible scrollbar on the New Tab Page. See theme.sh.\n        view.setVerticalScrollBarEnabled(false);|' \
+    chrome/android/feed/core/java/src/org/chromium/chrome/browser/feed/FeedSurfaceCoordinator.java
+
+echo "[aerium] NTP scrollbar hidden"
+
+
+# --- No "Ask Gemini" entry in the three-dot menu.
+#
+# maybeBuildOpenGlicItem() is gated by GlicEnabling.isEnabledForProfile() at
+# the call site, a runtime eligibility check with no branding gate - the
+# desktop C++ menu had the exact same shape, and the same reason for removing
+# it outright rather than patching the eligibility check applies here too.
+# Both call sites are identical three-line blocks (a "// Glic" comment, the
+# lookup, and the conditional add), one for the icon-row menu and one for the
+# list menu; the range-change below matches that shape wherever it recurs
+# rather than by line number, so it survives either menu changing shape
+# without the other moving.
+sed -i '/^        \/\/ Glic$/,+2c\        // Aerium: no "Ask Gemini" entry in the app menu. See theme.sh.' \
+    chrome/android/java/src/org/chromium/chrome/browser/tabbed_mode/TabbedAppMenuPropertiesDelegate.java
+
+echo "[aerium] Ask Gemini removed from app menu"
