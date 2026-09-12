@@ -33,7 +33,10 @@ behind any of this.
 - A clock, a greeting and a quote of the day above the speed dial on the new
   tab page - Settings → New tab page has switches for each. Nothing here is
   fetched: the clock reads the device's own time, and the quotes are a list
-  built into the app.
+  built into the app. Tap the quote for another one; each install sees its
+  own rotation rather than everyone opening on the same quote the same day.
+  Tiles and pills also adapt their colours when a photo is the background,
+  matching what the desktop page already did.
 
 **Fixed**
 
