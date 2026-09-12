@@ -255,6 +255,48 @@ sed_i 's|^    ) {$|    ),\n      prefs_(prefs) {|' \
 sed_i 's|^  if (uses_platform_autofill()) {$|#if BUILDFLAG(IS_ANDROID)\n  // Aerium: re-ask while the answer is no. The constructor asked once, at the\n  // first tab of the session, and a framework that was not ready yet would\n  // otherwise pin every later tab to the built-in client - which in this build\n  // means no autofill at all, and no settings UI to recover with. Latches on\n  // and never off: promoting a dead state is free, demoting a working one is\n  // the flake this is meant to remove. The pref clause mirrors Vanadium patch\n  // 0217, which ANDs the same pref into the constructor - without it a\n  // promotion here could reach a state the constructor would have refused.\n  if (!uses_platform_autofill_ \&\&\n      UsesVirtualViewStructureForAutofill(CHECK_DEREF(prefs_.get())) \&\&\n      prefs_->GetBoolean(prefs::kAutofillUsingPlatformAutofill)) {\n    uses_platform_autofill_ = true;\n    // Same two side effects the constructor performs when it settles on true,\n    // so the saved package and the shared pref other apps read do not stay\n    // describing the state we just left.\n    Java_AutofillClientProviderUtils_updatePackageUsedForAutofill(\n        base::android::AttachCurrentThread(), prefs_.get(), true);\n    SetSharedPrefForSettingsContentProvider(true);\n  }\n#endif  // BUILDFLAG(IS_ANDROID)\n&|' \
     chrome/browser/ui/autofill/autofill_client_provider.cc
 
+# --- UNVERIFIED. Not built, not run on a device. Written at the explicit
+# request of a user report ("autofill fails in normal tabs, works in
+# incognito") after the two fixes above turned out to already be shipped in
+# the release that report was filed against, and after reading pristine
+# Chromium confirmed there is no code anywhere that treats a regular and an
+# incognito profile differently here - AutofillClientProviderFactory shares
+# one instance between them (ProfileSelection::kRedirectedToOriginal, real
+# pristine Chromium at both 152.0.7977.84 and 153.0.8010.36, not just this
+# comment).
+#
+# What the fix above still does not reach: it re-asks on every new
+# WebContents, but a WebContents already attached with ChromeAutofillClient
+# before the flag flipped true is never revisited - it keeps the built-in
+# engine for the rest of its life. Restored tabs from a cold start are
+# exactly the ones most likely to have raced the OS Autofill service and
+# lost, which is what a same-session "incognito works, a normal tab does
+# not" report most likely actually is: not profile type, but tab age
+# relative to when the race resolved.
+#
+# The class below gives an already-existing WebContents a second chance, by
+# watching its own navigations rather than only being asked about at
+# creation. The mechanism - swapping what a shared
+# content::WebContentsUserData<ContentAutofillClient> slot holds via its
+# public UserDataKey()/RemoveUserData(), and letting an observer remove
+# itself mid-dispatch - is read directly out of pristine Chromium headers,
+# not assumed; the header-by-header reasoning is in the C++ comment this
+# writes, and it should be read before this is trusted. It has not been
+# compiled and it has not run on a device. Do not carry this into a release
+# without doing both, and without specifically watching for a crash on the
+# tab that gets promoted - see that comment for the one part reading the
+# headers could not settle.
+AFCP=chrome/browser/ui/autofill/autofill_client_provider.cc
+sed_i 's|^#include "components/prefs/android/pref_service_android.h"$|&\n#include "chrome/browser/profiles/profile.h"\n#include "chrome/browser/ui/autofill/autofill_client_provider_factory.h"\n#include "components/autofill/content/browser/content_autofill_client.h"\n#include "content/public/browser/navigation_handle.h"\n#include "content/public/browser/web_contents_user_data.h"|' \
+    $AFCP
+
+sed_i 's|^AutofillClientProvider::AutofillClientProvider(PrefService\* prefs)$|\/\/ Aerium: UNVERIFIED - see theme.sh for the full caveat. Not compiled, not\n\/\/ run on a device. Retries the platform-autofill promotion on a WebContents\n\/\/ that already exists, instead of only on ones created after the fact.\n\/\/\n\/\/ CreateClientForWebContents() above re-asks getAndroidAutofillFrameworkAvailability()\n\/\/ and can flip uses_platform_autofill_ from false to true, but only when a\n\/\/ *new* WebContents is being attached. A WebContents that was already given\n\/\/ ChromeAutofillClient - most often a tab restored at cold start, the exact\n\/\/ moment the OS Autofill service is least likely to have finished binding -\n\/\/ never goes through this method again for the rest of its life, so it stays\n\/\/ on the built-in engine even after the flag above has flipped true for\n\/\/ every tab created afterwards. That split - tabs alive before the flip stay\n\/\/ broken, tabs created after it work - is what a same-session comparison\n\/\/ reads as "incognito works, a normal tab does not": a normal tab is simply\n\/\/ far more likely to be one of the old ones.\n\/\/\n\/\/ This class is attached alongside ChromeAutofillClient, purely to get a\n\/\/ second look later. On each primary-frame navigation it re-checks the same\n\/\/ promotion the constructor above performs; once it can see true, it tears\n\/\/ down the ChromeAutofillClient this WebContents was given and attaches\n\/\/ AndroidAutofillClient in its place, then removes itself.\n\/\/\n\/\/ What is and is not verified:\n\/\/   * ContentAutofillClient::UserDataKey() and WebContents::RemoveUserData()\n\/\/     are both public, documented content:: API - confirmed by reading\n\/\/     content\/public\/browser\/web_contents_user_data.h directly rather than\n\/\/     assuming it. ChromeAutofillClient and AndroidAutofillClient are the\n\/\/     same content::WebContentsUserData<ContentAutofillClient> slot, not two\n\/\/     separate ones, so this is a real swap of what that one slot holds, not\n\/\/     a workaround.\n\/\/   * ContentAutofillDriverFactory - the piece that actually owns the\n\/\/     per-frame AutofillDriver objects - is owned by ContentAutofillClient\n\/\/     (components\/autofill\/content\/browser\/content_autofill_driver_factory.h\n\/\/     says so directly), so destroying the old client takes the whole old\n\/\/     driver tree with it rather than leaving it dangling.\n\/\/   * base::ObserverList, which content::WebContentsObserver is built on,\n\/\/     documents that an observer may remove itself during a dispatch it is\n\/\/     currently being called from - which is what happens here, since\n\/\/     removing our own WebContentsUserData destroys `this`.\n\/\/   * NOT verified: whether anything else reachable from this same\n\/\/     navigation-commit dispatch - another observer, a popup controller -\n\/\/     is holding a raw pointer into the driver tree the old client owns, at the\n\/\/     moment this runs and would be left pointing at freed memory. Nothing\n\/\/     found while reading the three files above suggests it, but that is a\n\/\/     search, not a proof, and the failure mode if it is wrong is a crash,\n\/\/     not a missed suggestion.\n\/\/   * NOT verified at all: that this compiles, or that it behaves as\n\/\/     described on an actual device. No build was run.\n\/\/\n\/\/ Do not treat this block as equivalent in confidence to the rest of\n\/\/ theme.sh. Build it, exercise the exact repro (cold-start a normal tab\n\/\/ before the Autofill service is up, confirm it is stuck, use the browser\n\/\/ until the flag promotes, confirm the same tab recovers without being\n\/\/ closed) and watch for crashes before trusting it in a release.\n#if BUILDFLAG(IS_ANDROID)\nclass AutofillPlatformPromotionObserver\n    : public content::WebContentsUserData<AutofillPlatformPromotionObserver>,\n      public content::WebContentsObserver {\n public:\n  ~AutofillPlatformPromotionObserver() override = default;\n\n  void DidFinishNavigation(content::NavigationHandle* handle) override {\n    if (!handle->IsInPrimaryMainFrame() \|\| handle->IsSameDocument() \|\|\n        !handle->HasCommitted()) {\n      return;\n    }\n    content::WebContents* contents = \&GetWebContents();\n    Profile* profile =\n        Profile::FromBrowserContext(contents->GetBrowserContext());\n    if (!AutofillClientProviderFactory::GetForProfile(profile)\n             .uses_platform_autofill()) {\n      return;\n    }\n    \/\/ Nothing below this line may touch `this` again: the last statement\n    \/\/ destroys it.\n    contents->RemoveUserData(ContentAutofillClient::UserDataKey());\n    android_autofill::AndroidAutofillClient::CreateForWebContents(contents);\n    contents->RemoveUserData(AutofillPlatformPromotionObserver::UserDataKey());\n  }\n\n private:\n  friend class content::WebContentsUserData<AutofillPlatformPromotionObserver>;\n  explicit AutofillPlatformPromotionObserver(content::WebContents* contents)\n      : content::WebContentsUserData<AutofillPlatformPromotionObserver>(\n            *contents),\n        content::WebContentsObserver(contents) {}\n  WEB_CONTENTS_USER_DATA_KEY_DECL();\n};\n\nWEB_CONTENTS_USER_DATA_KEY_IMPL(AutofillPlatformPromotionObserver)\n#endif  \/\/ BUILDFLAG(IS_ANDROID)\n&|' \
+    $AFCP
+
+sed_i 's|^    ChromeAutofillClient::CreateForWebContents(web_contents);$|&\n#if BUILDFLAG(IS_ANDROID)\n    AutofillPlatformPromotionObserver::CreateForWebContents(web_contents);\n#endif  \/\/ BUILDFLAG(IS_ANDROID)|' \
+    $AFCP
+
+
 # --- Stop Settings crashing on open. patch.sh deletes the six autofill and
 # password entries (orders 11-17) from main_preferences.xml, but MainSettings
 # .java still expects the XML to define them. Both branches of
