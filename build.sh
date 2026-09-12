@@ -543,8 +543,52 @@ export ANDROID_HOME=$PWD/third_party/android_sdk/public
 
 mkdir -p $SCRIPT_DIR/release
 set_keys
-sign_apk "$(find out/Default/apks -name 'Chrome*.apk' | head -n1)" "$SCRIPT_DIR/release/aerium-$VERSION-$AERIUM_ABI.apk"
+UNSIGNED_APK="$(find out/Default/apks -name 'Chrome*.apk' | head -n1)"
+sign_apk "$UNSIGNED_APK" "$SCRIPT_DIR/release/aerium-$VERSION-$AERIUM_ABI.apk"
 rm -rf $SCRIPT_DIR/keys
+
+# --- Archive what a native crash report needs to symbolise (issue #11).
+#
+# Every native crash report this project has received so far is offsets with
+# no names: args.gn sets symbol_level = 0, and R8 renames every Java class and
+# method in a release build. That cost real diagnosis time on issue #11 - the
+# first report was readable only because its poison-byte fault address
+# happened to spell out the bug by itself, and the second report is a stack of
+# single- and double-letter class names (fo6.onAnimationEnd, co6.d, yn6.a...)
+# that nothing here can currently map back to source.
+#
+# Neither artifact goes in the public release. They ride along in the
+# existing aerium-android-<arch> workflow artifact instead (30-day retention,
+# set in the stage action) - the mapping is only useful with a matching crash
+# report anyway, and the unstripped library would roughly double the size of
+# what most people are here to download.
+#
+# The mapping file's name comes from GN's own rule
+# (proguard_mapping_path = "$_final_apk_path.mapping" in
+# build/config/android/rules.gni), so it always sits next to the unsigned
+# apk under whatever name upstream gave it - it is not renamed by sign_apk,
+# which only ever writes its signed copy elsewhere.
+if [ -f "$UNSIGNED_APK.mapping" ]; then
+    cp "$UNSIGNED_APK.mapping" "$SCRIPT_DIR/release/aerium-$VERSION-$AERIUM_ABI.apk.mapping"
+    echo "[aerium] archived R8 mapping: release/aerium-$VERSION-$AERIUM_ABI.apk.mapping"
+else
+    echo "[aerium] no R8 mapping next to $UNSIGNED_APK - crash reports for this build will stay unsymbolised"
+fi
+
+# lib.unstripped/ is where GN's shared_library template keeps the pre-strip
+# copy (build/config/android/rules.gni), named the same as the stripped one
+# that ends up inside the APK. Compressed because an unstripped libchrome.so
+# keeps its full ELF symbol table and is multiple hundred MB uncompressed;
+# -9 rather than the checkpoint tar's -3 because this runs once per finished
+# build rather than once per stage, so there is time to spend on it.
+UNSTRIPPED_LIB=out/Default/lib.unstripped/libchrome.so
+if [ -f "$UNSTRIPPED_LIB" ]; then
+    zstd -T0 -9 -q -f -o "$SCRIPT_DIR/release/aerium-$VERSION-$AERIUM_ABI-libchrome.so.zst" "$UNSTRIPPED_LIB"
+    echo "[aerium] archived unstripped libchrome.so: release/aerium-$VERSION-$AERIUM_ABI-libchrome.so.zst"
+else
+    echo "[aerium] no unstripped libchrome.so found at $UNSTRIPPED_LIB"
+fi
+
 echo "$VERSION" > $SCRIPT_DIR/release/version.txt
 touch $SCRIPT_DIR/release/finished.marker
 echo "[aerium] build finished: release/aerium-$VERSION-$AERIUM_ABI.apk"
