@@ -8209,7 +8209,7 @@ sed_i 's%^    private void openChromeManagementPage() {$%    // Aerium: see them
 sed_i 's%^        if (id == R.id.view_source$%        // Aerium: see theme.sh. Before the view-source arm rather than after it,\n        // because everything below this point assumes a current tab and this\n        // does not need one.\n        if (id == R.id.aerium_install_extension) {\n            openAeriumExtensionsPage();\n            return true;\n        }\n\n&%' \
     $CACT
 
-sed_i 's|      <message name="IDS_AERIUM_MENU_VIEW_SOURCE" desc=|      <message name="IDS_AERIUM_MENU_INSTALL_EXTENSION" desc="Menu item that opens a page for installing an extension from a .crx file stored on the device. [CHAR_LIMIT=27]">\n        Install from file\n      </message>\n&|' \
+sed_i 's|      <message name="IDS_AERIUM_MENU_VIEW_SOURCE" desc=|      <message name="IDS_AERIUM_MENU_INSTALL_EXTENSION" desc="Menu item that opens a page for installing an extension from a .crx or .zip file stored on the device. [CHAR_LIMIT=27]">\n        Install from file\n      </message>\n&|' \
     chrome/browser/ui/android/strings/android_chrome_strings.grd
 
 echo "[aerium] install extension menu row applied"
@@ -8567,3 +8567,112 @@ sed_i 's|      <message name="IDS_OS_VERSION_TITLE" desc="Title for operating sy
     chrome/browser/ui/android/strings/android_chrome_strings.grd
 
 echo "[aerium] About page Support Aerium row applied"
+
+
+# --- android issue 23: .zip support for chrome://aerium-extensions.
+#
+# The picker added above only ever offered a .crx. The issue this closes is
+# about exactly the other case: a filter list or extension people have as a
+# .zip - from a release page, a friend, or their own `zip` of an unpacked
+# folder - and "Load unpacked" is not a menu Android has, so the .zip had no
+# way in short of unzipping it by hand into device storage first, which is
+# the manual-extraction failure mode (broken manifests, postMessage errors
+# from a partially-written folder) the issue is actually asking to route
+# around.
+#
+# Upstream already answers this, just from a different door: chrome://
+# extensions' own drag-and-drop handler, DeveloperPrivateInstallDroppedFile-
+# Function::Run() in developer_private_functions.cc, does exactly "if it's a
+# .zip, ZipFileInstaller into unpacked_install_directory(); if it's a .crx,
+# CrxInstaller" - the two cases side by side, already Android-aware (it
+# resolves content URIs the same way the block above does). What follows
+# ports that same pairing onto the picker chrome://aerium-extensions already
+# has, rather than inventing a second way to unzip an extension.
+#
+# ZipFileInstaller does the unzip, the manifest sniff (theme vs extension,
+# real manifest present) and the file-extraction filtering itself, on
+# GetExtensionFileTaskRunner() - the same task runner every other extension
+# file operation uses, so it cannot race a concurrent install or update. It
+# hands the result to UnpackedInstaller, which is the one piece worth being
+# plain about: an unpacked load carries no ExtensionInstallPrompt. That is
+# not a corner cut here, it is what "Load unpacked" has always meant on every
+# platform Chromium ships it on - developer mode is itself the consent, and
+# upstream's own dropped-.zip handler skips the prompt for the same reason.
+# The page copy below says so, so nobody mistakes the silence for the .crx
+# path's review-then-install behaviour bleeding into this one.
+#
+# .user.js is the third format the issue asks for and is deliberately not
+# part of this change. A userscript is not an extension Chromium's installers
+# know how to load - there is no manifest to sniff - so supporting it means
+# writing one at install time (an @match parser, a generated content script
+# wrapper, GM_* API shims) rather than reusing an installer that already
+# exists. That is a real feature in its own right and belongs in its own
+# change, verified on its own; folding it in here risked shipping something
+# unreviewable alongside something straightforward.
+AEXT=chrome/browser/ui/webui/aerium_extensions.h
+
+sed_i 's|#include "extensions/browser/install_prompt_data.h"|&\n#include "extensions/browser/extension_file_task_runner.h"\n#include "extensions/browser/extension_registrar.h"\n#include "extensions/browser/zipfile_installer.h"\n#include "chrome/browser/extensions/chrome_zipfile_installer.h"|' \
+    $AEXT
+
+# The picker: a second filter group rather than adding "zip" into the
+# existing one - FileTypeInfo::extensions' own comment says an inner vector is
+# for spellings of the same format (its example is "htm"/"html"), and a .crx
+# and a .zip are not that. Android's own picker has no per-group dropdown to
+# tell apart anyway, so this changes nothing a user sees; it just stops
+# leaning on behaviour the type was not documented to have.
+perl -0777 -pi -e '
+    s%  file_types\.extensions\.push_back\(\n      \{extensions::kExtensionFileExtension \+ 1\}\);%  // Aerium: see theme.sh (android issue 23).\n  file_types.extensions.push_back(\n      {extensions::kExtensionFileExtension + 1});\n  file_types.extensions.push_back({FILE_PATH_LITERAL("zip")});%
+        or die "[aerium] FATAL: aerium_extensions.h file_types.extensions push_back not found (android issue 23)\n";
+' $AEXT
+
+# The page copy: says plainly that a .zip skips the review .crx gets, instead
+# of letting the existing "Aerium will show you the permissions" line imply a
+# prompt that will not appear.
+perl -0777 -pi -e '
+    s%<p>Choose a <code>\.crx</code> file that is already on this device\. Aerium will\nshow you the permissions it asks for before anything is installed\.</p>%<p>Choose a <code>.crx</code> or <code>.zip</code> file that is already on\nthis device. A .crx shows you the permissions it asks for before anything is\ninstalled. A .zip loads right away instead, the same as Developer Mode'"'"'s\n"Load unpacked" on desktop Chromium - no prompt, so only pick one you trust.</p>%
+        or die "[aerium] FATAL: aerium_extensions.h page copy paragraph not found (android issue 23)\n";
+' $AEXT
+
+# The member fields: a flag to carry the picked format from FileSelected
+# through the async content-URI copy to whichever installer handles it, and
+# the new method next to the one it parallels.
+perl -0777 -pi -e '
+    s%  void HandlePick\(const base::ListValue\& args\);\n  void InstallFrom\(const base::FilePath\& path\);\n  void OnCopied\(const base::FilePath\& copy, bool ok\);\n  void Status\(const std::string\& text\);\n\n  scoped_refptr<ui::SelectFileDialog> dialog_;%  void HandlePick(const base::ListValue\& args);\n  void InstallFrom(const base::FilePath\& path);\n  // Aerium: see theme.sh (android issue 23).\n  void InstallZipFrom(const base::FilePath\& path);\n  void OnCopied(const base::FilePath\& copy, bool ok);\n  void Status(const std::string\& text);\n\n  scoped_refptr<ui::SelectFileDialog> dialog_;\n  // Aerium: see theme.sh (android issue 23). Set in FileSelected, read in\n  // OnCopied and at the end of FileSelected - whichever install path runs\n  // once the file is ready to hand to an installer.\n  bool is_zip_ = false;%
+        or die "[aerium] FATAL: aerium_extensions.h private members not found (android issue 23)\n";
+' $AEXT
+
+# FileSelected: work out the format from the picked file's own name before
+# anything else. file.file_path is the display name the user actually chose -
+# local_path is very often a content:// URI on Android with no extension of
+# its own to sniff, so the display name is the one place a real ".zip" or
+# ".crx" survives. Anything else is rejected here rather than handed to
+# CrxInstaller to fail on, since CrxInstaller's failure for "not a CRX" is a
+# generic parse error with no hint of what the picker actually expected.
+perl -0777 -pi -e '
+    s%  const base::FilePath\& path =\n      file\.local_path\.empty\(\) \? file\.file_path : file\.local_path;\n  if \(path\.empty\(\)\) \{\n    Status\("That file could not be read\."\);\n    return;\n  \}\n%  const base::FilePath\& path =\n      file.local_path.empty() ? file.file_path : file.local_path;\n  if (path.empty()) {\n    Status("That file could not be read.");\n    return;\n  }\n\n  // Aerium: see theme.sh (android issue 23).\n  const base::FilePath\& named =\n      file.file_path.empty() ? path : file.file_path;\n  if (named.MatchesExtension(FILE_PATH_LITERAL(".zip"))) {\n    is_zip_ = true;\n  } else if (named.MatchesExtension(FILE_PATH_LITERAL(".crx"))) {\n    is_zip_ = false;\n  } else {\n    Status("Choose a .crx or .zip file.");\n    return;\n  }\n%
+        or die "[aerium] FATAL: aerium_extensions.h FileSelected path check not found (android issue 23)\n";
+' $AEXT
+
+# The content-URI copy: same flow, extension on the temp copy now matches
+# whichever format was picked, and both branches below dispatch on is_zip_
+# instead of always assuming a .crx.
+perl -0777 -pi -e '
+    s%        profile->GetPath\(\)\.AppendASCII\("aerium-picked-extension\.crx"\);%        profile->GetPath().AppendASCII(\n            is_zip_ ? "aerium-picked-extension.zip"\n                    : "aerium-picked-extension.crx");%
+        or die "[aerium] FATAL: aerium_extensions.h copy destination not found (android issue 23)\n";
+' $AEXT
+
+perl -0777 -pi -e '
+    s%  InstallFrom\(path\);\n\}\n\ninline void AeriumExtensions::OnCopied\(const base::FilePath\& copy, bool ok\) \{\n  if \(!ok\) \{\n    Status\("That file could not be read\."\);\n    return;\n  \}\n  InstallFrom\(copy\);\n\}%  if (is_zip_) {\n    InstallZipFrom(path);\n  } else {\n    InstallFrom(path);\n  }\n}\n\ninline void AeriumExtensions::OnCopied(const base::FilePath\& copy, bool ok) {\n  if (!ok) {\n    Status("That file could not be read.");\n    return;\n  }\n  if (is_zip_) {\n    InstallZipFrom(copy);\n  } else {\n    InstallFrom(copy);\n  }\n}%
+        or die "[aerium] FATAL: aerium_extensions.h FileSelected/OnCopied tail not found (android issue 23)\n";
+' $AEXT
+
+# The installer itself. Same pairing as upstream'"'"'s dropped-.zip handler:
+# ZipFileInstaller unzips into the profile'"'"'s unpacked_install_directory() and
+# loads the result with UnpackedInstaller - no ExtensionInstallPrompt, by
+# design, see the block comment above.
+perl -0777 -pi -e '
+    s%class AeriumExtensionsUIConfig%// Aerium: see theme.sh (android issue 23). Mirrors upstream'"'"'s own\n// DeveloperPrivateInstallDroppedFileFunction .zip branch in\n// chrome/browser/extensions/api/developer_private/developer_private_functions.cc:\n// ZipFileInstaller into the registrar'"'"'s unpacked_install_directory(), which\n// loads with extensions::UnpackedInstaller once unzipped.\ninline void AeriumExtensions::InstallZipFrom(const base::FilePath\& path) {\n  content::BrowserContext* context = Profile::FromWebUI(web_ui());\n  extensions::ExtensionRegistrar* registrar =\n      extensions::ExtensionRegistrar::Get(context);\n  extensions::ZipFileInstaller::Create(\n      extensions::GetExtensionFileTaskRunner(),\n      extensions::MakeRegisterInExtensionServiceCallback(context))\n      ->InstallZipFileToUnpackedExtensionsDir(\n          path, registrar->unpacked_install_directory());\n  Status("Unpacking the extension...");\n}\n\nclass AeriumExtensionsUIConfig%
+        or die "[aerium] FATAL: aerium_extensions.h AeriumExtensionsUIConfig anchor not found (android issue 23)\n";
+' $AEXT
+
+echo "[aerium] .zip support for chrome://aerium-extensions applied (android issue 23)"

@@ -13,6 +13,14 @@ behind any of this.
   the desktop builds were on - this build was on 152.0.7977.75 and is now
   ahead of both.
 
+**Added**
+
+- `chrome://aerium-extensions` (Extensions menu → Install from file) now takes
+  a `.zip` as well as a `.crx`, unzipping it the same way Developer Mode's
+  "Load unpacked" does upstream - no manual extraction, no permission prompt.
+  Closes
+  [#23](https://github.com/aerium-browser/aerium-browser-android/issues/23).
+
 **Fixed**
 
 - The launcher icon is bigger and no longer sits on a white plate. The mark is

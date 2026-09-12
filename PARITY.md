@@ -102,7 +102,8 @@ about OLED phone panels and does not carry to a desktop monitor.
 | An extension can own the New Tab page | ✅ | ✅ | ✅ |
 | Web store bundled with the package | ✅ | ✅ | 🟡 points at the Chrome, Opera and Edge stores |
 | Install a .crx from an allowed off-store host | ✅ | ✅ | ✅ |
-| Install a .crx already on the device | ❌ | ❌ | ❌ |
+| Install a .crx already on the device | ❌ | ❌ | ✅ chrome://aerium-extensions |
+| Install a .zip already on the device | ❌ | ❌ | ✅ chrome://aerium-extensions |
 | MV2 support | ✅ | ✅ | ✅ |
 
 ## Identity and internal pages
