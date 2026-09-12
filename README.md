@@ -10,6 +10,27 @@
 [![released](https://img.shields.io/github/release-date/aerium-browser/aerium-browser-android?label=released)](https://github.com/aerium-browser/aerium-browser-android/releases/latest)
 [![downloads](https://img.shields.io/github/downloads/aerium-browser/aerium-browser-android/total?label=downloads)](https://github.com/aerium-browser/aerium-browser-android/releases)
 [![license](https://img.shields.io/badge/License-GPLv2-blue.svg)](LICENSE)
+[![Donate XMR](https://img.shields.io/badge/XMR-Donate-FF6600?logo=monero&logoColor=white)](#support-aerium)
+[![Donate LTC](https://img.shields.io/badge/LTC-Donate-345D9D?logo=litecoin&logoColor=white)](#support-aerium)
+
+### Support Aerium
+
+Aerium runs on donations and spare time: no ads, no data sales. Scan or copy an address to help keep it going.
+
+<table>
+<tr>
+<td align="center">
+<img src="donate/xmr-qr.png" width="140" height="140" alt="Monero donation QR code"><br>
+<b>Monero (XMR)</b><br>
+<code>49TPHGjCk52cr6f8LWwDrwAvCWmXWfVPy5DUt7KTEnLBfsm6xa9bUgaAVV5xYU6LH5WcoRNYZZSBuAjHFuVHFUDpRm6tKFA</code>
+</td>
+<td align="center">
+<img src="donate/ltc-qr.png" width="140" height="140" alt="Litecoin donation QR code"><br>
+<b>Litecoin (LTC)</b><br>
+<code>ltc1q8cpevsanzlmuc0ja8d0eltj72qk55nu7dty59v</code>
+</td>
+</tr>
+</table>
 
 Aerium is a browser for people who'd rather their browser stayed out of the way. No telemetry calling home, no ad platform baked into the settings page. Extensions, including Manifest V2, install straight from the Chrome Web Store, something most Android browsers still can't do.
 
@@ -138,13 +159,6 @@ Want your own signed build?
 ## Contributing
 
 Issues and pull requests are welcome. See [UPDATING.md](UPDATING.md) for how the build stays in sync with upstream releases.
-
-## Support Aerium
-
-Aerium doesn't run ads or sell data, so development runs on donations and spare time. If you'd like to chip in:
-
-- **Monero (XMR):** `49TPHGjCk52cr6f8LWwDrwAvCWmXWfVPy5DUt7KTEnLBfsm6xa9bUgaAVV5xYU6LH5WcoRNYZZSBuAjHFuVHFUDpRm6tKFA`
-- **Litecoin (LTC):** `ltc1q8cpevsanzlmuc0ja8d0eltj72qk55nu7dty59v`
 
 ## About
 
