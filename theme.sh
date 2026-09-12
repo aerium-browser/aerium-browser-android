@@ -8541,3 +8541,29 @@ sed -i '/^        \/\/ Glic$/,+2c\        // Aerium: no "Ask Gemini" entry in th
     chrome/android/java/src/org/chromium/chrome/browser/tabbed_mode/TabbedAppMenuPropertiesDelegate.java
 
 echo "[aerium] Ask Gemini removed from app menu"
+
+
+# --- A "Support Aerium" row on Settings -> About Aerium, next to Legal
+# information.
+#
+# HyperlinkPreference already exists for exactly this: legal_information_
+# preferences.xml uses the same class for its open-source-license and
+# terms-of-service rows, reading the destination from a translateable="false"
+# string via app:url and opening it with CustomTabActivity.showInfoPage() on
+# tap - an in-app tab, the same place any other link opens, not a hand-off to
+# whatever browser Android considers default. No new Java class or click
+# handler needed, unlike the desktop settings row this mirrors.
+#
+# about_chrome_preferences.xml has no xmlns:app today because nothing in it
+# has needed a custom attribute before now; app:url is one, so the namespace
+# is added alongside the row that is the first to use it.
+sed_i 's|<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">|<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"\n    xmlns:app="http://schemas.android.com/apk/res-auto">|' \
+    chrome/android/java/res/xml/about_chrome_preferences.xml
+
+sed_i 's|        android:title="@string/legal_information_title" />|&\n    <org.chromium.chrome.browser.about_settings.HyperlinkPreference\n        android:key="support_aerium"\n        android:title="@string/support_aerium_title"\n        app:url="@string/support_aerium_url" />|' \
+    chrome/android/java/res/xml/about_chrome_preferences.xml
+
+sed_i 's|      <message name="IDS_OS_VERSION_TITLE" desc="Title for operating system version">|      <message name="IDS_SUPPORT_AERIUM_TITLE" desc="Title of the row on the About Aerium screen that opens Aerium'"'"'s donation page.">\n        Support Aerium\n      </message>\n      <message name="IDS_SUPPORT_AERIUM_URL" desc="URL for Aerium'"'"'s donation page" translateable="false">\n        https://aerium-browser.github.io/#support\n      </message>\n&|' \
+    chrome/browser/ui/android/strings/android_chrome_strings.grd
+
+echo "[aerium] About page Support Aerium row applied"
