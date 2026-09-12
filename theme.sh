@@ -8415,3 +8415,54 @@ sed_i 's%^#endif  // CHROME_BROWSER_AERIUM_FLAG_ENTRIES_H_$%    {"disable-before
     chrome/browser/aerium_flag_entries.h
 
 echo "[aerium] desktop flags batch three applied"
+
+
+# --- A one-tap toggle between Aerium's Normal and Private windows, in the
+# main toolbar.
+#
+# Asked for as a Brave-style seamless switch between normal and incognito
+# tabs. Aerium's Incognito already runs as its own window rather than a mode
+# within one - IncognitoUtils.shouldOpenIncognitoAsWindow() is forced true a
+# few sections above, because extensions in Incognito are wired around that
+# separate-window model. A Hub-pane toggle like stock Chromium's own is not an
+# option here without reversing that, which would be touching the one thing
+# extensions in Incognito depends on for a UI convenience - not this patch's
+# call to make.
+#
+# What IS true today: switching between the two windows already does not
+# close either one. IntentHandler.createTrustedOpenNewWindowIntent() just
+# starts the other window's Activity with FLAG_ACTIVITY_NEW_TASK, leaving this
+# one paused in the background, same as Android's own recents would. The
+# friction is that reaching it means the three-dot menu, every time. This
+# button is the one-tap version of the same, non-destructive switch, sitting
+# where Brave puts its own.
+#
+# Read once rather than observed. mIncognitoStateProvider tracks the current
+# tab's profile, but every tab in one of these windows is already the same
+# profile - the whole window is one or the other for its lifetime - so the
+# state this button needs cannot change under it after this runs.
+#
+# ic_incognito is the exact drawable the app menu's own "New Incognito
+# Window"/"New Window" rows already use, so this button and that menu item
+# never show two different pictures for the same action. The highlighted
+# background is drawn in code rather than as a resource because it is nothing
+# more than the dark accent Aerium already uses for Incognito windows
+# (theme.sh, AeriumBrandDark) at low opacity - a fourth XML file would buy
+# nothing a five-line GradientDrawable does not.
+#
+# No window is ever brought back to the front by this - each tap opens
+# another instance of the other side, same as "New Incognito Window" already
+# does today. Reusing an existing one would mean tracking task IDs this
+# project does not track anywhere yet; a known v1 limit, not an oversight.
+TPX=chrome/browser/ui/android/toolbar/java/res/layout/toolbar_phone.xml
+sed_i 's|^        <org.chromium.chrome.browser.toolbar.top.ToggleTabStackButton$|        <org.chromium.ui.widget.ChromeImageButton\n            android:id="@+id/aerium_incognito_toggle"\n            android:src="@drawable/ic_incognito"\n            style="@style/ToolbarHoverableButton"\n            android:layout_gravity="top"\n            app:tint="@color/default_icon_color_tint_list"/>\n\n&|' \
+    $TPX
+
+TM=chrome/android/java/src/org/chromium/chrome/browser/toolbar/ToolbarManager.java
+sed_i 's|^        mToolbarLongPressMenuHandler =$|        // Aerium: the Normal/Private toggle button. See theme.sh.\n        ChromeImageButton aeriumIncognitoToggle =\n                mControlContainer.findViewById(R.id.aerium_incognito_toggle);\n        if (aeriumIncognitoToggle != null) {\n            boolean aeriumIsIncognitoWindow = mIncognitoStateProvider.isIncognitoSelected();\n            aeriumIncognitoToggle.setContentDescription(\n                    mActivity.getString(\n                            aeriumIsIncognitoWindow\n                                    ? R.string.aerium_switch_to_normal_window\n                                    : R.string.aerium_switch_to_private_window));\n            if (aeriumIsIncognitoWindow) {\n                android.graphics.drawable.GradientDrawable aeriumToggleBg =\n                        new android.graphics.drawable.GradientDrawable();\n                aeriumToggleBg.setShape(android.graphics.drawable.GradientDrawable.OVAL);\n                aeriumToggleBg.setColor(0x407FC4E4);\n                aeriumIncognitoToggle.setBackground(aeriumToggleBg);\n            }\n            aeriumIncognitoToggle.setOnClickListener(\n                    v ->\n                            mActivity.startActivity(\n                                    IntentHandler.createTrustedOpenNewWindowIntent(\n                                            mActivity, !aeriumIsIncognitoWindow)));\n        }\n\n&|' \
+    $TM
+
+sed_i 's|      <message name="IDS_AERIUM_EXTERNAL_DOWNLOAD_MANAGER_TITLE" desc=|      <message name="IDS_AERIUM_SWITCH_TO_PRIVATE_WINDOW" desc="Content description of the toolbar button that opens Aerium'"'"'s Private window.">\n        Switch to Private window\n      </message>\n      <message name="IDS_AERIUM_SWITCH_TO_NORMAL_WINDOW" desc="Content description of the toolbar button that opens Aerium'"'"'s Normal window, shown while already in the Private one.">\n        Switch to Normal window\n      </message>\n&|' \
+    chrome/browser/ui/android/strings/android_chrome_strings.grd
+
+echo "[aerium] incognito toggle button applied"
