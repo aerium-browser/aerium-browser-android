@@ -114,6 +114,7 @@ about OLED phone panels and does not carry to a desktop monitor.
 | `chrome://aerium-first-run` | ✅ | ✅ | ✅ |
 | `aerium://` as an alias for every internal page | ✅ | ✅ | ✅ |
 | About page points at the project | ✅ | ✅ | ✅ |
+| Share Aerium row on the About page | ✅ | ✅ | ✅ |
 | Startpage default, nine privacy-first engines offered | ✅ | ✅ | ✅ |
 | Secure DNS menu: Mullvad, Quad9, NextDNS, no Google | ✅ | ✅ | ✅ |
 | Aerogel: a tab with its own throwaway cookie jar | ✅ | ✅ | ❌ |
