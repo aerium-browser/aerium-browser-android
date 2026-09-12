@@ -162,4 +162,4 @@ Issues and pull requests are welcome. See [UPDATING.md](UPDATING.md) for how the
 
 ## About
 
-Aerium is built on [GrapheneOS's Vanadium](https://github.com/GrapheneOS/Vanadium), following the desktop-extensions approach pioneered by [Helium Browser](https://github.com/imputnet/helium), with Aerium's own branding, defaults, and privacy-parity flags layered on top. Licensed under [GPLv2](LICENSE).
+Aerium is built on [GrapheneOS's Vanadium](https://github.com/GrapheneOS/Vanadium), following the desktop-extensions approach pioneered by [Titanium Browser](https://github.com/jqssun/android-titanium-browser), with Aerium's own branding, defaults, and privacy-parity flags layered on top. Licensed under [GPLv2](LICENSE).
