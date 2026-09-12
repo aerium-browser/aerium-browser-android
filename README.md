@@ -33,9 +33,17 @@ Aerium runs on donations and spare time: no ads, no data sales. Scan or copy an 
 <br><a href="https://aerium-browser.github.io/donate/ltc"><code>ltc1q8cpevsanzlmuc0ja8d0eltj72qk55nu7dty59v</code></a>
 </p>
 
-Aerium is a browser for people who'd rather their browser stayed out of the way. No telemetry calling home, no ad platform baked into the settings page. Extensions, including Manifest V2, install straight from the Chrome Web Store, something most Android browsers still can't do.
+Aerium is a browser for people who'd rather their browser stayed out of the way. No telemetry calling home, no ad platform baked into the settings page. Extensions, including Manifest V2, install straight from the Chrome Web Store, something most Android browsers still can't do. Kiwi Browser used to be the answer to that and stopped receiving updates in January 2026; this picks up where it left off, on a security-hardened Chromium base.
 
 [**Download for Android**](https://github.com/aerium-browser/aerium-browser-android/releases/latest)
+
+## Installing and staying updated
+
+The link above is an arm64 APK, the right one for almost every phone and tablet made in the last several years. A few other ways to get and keep it:
+
+- **[Obtainium](https://github.com/ImranR98/Obtainium)**: add this repository (`aerium-browser/aerium-browser-android`) as an app source and Obtainium tracks new releases and offers the update itself - no manual GitHub visits. Obtainium is itself sideloaded (F-Droid, or its own APK from its releases page), which fits a de-googled setup better than an app store.
+- **x86_64** (emulators, x86 tablets, Chromebooks that run Android apps): a separate build, kept off the main release feed on purpose so the in-app updater never offers arm64 phones an APK that can't install on them. Find the newest one on the [releases page](https://github.com/aerium-browser/aerium-browser-android/releases) under a tag containing `-x64-`. If none is recent enough, ask in an issue - it's built on request, not on every version.
+- Aerium also checks for a new release once a day on its own and notifies you - **Settings** needs opening, but nothing else does.
 
 ## What you get
 
