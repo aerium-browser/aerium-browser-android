@@ -17,20 +17,21 @@
 
 Aerium runs on donations and spare time: no ads, no data sales. Scan or copy an address to help keep it going.
 
-<table>
-<tr>
-<td align="center">
-<img src="donate/xmr-qr.png" width="140" height="140" alt="Monero donation QR code"><br>
-<b>Monero (XMR)</b><br>
-<code>49TPHGjCk52cr6f8LWwDrwAvCWmXWfVPy5DUt7KTEnLBfsm6xa9bUgaAVV5xYU6LH5WcoRNYZZSBuAjHFuVHFUDpRm6tKFA</code>
-</td>
-<td align="center">
-<img src="donate/ltc-qr.png" width="140" height="140" alt="Litecoin donation QR code"><br>
-<b>Litecoin (LTC)</b><br>
-<code>ltc1q8cpevsanzlmuc0ja8d0eltj72qk55nu7dty59v</code>
-</td>
-</tr>
-</table>
+<p align="center">
+<a href="monero:49TPHGjCk52cr6f8LWwDrwAvCWmXWfVPy5DUt7KTEnLBfsm6xa9bUgaAVV5xYU6LH5WcoRNYZZSBuAjHFuVHFUDpRm6tKFA">
+<img src="donate/xmr-qr.png" width="120" height="120" alt="Monero donation QR code">
+<br><b>Monero (XMR)</b>
+</a>
+<br><code>49TPHGjCk52cr6f8LWwDrwAvCWmXWfVPy5DUt7KTEnLBfsm6xa9bUgaAVV5xYU6LH5WcoRNYZZSBuAjHFuVHFUDpRm6tKFA</code>
+</p>
+
+<p align="center">
+<a href="litecoin:ltc1q8cpevsanzlmuc0ja8d0eltj72qk55nu7dty59v">
+<img src="donate/ltc-qr.png" width="120" height="120" alt="Litecoin donation QR code">
+<br><b>Litecoin (LTC)</b>
+</a>
+<br><code>ltc1q8cpevsanzlmuc0ja8d0eltj72qk55nu7dty59v</code>
+</p>
 
 Aerium is a browser for people who'd rather their browser stayed out of the way. No telemetry calling home, no ad platform baked into the settings page. Extensions, including Manifest V2, install straight from the Chrome Web Store, something most Android browsers still can't do.
 
