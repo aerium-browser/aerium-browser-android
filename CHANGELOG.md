@@ -30,6 +30,10 @@ behind any of this.
 - **Share Aerium**, next to Support Aerium on the About screen. Opens the
   ordinary system share sheet with a one-line pitch and the download link -
   nothing tracked, nothing sent anywhere until you pick where it goes.
+- A clock, a greeting and a quote of the day above the speed dial on the new
+  tab page - Settings → New tab page has switches for each. Nothing here is
+  fetched: the clock reads the device's own time, and the quotes are a list
+  built into the app.
 
 **Fixed**
 
