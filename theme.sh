@@ -5636,7 +5636,7 @@ sed_i 's|^                AERIUM_BOTTOM_BAR,$|                AERIUM_CLASSIC_TAB
 # every configuration change - so returning 1 here is the whole of "one column",
 # and there is no second path that can put the second column back.
 TLM=chrome/android/features/tab_ui/java/src/org/chromium/chrome/browser/tasks/tab_management/TabListMediator.java
-sed_i 's%    int getSpanCount(int screenWidthDp) {%&\n        // Aerium: see theme.sh. One column is what makes the classic switcher\n        // classic - a card as wide as the list is what everything else follows\n        // from. mComponentId keeps this off the tab group dialog and the tab\n        // list editor, which share this mediator.\n        if (mMode == TabListMode.GRID\n                \&\& mComponentId == TabComponentId.GRID_TAB_SWITCHER\n                \&\& ChromeSharedPreferences.getInstance()\n                        .readBoolean(ChromePreferenceKeys.AERIUM_CLASSIC_TAB_SWITCHER, true)) {\n            return 1;\n        }%' \
+sed_i 's%    int getSpanCount(int screenWidthDp) {%&\n        // Aerium: see theme.sh. One column is what makes the classic switcher\n        // classic - a card as wide as the list is what everything else follows\n        // from. mComponentId keeps this off the tab group dialog and the tab\n        // list editor, which share this mediator.\n        if (mComponentId == TabComponentId.GRID_TAB_SWITCHER\n                \&\& ChromeSharedPreferences.getInstance()\n                        .readBoolean(ChromePreferenceKeys.AERIUM_CLASSIC_TAB_SWITCHER, true)) {\n            return 1;\n        }%' \
     $TLM
 
 TLC=chrome/android/features/tab_ui/java/src/org/chromium/chrome/browser/tasks/tab_management/TabListCoordinator.java
@@ -6875,7 +6875,7 @@ public class AeriumSpeedDial extends LinearLayout {
     }
 
     /** Whether the speed dial replaces the Most Visited tiles. Default on. */
-    public static boolean isEnabled() {
+    public static boolean isSpeedDialEnabled() {
         return ChromeSharedPreferences.getInstance()
                 .readBoolean(ChromePreferenceKeys.AERIUM_SPEED_DIAL, true);
     }
@@ -6950,7 +6950,7 @@ public class AeriumSpeedDial extends LinearLayout {
     /** Draws the grid from what is stored. Cheap enough to call on every change. */
     private void rebuild() {
         removeAllViews();
-        if (!isEnabled()) {
+        if (!isSpeedDialEnabled()) {
             setVisibility(GONE);
             return;
         }
@@ -7458,7 +7458,7 @@ sed_i 's|        android:layout="@layout/mv_tiles_layout" />|&\n\n    <!-- Aeriu
 # inflates the stub and hands the result to the coordinator that drives it;
 # leaving that alone and setting the container GONE means every view the
 # coordinator looks for still exists. Same package, so no import.
-sed_i 's|        mvTilesContainerLayout.setVisibility(View.VISIBLE);|        // Aerium: the speed dial replaces these tiles - see theme.sh. Hidden\n        // rather than skipped so the coordinator still finds its views.\n        mvTilesContainerLayout.setVisibility(\n                AeriumSpeedDial.isEnabled() ? View.GONE : View.VISIBLE);|' \
+sed_i 's|        mvTilesContainerLayout.setVisibility(View.VISIBLE);|        // Aerium: the speed dial replaces these tiles - see theme.sh. Hidden\n        // rather than skipped so the coordinator still finds its views.\n        mvTilesContainerLayout.setVisibility(\n                AeriumSpeedDial.isSpeedDialEnabled() ? View.GONE : View.VISIBLE);|' \
     chrome/android/java/src/org/chromium/chrome/browser/ntp/NewTabPageLayout.java
 
 sed_i 's|      <message name="IDS_MENU_DEV_TOOLS" desc=|      <message name="IDS_AERIUM_SPEED_DIAL_ADD" desc="Label under the empty tile that adds a new new-tab-page shortcut.">\n        Add\n      </message>\n      <message name="IDS_AERIUM_SPEED_DIAL_ADD_TITLE" desc="Title of the dialog that adds a new-tab-page shortcut.">\n        Add a shortcut\n      </message>\n      <message name="IDS_AERIUM_SPEED_DIAL_ADD_CONFIRM" desc="Button that confirms adding the shortcut.">\n        Add\n      </message>\n      <message name="IDS_AERIUM_SPEED_DIAL_EDIT_TITLE" desc="Title of the dialog that edits a new-tab-page shortcut.">\n        Edit shortcut\n      </message>\n      <message name="IDS_AERIUM_SPEED_DIAL_SAVE" desc="Button that saves an edited shortcut.">\n        Save\n      </message>\n      <message name="IDS_AERIUM_SPEED_DIAL_DONE" desc="Button that leaves the new tab page shortcut edit mode.">\n        Done\n      </message>\n      <message name="IDS_AERIUM_SPEED_DIAL_NAME" desc="Hint in the shortcut name field.">\n        Name\n      </message>\n      <message name="IDS_AERIUM_SPEED_DIAL_ADDRESS" desc="Hint in the shortcut address field.">\n        Address\n      </message>\n&|' \
@@ -8215,6 +8215,7 @@ import android.view.Gravity;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import org.chromium.base.shared_preferences.SharedPreferencesManager;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
@@ -8374,7 +8375,7 @@ public class AeriumNtpWidgets extends LinearLayout {
      * quote a fresh profile happens to start on.
      */
     private static int quoteOffset() {
-        ChromeSharedPreferences prefs = ChromeSharedPreferences.getInstance();
+        SharedPreferencesManager prefs = ChromeSharedPreferences.getInstance();
         int offset = prefs.readInt(ChromePreferenceKeys.AERIUM_NTP_QUOTE_OFFSET, -1);
         if (offset < 0) {
             offset = new Random().nextInt(QUOTES.length);
@@ -9305,6 +9306,9 @@ import org.json.JSONObject;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.IntentUtils;
+import org.chromium.base.supplier.MonotonicObservableSupplier;
+import org.chromium.base.supplier.ObservableSuppliers;
+import org.chromium.base.supplier.SettableMonotonicObservableSupplier;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
 import org.chromium.build.annotations.NullMarked;
@@ -9318,6 +9322,7 @@ import org.chromium.chrome.browser.settings.search.ChromeBaseSearchIndexProvider
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
+import org.chromium.components.browser_ui.settings.SettingsFragment;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
 import org.chromium.components.browser_ui.site_settings.ContentSettingException;
 import org.chromium.components.browser_ui.site_settings.WebsitePreferenceBridge;
@@ -9372,6 +9377,9 @@ public class AeriumBackupFragment extends ChromeBaseSettingsFragment {
     // rather than listing keys one by one means a setting added later is picked up for free.
     private static final String SHARED_PREF_PREFIX = "Chrome.Aerium.";
 
+    private final SettableMonotonicObservableSupplier<String> mPageTitle =
+            ObservableSuppliers.createMonotonic();
+
     // Native PrefService settings, listed explicitly rather than scanned: PrefService has no
     // Java-callable enumeration the way SharedPreferences does, so these are named by hand. Kept
     // to real user choices - see AeriumClearOnExit and the site rules table in
@@ -9422,6 +9430,7 @@ public class AeriumBackupFragment extends ChromeBaseSettingsFragment {
     @Override
     public void onCreatePreferences(@Nullable Bundle savedInstanceState, @Nullable String rootKey) {
         SettingsUtils.addPreferencesFromResource(this, R.xml.aerium_backup_preferences);
+        mPageTitle.set(getString(R.string.aerium_backup_title));
 
         Preference exportPref = findPreference(PREF_EXPORT);
         if (exportPref != null) {
@@ -9879,6 +9888,16 @@ public class AeriumBackupFragment extends ChromeBaseSettingsFragment {
                 prefs.setString(key, item.optString("value", ""));
             }
         }
+    }
+
+    @Override
+    public MonotonicObservableSupplier<String> getPageTitle() {
+        return mPageTitle;
+    }
+
+    @Override
+    public @SettingsFragment.AnimationType int getAnimationType() {
+        return SettingsFragment.AnimationType.PROPERTY;
     }
 
     public static final ChromeBaseSearchIndexProvider SEARCH_INDEX_DATA_PROVIDER =
