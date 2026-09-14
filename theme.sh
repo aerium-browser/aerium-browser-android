@@ -2806,8 +2806,7 @@ inline void AeriumExtensions::HandlePick(const base::ListValue& args) {
     return;
   }
   ui::SelectFileDialog::FileTypeInfo file_types;
-  file_types.extensions.push_back(
-      {extensions::kExtensionFileExtension + 1});
+  file_types.extensions.push_back({FILE_PATH_LITERAL("crx")});
   dialog_->SelectFile(ui::SelectFileDialog::SELECT_OPEN_FILE, std::u16string(),
                       base::FilePath(), &file_types, 0,
                       base::FilePath::StringType(),
@@ -9153,7 +9152,7 @@ sed_i 's|#include "extensions/browser/install_prompt_data.h"|&\n#include "extens
 # tell apart anyway, so this changes nothing a user sees; it just stops
 # leaning on behaviour the type was not documented to have.
 perl -0777 -pi -e '
-    s%  file_types\.extensions\.push_back\(\n      \{extensions::kExtensionFileExtension \+ 1\}\);%  // Aerium: see theme.sh (android issue 23).\n  file_types.extensions.push_back(\n      {extensions::kExtensionFileExtension + 1});\n  file_types.extensions.push_back({FILE_PATH_LITERAL("zip")});%
+    s%  file_types\.extensions\.push_back\(\{FILE_PATH_LITERAL\("crx"\)\}\);%  // Aerium: see theme.sh (android issue 23).\n  file_types.extensions.push_back({FILE_PATH_LITERAL("crx")});\n  file_types.extensions.push_back({FILE_PATH_LITERAL("zip")});%
         or die "[aerium] FATAL: aerium_extensions.h file_types.extensions push_back not found (android issue 23)\n";
 ' $AEXT
 
