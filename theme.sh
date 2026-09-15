@@ -4541,6 +4541,7 @@ cat > chrome/browser/aerium/aerium_update_checker.h <<'AERIUM_UPDATE_CHECKER_H'
 #include <utility>
 
 #include "base/functional/bind.h"
+#include "base/json/json_reader.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/no_destructor.h"
@@ -4562,7 +4563,6 @@ cat > chrome/browser/aerium/aerium_update_checker.h <<'AERIUM_UPDATE_CHECKER_H'
 #include "net/base/load_flags.h"
 #include "net/http/http_request_headers.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
-#include "services/data_decoder/public/cpp/data_decoder.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/simple_url_loader.h"
@@ -4795,13 +4795,11 @@ inline void AeriumUpdateChecker::OnResponse(std::unique_ptr<std::string> body) {
            profile_->GetPrefs()->GetString(kLatestUrl));
     return;
   }
-  // Out of process. This is untrusted network data, and the isolated decoder is
-  // what Chromium uses for exactly that; parsing it in the browser process
-  // would put a JSON parser between an unauthenticated response and everything
-  // the browser process can reach.
-  data_decoder::DataDecoder::ParseJsonIsolated(
-      *body, base::BindOnce(&AeriumUpdateChecker::OnParsed,
-                            weak_factory_.GetWeakPtr()));
+  std::optional<base::Value> parsed =
+      base::JSONReader::Read(*body, base::JSON_PARSE_RFC);
+  OnParsed(parsed.has_value()
+               ? base::expected<base::Value, std::string>(*std::move(parsed))
+               : base::unexpected(std::string("invalid JSON")));
 }
 
 inline void AeriumUpdateChecker::OnParsed(
