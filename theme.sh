@@ -1960,6 +1960,19 @@ sed_i '/^    "ZZ": {$/,/^    }$/{s/^        "&google",$/        "\&duckduckgo",\
     $SE_DEFS/regional_settings.json
 sed_i 's|auto iter = TemplateURLPrepopulateData::kRegionalSettings.find(country_id);|// Aerium: every country gets the same privacy-focused engine list - the\n  // "ZZ" default in regional_settings.json - instead of per-country\n  // Google-led lists.\n  auto iter = TemplateURLPrepopulateData::kRegionalSettings.find(CountryId());|' \
     components/regional_capabilities/regional_capabilities_utils.cc
+AERIUM_ZZ_ENGINE_COUNT=
+if [ -e $SE_DEFS/regional_settings.json ]; then
+    AERIUM_ZZ_ENGINE_COUNT=$(sed -n '/^    "ZZ": {$/,/^    }$/p' \
+        $SE_DEFS/regional_settings.json | grep -c '"&' || true)
+    if [ -z "$AERIUM_ZZ_ENGINE_COUNT" ] || [ "$AERIUM_ZZ_ENGINE_COUNT" -lt 5 ]; then
+        echo "[aerium] FATAL: the ZZ list in $SE_DEFS/regional_settings.json" \
+             "holds $AERIUM_ZZ_ENGINE_COUNT engines - the substitution above" \
+             "did not write the list this build expects" >&2
+        return 1
+    fi
+fi
+sed_i 's|^constexpr size_t kTopSearchEnginesThreshold = 5;$|constexpr size_t kTopSearchEnginesThreshold = '"$AERIUM_ZZ_ENGINE_COUNT"';|' \
+    components/regional_capabilities/regional_capabilities_utils.cc
 # No sed for the default engine. Vanadium's own
 # 0114-set-default-search-engine-to-DuckDuckGo.patch already points
 # GetPrepopulatedFallbackSearch at duckduckgo.id, which is what we want, so the
@@ -7458,6 +7471,9 @@ sed_i 's|        android:layout="@layout/mv_tiles_layout" />|&\n\n    <!-- Aeriu
 sed_i 's|        mvTilesContainerLayout.setVisibility(View.VISIBLE);|        // Aerium: the speed dial replaces these tiles - see theme.sh. Hidden\n        // rather than skipped so the coordinator still finds its views.\n        mvTilesContainerLayout.setVisibility(\n                AeriumSpeedDial.isSpeedDialEnabled() ? View.GONE : View.VISIBLE);|' \
     chrome/android/java/src/org/chromium/chrome/browser/ntp/NewTabPageLayout.java
 
+sed_i 's|        setBackgroundColor(ChromeSemanticColorUtils.getHomeSurfaceBackgroundColor(getContext()));|&\n\n        if (!org.chromium.chrome.browser.toolbar.settings.AddressBarPreference\n                .isToolbarConfiguredToShowOnTop()) {\n            setGravity(android.view.Gravity.BOTTOM \| android.view.Gravity.CENTER_HORIZONTAL);\n            setPadding(\n                    getPaddingLeft(),\n                    0,\n                    getPaddingRight(),\n                    getPaddingBottom()\n                            + getResources()\n                                    .getDimensionPixelSize(R.dimen.toolbar_height_no_shadow));\n        }|' \
+    chrome/android/java/src/org/chromium/chrome/browser/ntp/NewTabPageLayout.java
+
 sed_i 's|      <message name="IDS_MENU_DEV_TOOLS" desc=|      <message name="IDS_AERIUM_SPEED_DIAL_ADD" desc="Label under the empty tile that adds a new new-tab-page shortcut.">\n        Add\n      </message>\n      <message name="IDS_AERIUM_SPEED_DIAL_ADD_TITLE" desc="Title of the dialog that adds a new-tab-page shortcut.">\n        Add a shortcut\n      </message>\n      <message name="IDS_AERIUM_SPEED_DIAL_ADD_CONFIRM" desc="Button that confirms adding the shortcut.">\n        Add\n      </message>\n      <message name="IDS_AERIUM_SPEED_DIAL_EDIT_TITLE" desc="Title of the dialog that edits a new-tab-page shortcut.">\n        Edit shortcut\n      </message>\n      <message name="IDS_AERIUM_SPEED_DIAL_SAVE" desc="Button that saves an edited shortcut.">\n        Save\n      </message>\n      <message name="IDS_AERIUM_SPEED_DIAL_DONE" desc="Button that leaves the new tab page shortcut edit mode.">\n        Done\n      </message>\n      <message name="IDS_AERIUM_SPEED_DIAL_NAME" desc="Hint in the shortcut name field.">\n        Name\n      </message>\n      <message name="IDS_AERIUM_SPEED_DIAL_ADDRESS" desc="Hint in the shortcut address field.">\n        Address\n      </message>\n&|' \
     chrome/browser/ui/android/strings/android_chrome_strings.grd
 
@@ -8426,7 +8442,9 @@ public class AeriumNtpWidgets extends LinearLayout {
             mClockText = new TextView(getContext());
             mClockText.setTextColor(ACCENT);
             mClockText.setTextSize(40);
-            addView(mClockText);
+            addView(
+                    mClockText,
+                    new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT));
 
             mDateText = new TextView(getContext());
             mDateText.setTextColor(label());
@@ -8999,6 +9017,11 @@ sed_i 's|^        mToolbarLongPressMenuHandler =$|        // Aerium: the Normal/
 
 sed_i 's|      <message name="IDS_AERIUM_EXTERNAL_DOWNLOAD_MANAGER_TITLE" desc=|      <message name="IDS_AERIUM_SWITCH_TO_PRIVATE_WINDOW" desc="Content description of the toolbar button that opens Aerium'"'"'s Private window.">\n        Switch to Private window\n      </message>\n      <message name="IDS_AERIUM_SWITCH_TO_NORMAL_WINDOW" desc="Content description of the toolbar button that opens Aerium'"'"'s Normal window, shown while already in the Private one.">\n        Switch to Normal window\n      </message>\n&|' \
     chrome/browser/ui/android/strings/android_chrome_strings.grd
+
+sed_i 's|^        HomepageManager.getInstance().onMenuClick(context);$|        SettingsNavigationFactory.createSettingsNavigation()\n                .startSettings(context, AeriumNewTabPageFragment.class);|' \
+    $TM
+sed_i 's|^import org.chromium.chrome.browser.toolbar.home_button.HomeButtonCoordinator;$|import org.chromium.chrome.browser.settings.AeriumNewTabPageFragment;\nimport org.chromium.chrome.browser.settings.SettingsNavigationFactory;\n&|' \
+    $TM
 
 echo "[aerium] incognito toggle button applied"
 
@@ -9919,3 +9942,72 @@ sed_i 's|      <message name="IDS_AERIUM_NTP_TITLE" desc=|      <message name="I
     chrome/browser/ui/android/strings/android_chrome_strings.grd
 
 echo "[aerium] backup/restore settings screen registered"
+
+
+AERIUM_MAIN_PREFS=chrome/android/java/res/xml/main_preferences.xml
+perl -0777 -pi -e '
+    my $cats = qq{    <PreferenceCategory\n}
+        . qq{        android:key="aerium_privacy_section"\n}
+        . qq{        android:order="20"\n}
+        . qq{        android:title="\@string/aerium_prefs_section_privacy"/>\n}
+        . qq{    <PreferenceCategory\n}
+        . qq{        android:key="aerium_appearance_section"\n}
+        . qq{        android:order="30"\n}
+        . qq{        android:title="\@string/aerium_prefs_section_appearance"/>\n}
+        . qq{    <PreferenceCategory\n}
+        . qq{        android:key="aerium_downloads_section"\n}
+        . qq{        android:order="40"\n}
+        . qq{        android:title="\@string/aerium_prefs_section_downloads"/>\n};
+    s{\n</PreferenceScreen>}{\n$cats</PreferenceScreen>}
+        or die "[aerium] FATAL: no closing PreferenceScreen tag in "
+               . "main_preferences.xml\n";
+' $AERIUM_MAIN_PREFS
+perl -0777 -pi -e '
+    my %order = (
+        settings_promo_card => 0,
+        account_and_google_services_section => 1,
+        sign_in => 2,
+        google_services => 3,
+        basics_section => 10,
+        search_engine => 11,
+        address_bar => 12,
+        default_browser => 13,
+        homepage => 14,
+        aerium_new_tab_page => 15,
+        tabs => 16,
+        aerium_privacy_section => 20,
+        privacy => 21,
+        safety_hub => 22,
+        content_settings => 23,
+        aerium_appearance_section => 30,
+        appearance => 31,
+        accessibility => 32,
+        languages => 33,
+        aerium_downloads_section => 40,
+        downloads => 41,
+        aerium_media => 42,
+        notifications => 43,
+        advanced_section => 50,
+        aerium_backup => 51,
+        glic => 52,
+        developer => 53,
+        about_chrome => 54,
+    );
+    for my $k (sort keys %order) {
+        my $o = $order{$k};
+        s{(<[\w.]+\b[^<>]*?android:key="\Q$k\E"[^<>]*?>)}{
+            my $e = $1;
+            $e =~ s/\n\s*android:order="\d+"//;
+            $e =~ s/(android:key="\Q$k\E")/$1\n        android:order="$o"/;
+            $e;
+        }se
+            or die "[aerium] FATAL: no element with android:key=\"$k\" in "
+                   . "main_preferences.xml - upstream renamed or restructured "
+                   . "it, or an Aerium row above failed to insert\n";
+    }
+' $AERIUM_MAIN_PREFS
+
+sed_i 's|      <message name="IDS_AERIUM_BACKUP_TITLE" desc=|      <message name="IDS_AERIUM_PREFS_SECTION_PRIVACY" desc="Header above the privacy, safety check and site settings rows in Settings.">\n        Privacy\n      </message>\n      <message name="IDS_AERIUM_PREFS_SECTION_APPEARANCE" desc="Header above the appearance, accessibility and language rows in Settings.">\n        Appearance and language\n      </message>\n      <message name="IDS_AERIUM_PREFS_SECTION_DOWNLOADS" desc="Header above the downloads, media and notification rows in Settings.">\n        Downloads and media\n      </message>\n&|' \
+    chrome/browser/ui/android/strings/android_chrome_strings.grd
+
+echo "[aerium] settings regrouped"
