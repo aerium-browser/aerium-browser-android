@@ -6786,10 +6786,11 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import org.chromium.base.IntentUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
+import org.chromium.chrome.browser.tab.TabLaunchType;
+import org.chromium.chrome.browser.tabmodel.document.ChromeAsyncTabLauncher;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -7020,17 +7021,7 @@ public class AeriumSpeedDial extends LinearLayout {
         return row;
     }
 
-    /**
-     * Aerium: Bookmarks, History and Downloads, opened as native pages.
-     *
-     * <p>These go through a TRUSTED intent rather than the plain one the shortcuts use.
-     * patch.sh deliberately limits the system dispatcher to network URLs, so an ordinary VIEW
-     * intent carrying chrome://bookmarks would be dropped; IntentUtils.addTrustedIntentExtras
-     * marks it as coming from the browser itself, which is what the app menu's own entries
-     * amount to. The alternative was BookmarkUtils, HistoryManagerUtils and DownloadUtils, which
-     * between them want an Activity, a Tab and a Profile - three couplings into stacks this view
-     * is deliberately kept out of, to open three pages.
-     */
+    /** Aerium: Bookmarks, History and Downloads, opened as native pages. */
     private View buildShortcutRow() {
         LinearLayout row = new LinearLayout(getContext());
         row.setOrientation(HORIZONTAL);
@@ -7125,15 +7116,8 @@ public class AeriumSpeedDial extends LinearLayout {
     }
 
     private void openInternal(String url) {
-        Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
-        intent.setPackage(getContext().getPackageName());
-        intent.putExtra(Browser.EXTRA_APPLICATION_ID, getContext().getPackageName());
-        IntentUtils.addTrustedIntentExtras(intent);
-        try {
-            getContext().startActivity(intent);
-        } catch (RuntimeException e) {
-            // Nothing to do: the row simply does not open.
-        }
+        new ChromeAsyncTabLauncher(/* incognito= */ false)
+                .launchUrl(url, TabLaunchType.FROM_CHROME_UI);
     }
 
     private GridLayout.LayoutParams cellParams() {
