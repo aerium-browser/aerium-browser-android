@@ -5595,11 +5595,7 @@ sed_i 's|^                AERIUM_EXTERNAL_DOWNLOAD_MANAGER,$|                AER
 sed_i 's%        FontPreloader.getInstance().load(getApplication());%&\n\n        // Aerium: features are fixed when the process starts, so the bottom\n        // bar goes on the command line here rather than being flipped live.\n        //\n        // Ours goes FIRST in the merged value, ahead of anything already\n        // there. FeatureList::RegisterOverride() uses try_emplace, and says\n        // so in as many words - "only the first override for a given\n        // feature name takes effect" - so with this appended last, an\n        // AndroidBottomBar entry set from chrome://flags won and the params\n        // below were silently dropped. Everyone told to enable that flag by\n        // hand before this shipped is in exactly that position.\n        if (ChromeSharedPreferences.getInstance()\n                .readBoolean(ChromePreferenceKeys.AERIUM_BOTTOM_BAR, true)) {\n            CommandLine bottomBarLine = CommandLine.getInstance();\n            String bottomBarExisting = bottomBarLine.getSwitchValue("enable-features");\n            String bottomBarFeature =\n                    "AndroidBottomBar:show_bottom_bar_on_gts/true/disable_on_ntp/false";\n            String bottomBarMerged =\n                    (bottomBarExisting == null || bottomBarExisting.isEmpty())\n                            ? bottomBarFeature\n                            : bottomBarFeature + "," + bottomBarExisting;\n            bottomBarLine.appendSwitchWithValue("enable-features", bottomBarMerged);\n        }%' \
     $CAI
 
-sed_i 's|^</PreferenceScreen>$|    <org.chromium.components.browser_ui.settings.ChromeSwitchPreference\n        android:key="aerium_bottom_bar"\n        android:title="@string/aerium_bottom_bar_title"\n        android:summary="@string/aerium_bottom_bar_summary" />\n&|' \
-    chrome/browser/ui/android/night_mode/java/res/xml/theme_preferences.xml
 
-sed_i 's|^        // TODO(crbug.com/40198953): Notify feature engagement system that settings were opened.$|        ChromeSwitchPreference bottomBar =\n                (ChromeSwitchPreference) findPreference("aerium_bottom_bar");\n        if (bottomBar != null) {\n            bottomBar.setChecked(\n                    sharedPreferencesManager.readBoolean(\n                            ChromePreferenceKeys.AERIUM_BOTTOM_BAR, true));\n            bottomBar.setOnPreferenceChangeListener(\n                    (preference, newValue) -> {\n                        sharedPreferencesManager.writeBoolean(\n                                ChromePreferenceKeys.AERIUM_BOTTOM_BAR, (boolean) newValue);\n                        showRestartSnackbar();\n                        return true;\n                    });\n        }\n\n&|' \
-    $TSF
 
 sed_i 's|      <message name="IDS_AERIUM_EXTERNAL_DOWNLOAD_MANAGER_TITLE" desc=|      <message name="IDS_AERIUM_BOTTOM_BAR_TITLE" desc="Title of the switch that moves the main browser controls to a bar along the bottom of the screen.">\n        Bottom bar\n      </message>\n      <message name="IDS_AERIUM_BOTTOM_BAR_SUMMARY" desc="Summary under the Bottom bar switch. Mentions the new tab button moving and that a restart is needed.">\n        Put the browser controls along the bottom of the screen, within reach of your thumb. The new tab button in the tab switcher moves down with them. Restart Aerium to apply.\n      </message>\n&|' \
     chrome/browser/ui/android/strings/android_chrome_strings.grd
@@ -5690,11 +5686,7 @@ sed_i 's%^        final Size oldDefaultSize = mMediator.getDefaultGridCardSize()
 sed_i 's%^                                        PERCENTAGE_AREA_OVERLAP_MERGE_THRESHOLD,$%                                        // Aerium: see theme.sh.\n                                        mAeriumClassicSwitcher\n                                                ? 2f\n                                                : PERCENTAGE_AREA_OVERLAP_MERGE_THRESHOLD,%' \
     $TLC
 
-sed_i 's|^</PreferenceScreen>$|    <org.chromium.components.browser_ui.settings.ChromeSwitchPreference\n        android:key="aerium_classic_tab_switcher"\n        android:title="@string/aerium_classic_tab_switcher_title"\n        android:summary="@string/aerium_classic_tab_switcher_summary" />\n&|' \
-    chrome/browser/ui/android/night_mode/java/res/xml/theme_preferences.xml
 
-sed_i 's|^        // TODO(crbug.com/40198953): Notify feature engagement system that settings were opened.$|        ChromeSwitchPreference classicTabSwitcher =\n                (ChromeSwitchPreference) findPreference("aerium_classic_tab_switcher");\n        if (classicTabSwitcher != null) {\n            classicTabSwitcher.setChecked(\n                    sharedPreferencesManager.readBoolean(\n                            ChromePreferenceKeys.AERIUM_CLASSIC_TAB_SWITCHER, true));\n            classicTabSwitcher.setOnPreferenceChangeListener(\n                    (preference, newValue) -> {\n                        sharedPreferencesManager.writeBoolean(\n                                ChromePreferenceKeys.AERIUM_CLASSIC_TAB_SWITCHER,\n                                (boolean) newValue);\n                        showRestartSnackbar();\n                        return true;\n                    });\n        }\n\n&|' \
-    $TSF
 
 sed_i 's|      <message name="IDS_AERIUM_BOTTOM_BAR_TITLE" desc=|      <message name="IDS_AERIUM_CLASSIC_TAB_SWITCHER_TITLE" desc="Title of the switch that shows open tabs as one column of large overlapping cards instead of a grid.">\n        Classic tab switcher\n      </message>\n      <message name="IDS_AERIUM_CLASSIC_TAB_SWITCHER_SUMMARY" desc="Summary under the Classic tab switcher switch. Says what it looks like and that a restart is needed.">\n        Show open tabs as a single column of large, overlapping cards, the way Chrome used to. Turn this off for the two-column grid. Restart Aerium to apply.\n      </message>\n&|' \
     chrome/browser/ui/android/strings/android_chrome_strings.grd
@@ -7212,11 +7204,7 @@ sed_i 's|    public static final String AERIUM_CLASSIC_TAB_SWITCHER = "Chrome.Ae
     $CPK
 sed_i 's|^                AERIUM_CLASSIC_TAB_SWITCHER,$|&\n                AERIUM_SEAMLESS_INCOGNITO,|' $CPK
 
-sed_i 's|^</PreferenceScreen>$|    <org.chromium.components.browser_ui.settings.ChromeSwitchPreference\n        android:key="aerium_seamless_incognito"\n        android:title="@string/aerium_seamless_incognito_title"\n        android:summary="@string/aerium_seamless_incognito_summary" />\n&|' \
-    chrome/browser/ui/android/night_mode/java/res/xml/theme_preferences.xml
 
-sed_i 's|^        // TODO(crbug.com/40198953): Notify feature engagement system that settings were opened.$|        ChromeSwitchPreference seamlessIncognito =\n                (ChromeSwitchPreference) findPreference("aerium_seamless_incognito");\n        if (seamlessIncognito != null) {\n            seamlessIncognito.setChecked(\n                    sharedPreferencesManager.readBoolean(\n                            ChromePreferenceKeys.AERIUM_SEAMLESS_INCOGNITO, false));\n            seamlessIncognito.setOnPreferenceChangeListener(\n                    (preference, newValue) -> {\n                        sharedPreferencesManager.writeBoolean(\n                                ChromePreferenceKeys.AERIUM_SEAMLESS_INCOGNITO,\n                                (boolean) newValue);\n                        showRestartSnackbar();\n                        return true;\n                    });\n        }\n\n&|' \
-    $TSF
 
 sed_i 's|      <message name="IDS_AERIUM_CLASSIC_TAB_SWITCHER_TITLE" desc=|      <message name="IDS_AERIUM_SEAMLESS_INCOGNITO_TITLE" desc="Title of the switch that keeps Private tabs in the same window as Normal ones.">\n        Seamless Incognito\n      </message>\n      <message name="IDS_AERIUM_SEAMLESS_INCOGNITO_SUMMARY" desc="Summary under the Seamless Incognito switch. Says what it does, that it is new, and that a restart is needed.">\n        Keep Private tabs in this window, with a switch at the top of the tab switcher, instead of opening a separate window for them. New and less tested than the default. Restart Aerium to apply.\n      </message>\n&|' \
     chrome/browser/ui/android/strings/android_chrome_strings.grd
@@ -8325,20 +8313,199 @@ echo "[aerium] aerium guard applied"
 
 
 
+
+cat > chrome/android/java/res/xml/aerium_layout_preferences.xml <<'AERIUM_LAYOUT_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright 2026 The Chromium Authors
+     Use of this source code is governed by a BSD-style license that can be
+     found in the LICENSE file. -->
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+    <org.chromium.components.browser_ui.settings.ChromeSwitchPreference
+        android:key="aerium_bottom_bar"
+        android:persistent="false"
+        android:title="@string/aerium_bottom_bar_title"
+        android:summary="@string/aerium_bottom_bar_summary" />
+    <org.chromium.components.browser_ui.settings.ChromeSwitchPreference
+        android:key="aerium_classic_tab_switcher"
+        android:persistent="false"
+        android:title="@string/aerium_classic_tab_switcher_title"
+        android:summary="@string/aerium_classic_tab_switcher_summary" />
+    <org.chromium.components.browser_ui.settings.ChromeSwitchPreference
+        android:key="aerium_seamless_incognito"
+        android:persistent="false"
+        android:title="@string/aerium_seamless_incognito_title"
+        android:summary="@string/aerium_seamless_incognito_summary" />
+</PreferenceScreen>
+AERIUM_LAYOUT_XML
+
+sed_i 's|^  "java/res/xml/appearance_preferences.xml",$|  "java/res/xml/aerium_layout_preferences.xml",\n&|' \
+    chrome/android/chrome_java_resources.gni
+
+cat > chrome/android/java/src/org/chromium/chrome/browser/settings/AeriumLayoutFragment.java <<'AERIUM_LAYOUT_JAVA'
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+package org.chromium.chrome.browser.settings;
+
+import android.app.Activity;
+import android.os.Bundle;
+
+import org.chromium.base.supplier.MonotonicObservableSupplier;
+import org.chromium.base.supplier.ObservableSuppliers;
+import org.chromium.base.supplier.SettableMonotonicObservableSupplier;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
+import org.chromium.chrome.R;
+import org.chromium.chrome.browser.lifetime.ApplicationLifetime;
+import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
+import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
+import org.chromium.chrome.browser.settings.search.ChromeBaseSearchIndexProvider;
+import org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;
+import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
+import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager.SnackbarManageable;
+import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
+import org.chromium.components.browser_ui.settings.SettingsFragment;
+import org.chromium.components.browser_ui.settings.SettingsUtils;
+
+@NullMarked
+public class AeriumLayoutFragment extends ChromeBaseSettingsFragment {
+    private static final String PREF_BOTTOM_BAR = "aerium_bottom_bar";
+    private static final String PREF_CLASSIC_TAB_SWITCHER = "aerium_classic_tab_switcher";
+    private static final String PREF_SEAMLESS_INCOGNITO = "aerium_seamless_incognito";
+
+    private static final int RESTART_SNACKBAR_DURATION_MS = 10000;
+
+    private final SettableMonotonicObservableSupplier<String> mPageTitle =
+            ObservableSuppliers.createMonotonic();
+
+    @Override
+    public void onCreatePreferences(@Nullable Bundle savedInstanceState, @Nullable String rootKey) {
+        SettingsUtils.addPreferencesFromResource(this, R.xml.aerium_layout_preferences);
+        mPageTitle.set(getString(R.string.aerium_layout_title));
+
+        bind(PREF_BOTTOM_BAR, ChromePreferenceKeys.AERIUM_BOTTOM_BAR, true);
+        bind(PREF_CLASSIC_TAB_SWITCHER, ChromePreferenceKeys.AERIUM_CLASSIC_TAB_SWITCHER, true);
+        bind(PREF_SEAMLESS_INCOGNITO, ChromePreferenceKeys.AERIUM_SEAMLESS_INCOGNITO, false);
+    }
+
+    private void bind(String prefKey, String sharedPrefKey, boolean defaultValue) {
+        ChromeSwitchPreference pref = (ChromeSwitchPreference) findPreference(prefKey);
+        if (pref == null) return;
+        pref.setChecked(
+                ChromeSharedPreferences.getInstance().readBoolean(sharedPrefKey, defaultValue));
+        pref.setOnPreferenceChangeListener(
+                (preference, newValue) -> {
+                    ChromeSharedPreferences.getInstance()
+                            .writeBoolean(sharedPrefKey, (boolean) newValue);
+                    showRestartSnackbar();
+                    return true;
+                });
+    }
+
+    private void showRestartSnackbar() {
+        Activity activity = getActivity();
+        if (!(activity instanceof SnackbarManageable)) return;
+        SnackbarManager manager = ((SnackbarManageable) activity).getSnackbarManager();
+        manager.showSnackbar(
+                Snackbar.make(
+                                getString(R.string.aerium_restart_to_apply),
+                                new SnackbarManager.SnackbarController() {
+                                    @Override
+                                    public void onAction(@Nullable Object actionData) {
+                                        ApplicationLifetime.terminate(true);
+                                    }
+                                },
+                                Snackbar.TYPE_ACTION,
+                                Snackbar.UMA_UNKNOWN)
+                        .setAction(getString(R.string.aerium_relaunch), null)
+                        .setDuration(RESTART_SNACKBAR_DURATION_MS));
+    }
+
+    @Override
+    public MonotonicObservableSupplier<String> getPageTitle() {
+        return mPageTitle;
+    }
+
+    @Override
+    public @SettingsFragment.AnimationType int getAnimationType() {
+        return SettingsFragment.AnimationType.PROPERTY;
+    }
+
+    public static final ChromeBaseSearchIndexProvider SEARCH_INDEX_DATA_PROVIDER =
+            new ChromeBaseSearchIndexProvider(
+                    AeriumLayoutFragment.class.getName(), R.xml.aerium_layout_preferences);
+}
+AERIUM_LAYOUT_JAVA
+
+sed_i 's|^  "java/src/org/chromium/chrome/browser/browsing_data/BrowsingDataCounterBridge.java",$|  "java/src/org/chromium/chrome/browser/settings/AeriumLayoutFragment.java",\n&|' \
+    chrome/android/chrome_java_sources.gni
+
+sed_i 's|^import org.chromium.chrome.browser.browsing_data.ClearBrowsingDataFragment;$|&\nimport org.chromium.chrome.browser.settings.AeriumLayoutFragment;|' \
+    $SIPR
+sed_i 's|^                    AboutChromeSettings.SEARCH_INDEX_DATA_PROVIDER,$|&\n                    AeriumLayoutFragment.SEARCH_INDEX_DATA_PROVIDER,|' \
+    $SIPR
+
+sed_i 's|^        android:title="@string/appearance_settings" />$|&\n    <Preference\n        android:fragment="org.chromium.chrome.browser.settings.AeriumLayoutFragment"\n        android:key="aerium_layout"\n        android:order="42"\n        android:title="@string/aerium_layout_title"\n        android:summary="@string/aerium_layout_summary" />|' \
+    chrome/android/java/res/xml/main_preferences.xml
+
+AERIUM_MS=chrome/android/java/src/org/chromium/chrome/browser/settings/MainSettings.java
+
+perl -0777 -pi -e '
+    s{    private static boolean shouldShowSafetyHubPref\(\) \{\n        return !DeviceInfo\.isAutomotive\(\);\n    \}}
+     {    private static boolean shouldShowSafetyHubPref() \{\n        return false;\n    \}}
+        or die "[aerium] FATAL: shouldShowSafetyHubPref() in MainSettings.java no "
+             . "longer reads as a one-line automotive check\n";
+' $AERIUM_MS
+
+perl -0777 -pi -e '
+    s{        return signinManager\.isSigninSupported\(/\* requireUpdatedPlayServices= \*/ false\);\n}
+     {        return false;\n}
+        or die "[aerium] FATAL: shouldShowSignInPref() in MainSettings.java no longer "
+             . "returns isSigninSupported()\n";
+' $AERIUM_MS
+
+sed_i 's|^        googleServicePreference.setViewId(R.id.account_management_google_services_row);$|&\n        removePreferenceIfPresent(PREF_GOOGLE_SERVICES);\n        removePreferenceIfPresent(PREF_ACCOUNT_AND_GOOGLE_SERVICES_SECTION);|' \
+    $AERIUM_MS
+
+perl -0777 -pi -e '
+    s{    <Preference\n        android:fragment="org\.chromium\.chrome\.browser\.glic\.GlicSettings"\n        android:key="glic"\n        android:order="25"\n        android:title="\@string/glic_setting_label"/>\n}{}
+        or die "[aerium] FATAL: the glic row in main_preferences.xml is not the "
+             . "five-line Preference this expects - re-read it before removing it\n";
+' chrome/android/java/res/xml/main_preferences.xml
+
+sed_i 's|android:title="@string/prefs_section_basics"|android:title="@string/aerium_prefs_section_search"|' \
+    chrome/android/java/res/xml/main_preferences.xml
+sed_i 's|android:title="@string/prefs_section_autofill"|android:title="@string/aerium_prefs_section_autofill"|' \
+    chrome/android/java/res/xml/main_preferences.xml
+
+sed_i 's|      <message name="IDS_AERIUM_MEDIA_TITLE" desc=|      <message name="IDS_AERIUM_LAYOUT_TITLE" desc="Title of the settings screen holding the bottom bar, classic tab switcher and seamless Incognito switches, and of its row in the main Settings list.">\n        Toolbar and switcher\n      </message>\n      <message name="IDS_AERIUM_LAYOUT_SUMMARY" desc="Summary under that row.">\n        Where the controls sit, and how tabs and Private windows behave\n      </message>\n      <message name="IDS_AERIUM_PREFS_SECTION_LAYOUT" desc="Heading of the Settings group holding the address bar, toolbar, tabs and homepage rows.">\n        Layout and tabs\n      </message>\n      <message name="IDS_AERIUM_PREFS_SECTION_SEARCH" desc="Heading of the Settings group holding the search engine, default browser and languages rows.">\n        Search and startup\n      </message>\n      <message name="IDS_AERIUM_PREFS_SECTION_ABOUT" desc="Heading of the Settings group holding the About Aerium row.">\n        About\n      </message>\n      <message name="IDS_AERIUM_PREFS_SECTION_AUTOFILL" desc="Heading of the Settings group holding the passwords, payment methods and addresses rows.">\n        Passwords and autofill\n      </message>\n&|' \
+    chrome/browser/ui/android/strings/android_chrome_strings.grd
+
+echo "[aerium] layout settings screen registered"
+
 AERIUM_MAIN_PREFS=chrome/android/java/res/xml/main_preferences.xml
 perl -0777 -pi -e '
     my $cats = qq{    <PreferenceCategory\n}
         . qq{        android:key="aerium_privacy_section"\n}
-        . qq{        android:order="20"\n}
+        . qq{        android:order="10"\n}
         . qq{        android:title="\@string/aerium_prefs_section_privacy"/>\n}
         . qq{    <PreferenceCategory\n}
         . qq{        android:key="aerium_appearance_section"\n}
         . qq{        android:order="30"\n}
         . qq{        android:title="\@string/aerium_prefs_section_appearance"/>\n}
         . qq{    <PreferenceCategory\n}
-        . qq{        android:key="aerium_downloads_section"\n}
+        . qq{        android:key="aerium_layout_section"\n}
         . qq{        android:order="40"\n}
-        . qq{        android:title="\@string/aerium_prefs_section_downloads"/>\n};
+        . qq{        android:title="\@string/aerium_prefs_section_layout"/>\n}
+        . qq{    <PreferenceCategory\n}
+        . qq{        android:key="aerium_downloads_section"\n}
+        . qq{        android:order="60"\n}
+        . qq{        android:title="\@string/aerium_prefs_section_downloads"/>\n}
+        . qq{    <PreferenceCategory\n}
+        . qq{        android:key="aerium_about_section"\n}
+        . qq{        android:order="80"\n}
+        . qq{        android:title="\@string/aerium_prefs_section_about"/>\n};
     s{\n</PreferenceScreen>}{\n$cats</PreferenceScreen>}
         or die "[aerium] FATAL: no closing PreferenceScreen tag in "
                . "main_preferences.xml\n";
@@ -8346,33 +8513,41 @@ perl -0777 -pi -e '
 perl -0777 -pi -e '
     my %order = (
         settings_promo_card => 0,
-        account_and_google_services_section => 1,
-        sign_in => 2,
-        google_services => 3,
-        basics_section => 10,
-        search_engine => 11,
-        address_bar => 12,
-        default_browser => 13,
-        homepage => 14,
-        tabs => 16,
-        aerium_privacy_section => 20,
-        aerium_guard => 21,
-        privacy => 22,
-        safety_hub => 23,
-        content_settings => 24,
+        aerium_guard => 1,
+        aerium_privacy_section => 10,
+        privacy => 11,
+        content_settings => 12,
+        autofill_section => 20,
+        autofill_and_passwords => 21,
+        passwords => 22,
+        autofill_payment_methods => 23,
+        autofill_addresses => 24,
+        autofill_options => 25,
         aerium_appearance_section => 30,
         appearance => 31,
         accessibility => 32,
-        languages => 33,
-        aerium_downloads_section => 40,
-        downloads => 41,
-        aerium_media => 42,
-        notifications => 43,
-        advanced_section => 50,
-        aerium_backup => 51,
-        glic => 52,
-        developer => 53,
-        about_chrome => 54,
+        aerium_layout_section => 40,
+        address_bar => 41,
+        aerium_layout => 42,
+        tabs => 43,
+        homepage => 44,
+        basics_section => 50,
+        search_engine => 51,
+        default_browser => 52,
+        languages => 53,
+        aerium_downloads_section => 60,
+        downloads => 61,
+        aerium_media => 62,
+        notifications => 63,
+        advanced_section => 70,
+        aerium_backup => 71,
+        developer => 72,
+        aerium_about_section => 80,
+        about_chrome => 81,
+        account_and_google_services_section => 900,
+        sign_in => 901,
+        google_services => 902,
+        safety_hub => 903,
     );
     for my $k (sort keys %order) {
         my $o = $order{$k};
