@@ -287,4 +287,15 @@ if (content::WebContents::HasLiveWebContentsForBrowserContext(profile)) { return
 sed_i 's/|| mSupportedProfileType == SupportedProfileType.REGULAR) {/|| mSupportedProfileType == SupportedProfileType.REGULAR || mSupportedProfileType == SupportedProfileType.MIXED) {/' chrome/android/java/src/org/chromium/chrome/browser/ChromeTabbedActivity.java
 sed_i 's/|| mSupportedProfileType == SupportedProfileType.OFF_THE_RECORD) {/|| mSupportedProfileType == SupportedProfileType.OFF_THE_RECORD || mSupportedProfileType == SupportedProfileType.MIXED) {/' chrome/android/java/src/org/chromium/chrome/browser/ChromeTabbedActivity.java
 
+CLOUDUPLOAD=components/enterprise/connectors/core/cloud_content_scanning/cloud_binary_upload_service_base.cc
+RESUMABLEUPLOAD=components/enterprise/connectors/core/cloud_content_scanning/resumable_uploader_base.cc
+for f in $CLOUDUPLOAD $RESUMABLEUPLOAD; do
+    perl -0777 -pi -e '
+        my $n = s{\#if !BUILDFLAG\(IS_IOS\)\n(  safe_browsing::WebUIContentInfoSingleton::GetInstance\(\))}
+                 {#if !BUILDFLAG(IS_IOS) && BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)\n$1}g;
+        die "[aerium] FATAL: expected 1 WebUIContentInfoSingleton guard in $ARGV, rewrote $n - upstream guards these chrome://safe-browsing debug calls on IS_IOS alone, but WebUIInfoSingleton only declares them under SAFE_BROWSING_DOWNLOAD_PROTECTION, which safe_browsing_mode=0 turns off\n" unless $n == 1;
+    ' $f
+done
+echo "[aerium] deep scan debug reporting guarded on SAFE_BROWSING_DOWNLOAD_PROTECTION"
+
 export PATCHED=1
