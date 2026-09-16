@@ -79,6 +79,7 @@ WORK="${WORK:-$(mktemp -d)}"
 TREE="$WORK/tree"
 REPORT="$WORK/report.tsv"
 BASE="https://chromium.googlesource.com/chromium/src/+/refs/tags/$VERSION"
+MIRROR="https://raw.githubusercontent.com/chromium/chromium/$VERSION"
 
 echo "[verify-seds] chromium $VERSION"
 echo "[verify-seds] workdir $WORK"
@@ -228,6 +229,7 @@ echo "[verify-seds] $(wc -l < "$WORK/targets.txt") distinct sed targets"
 # longest prefix first so a nested submodule wins over its parent.
 SUBMAP="$WORK/submodules.tsv"
 curl -sSf "$BASE/DEPS?format=TEXT" 2>/dev/null | base64 -d > "$WORK/DEPS" \
+    || curl -sSf "$MIRROR/DEPS" 2>/dev/null > "$WORK/DEPS" \
     || : > "$WORK/DEPS"
 python3 - "$WORK/DEPS" > "$SUBMAP" <<'DEPSPY'
 import re, sys
@@ -255,13 +257,20 @@ while read -r p; do
     [ -f "$dest" ] && continue
     mkdir -p "$(dirname "$dest")"
     url="$BASE/$p?format=TEXT"
+    in_submodule=0
     while IFS=$'\t' read -r sub repo sha; do
         case "$p" in "$sub"/*)
-            url="$repo/+/$sha/${p#"$sub"/}?format=TEXT"; break ;;
+            url="$repo/+/$sha/${p#"$sub"/}?format=TEXT"; in_submodule=1; break ;;
         esac
     done < "$SUBMAP"
     for attempt in 1 2 3 4; do
         if curl -sSf "$url" 2>/dev/null | base64 -d > "$dest" \
+           && [ -s "$dest" ]; then
+            fetched=$((fetched + 1)); break
+        fi
+        rm -f "$dest"
+        if [ "$in_submodule" = 0 ] \
+           && curl -sSf "$MIRROR/$p" 2>/dev/null > "$dest" \
            && [ -s "$dest" ]; then
             fetched=$((fetched + 1)); break
         fi
