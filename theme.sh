@@ -8413,10 +8413,8 @@ perl -0777 -pi -e '
 
 sed_i 's|android:title="@string/prefs_section_basics"|android:title="@string/aerium_prefs_section_search"|' \
     chrome/android/java/res/xml/main_preferences.xml
-sed_i 's|android:title="@string/prefs_section_autofill"|android:title="@string/aerium_prefs_section_autofill"|' \
-    chrome/android/java/res/xml/main_preferences.xml
 
-sed_i 's|      <message name="IDS_AERIUM_MEDIA_TITLE" desc=|      <message name="IDS_AERIUM_LAYOUT_TITLE" desc="Title of the settings screen holding the bottom bar, classic tab switcher and seamless Incognito switches, and of its row in the main Settings list.">\n        Toolbar and switcher\n      </message>\n      <message name="IDS_AERIUM_LAYOUT_SUMMARY" desc="Summary under that row.">\n        Where the controls sit, and how tabs and Private windows behave\n      </message>\n      <message name="IDS_AERIUM_PREFS_SECTION_LAYOUT" desc="Heading of the Settings group holding the address bar, toolbar, tabs and homepage rows.">\n        Layout and tabs\n      </message>\n      <message name="IDS_AERIUM_PREFS_SECTION_SEARCH" desc="Heading of the Settings group holding the search engine, default browser and languages rows.">\n        Search and startup\n      </message>\n      <message name="IDS_AERIUM_PREFS_SECTION_ABOUT" desc="Heading of the Settings group holding the About Aerium row.">\n        About\n      </message>\n      <message name="IDS_AERIUM_PREFS_SECTION_AUTOFILL" desc="Heading of the Settings group holding the passwords, payment methods and addresses rows.">\n        Passwords and autofill\n      </message>\n&|' \
+sed_i 's|      <message name="IDS_AERIUM_MEDIA_TITLE" desc=|      <message name="IDS_AERIUM_LAYOUT_TITLE" desc="Title of the settings screen holding the bottom bar, classic tab switcher and seamless Incognito switches, and of its row in the main Settings list.">\n        Toolbar and switcher\n      </message>\n      <message name="IDS_AERIUM_LAYOUT_SUMMARY" desc="Summary under that row.">\n        Where the controls sit, and how tabs and Private windows behave\n      </message>\n      <message name="IDS_AERIUM_PREFS_SECTION_LAYOUT" desc="Heading of the Settings group holding the address bar, toolbar, tabs and homepage rows.">\n        Layout and tabs\n      </message>\n      <message name="IDS_AERIUM_PREFS_SECTION_SEARCH" desc="Heading of the Settings group holding the search engine, default browser and languages rows.">\n        Search and startup\n      </message>\n      <message name="IDS_AERIUM_PREFS_SECTION_ABOUT" desc="Heading of the Settings group holding the About Aerium row.">\n        About\n      </message>\n&|' \
     chrome/browser/ui/android/strings/android_chrome_strings.grd
 
 echo "[aerium] layout settings screen registered"
@@ -8454,12 +8452,6 @@ perl -0777 -pi -e '
         aerium_privacy_section => 10,
         privacy => 11,
         content_settings => 12,
-        autofill_section => 20,
-        autofill_and_passwords => 21,
-        passwords => 22,
-        autofill_payment_methods => 23,
-        autofill_addresses => 24,
-        autofill_options => 25,
         aerium_appearance_section => 30,
         appearance => 31,
         accessibility => 32,
