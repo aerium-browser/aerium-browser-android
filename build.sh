@@ -31,20 +31,7 @@ MODE_CI=0
 # elapsed calculation below covers restore too and self-corrects as the
 # checkpoint grows.
 JOB_TIMEOUT_MIN=${JOB_TIMEOUT_MIN:-350}
-# Measured over a 15-stage run: pack averages 5.7 min and upload 2.2 min,
-# so ~8 min of the reserve is actually used. At 80 every stage stopped
-# compiling at ~279 of its 350 minutes and threw away ~71 min (20%) of the
-# budget. 25 kept a wide margin over the observed 8 while returning most
-# of that time to the compile window.
-#
-# Nudged 25 -> 30 because the reserve now also has to cover the graceful
-# shutdown window below: the build backend is given time to finish writing
-# its incremental state before anything force-kills it, and that write is
-# the whole point of the stage. Overrunning the 350-min job timeout is
-# catastrophic (the runner is killed mid-step, so pack and upload never
-# happen and the ENTIRE stage is lost), whereas 5 extra minutes of reserve
-# costs 1.4% of the compile window.
-CHECKPOINT_RESERVE_MIN=${CHECKPOINT_RESERVE_MIN:-30}
+CHECKPOINT_RESERVE_MIN=${CHECKPOINT_RESERVE_MIN:-60}
 TOTAL_BUDGET_MIN=${TOTAL_BUDGET_MIN:-$((JOB_TIMEOUT_MIN - CHECKPOINT_RESERVE_MIN))}
 START_TS=${STAGE_START_TS:-$(date +%s)}
 
