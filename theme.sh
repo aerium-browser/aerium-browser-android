@@ -8100,6 +8100,166 @@ sed_i 's|      <message name="IDS_AERIUM_MEDIA_TITLE" desc=|      <message name=
 
 echo "[aerium] backup/restore settings screen registered"
 
+sed_i 's|^inline constexpr char kClearBrowsingDataOnExitList\[\] =$|inline constexpr char kAeriumGuardRequestedPreset[] =\n    "aerium_guard.requested_preset";\ninline constexpr char kAeriumGuardActivePreset[] =\n    "aerium_guard.active_preset";\n\n&|' \
+    components/browsing_data/core/pref_names.h
+
+sed_i 's|^  registry->RegisterListPref(kClearBrowsingDataOnExitList);$|&\n  registry->RegisterStringPref(kAeriumGuardRequestedPreset, std::string());\n  registry->RegisterStringPref(kAeriumGuardActivePreset, std::string());|' \
+    components/browsing_data/core/pref_names.cc
+
+sed_i 's%^uint64_t GetOriginTypeMask(const base::ListValue\& data_types) {$%struct AeriumGuardPresetValues {\n  bool do_not_track;\n  int cookie_controls_mode;\n  int network_prediction_options;\n  bool clear_data_on_exit;\n  bool search_suggest_enabled;\n  bool https_only_mode;\n  bool https_first_balanced_mode;\n  const char* webrtc_ip_handling_policy;\n  bool hyperlink_auditing;\n  bool alternate_error_pages;\n  bool can_make_payment;\n};\n\nbool AeriumGuardPresetFor(const std::string\& preset,\n                          AeriumGuardPresetValues* values) {\n  const bool privacy = preset == "privacy";\n  const bool performance = preset == "performance";\n  if (preset != "recommended" \&\& !privacy \&\& !performance) {\n    return false;\n  }\n  values->do_not_track = true;\n  values->cookie_controls_mode = 1;\n  values->hyperlink_auditing = false;\n  values->alternate_error_pages = false;\n  values->can_make_payment = false;\n  values->https_first_balanced_mode = true;\n  values->network_prediction_options = performance ? 0 : 2;\n  values->clear_data_on_exit = privacy;\n  values->search_suggest_enabled = !privacy;\n  values->https_only_mode = privacy;\n  values->webrtc_ip_handling_policy =\n      privacy ? "disable_non_proxied_udp" : "default_public_interface_only";\n  return true;\n}\n\nvoid AeriumGuardWriteBoolean(PrefService* prefs, const char* path, bool value) {\n  if (prefs->FindPreference(path)) {\n    prefs->SetBoolean(path, value);\n  }\n}\n\nvoid AeriumGuardWriteInteger(PrefService* prefs, const char* path, int value) {\n  if (prefs->FindPreference(path)) {\n    prefs->SetInteger(path, value);\n  }\n}\n\nvoid AeriumGuardWriteString(PrefService* prefs,\n                            const char* path,\n                            const char* value) {\n  if (prefs->FindPreference(path)) {\n    prefs->SetString(path, value);\n  }\n}\n\nbool AeriumGuardBooleanMatches(PrefService* prefs,\n                               const char* path,\n                               bool value) {\n  const PrefService::Preference* pref = prefs->FindPreference(path);\n  return !pref || pref->GetValue()->GetBool() == value;\n}\n\nbool AeriumGuardIntegerMatches(PrefService* prefs,\n                               const char* path,\n                               int value) {\n  const PrefService::Preference* pref = prefs->FindPreference(path);\n  return !pref || pref->GetValue()->GetInt() == value;\n}\n\nbool AeriumGuardStringMatches(PrefService* prefs,\n                              const char* path,\n                              const char* value) {\n  const PrefService::Preference* pref = prefs->FindPreference(path);\n  return !pref || pref->GetValue()->GetString() == value;\n}\n\nvoid AeriumGuardApply(PrefService* prefs,\n                      const AeriumGuardPresetValues\& values) {\n  AeriumGuardWriteBoolean(prefs, "enable_do_not_track", values.do_not_track);\n  AeriumGuardWriteInteger(prefs, "profile.cookie_controls_mode",\n                          values.cookie_controls_mode);\n  AeriumGuardWriteInteger(prefs, "net.network_prediction_options",\n                          values.network_prediction_options);\n  AeriumGuardWriteBoolean(prefs,\n                          browsing_data::prefs::kAeriumClearBrowsingDataOnExit,\n                          values.clear_data_on_exit);\n  AeriumGuardWriteBoolean(prefs, "search.suggest_enabled",\n                          values.search_suggest_enabled);\n  AeriumGuardWriteBoolean(prefs, "https_only_mode_enabled",\n                          values.https_only_mode);\n  AeriumGuardWriteBoolean(prefs, "https_first_balanced_mode_enabled",\n                          values.https_first_balanced_mode);\n  AeriumGuardWriteString(prefs, "webrtc.ip_handling_policy",\n                         values.webrtc_ip_handling_policy);\n  AeriumGuardWriteBoolean(prefs, "enable_a_ping", values.hyperlink_auditing);\n  AeriumGuardWriteBoolean(prefs, "alternate_error_pages.enabled",\n                          values.alternate_error_pages);\n  AeriumGuardWriteBoolean(prefs, "payments.can_make_payment_enabled",\n                          values.can_make_payment);\n}\n\nbool AeriumGuardMatches(PrefService* prefs,\n                        const AeriumGuardPresetValues\& values) {\n  return AeriumGuardBooleanMatches(prefs, "enable_do_not_track",\n                                   values.do_not_track) \&\&\n         AeriumGuardIntegerMatches(prefs, "profile.cookie_controls_mode",\n                                   values.cookie_controls_mode) \&\&\n         AeriumGuardIntegerMatches(prefs, "net.network_prediction_options",\n                                   values.network_prediction_options) \&\&\n         AeriumGuardBooleanMatches(\n             prefs, browsing_data::prefs::kAeriumClearBrowsingDataOnExit,\n             values.clear_data_on_exit) \&\&\n         AeriumGuardBooleanMatches(prefs, "search.suggest_enabled",\n                                   values.search_suggest_enabled) \&\&\n         AeriumGuardBooleanMatches(prefs, "https_only_mode_enabled",\n                                   values.https_only_mode) \&\&\n         AeriumGuardBooleanMatches(prefs, "https_first_balanced_mode_enabled",\n                                   values.https_first_balanced_mode) \&\&\n         AeriumGuardStringMatches(prefs, "webrtc.ip_handling_policy",\n                                  values.webrtc_ip_handling_policy) \&\&\n         AeriumGuardBooleanMatches(prefs, "enable_a_ping",\n                                   values.hyperlink_auditing) \&\&\n         AeriumGuardBooleanMatches(prefs, "alternate_error_pages.enabled",\n                                   values.alternate_error_pages) \&\&\n         AeriumGuardBooleanMatches(prefs, "payments.can_make_payment_enabled",\n                                   values.can_make_payment);\n}\n\nstd::string AeriumGuardDetect(PrefService* prefs) {\n  for (const char* name : {"recommended", "privacy", "performance"}) {\n    AeriumGuardPresetValues values;\n    if (AeriumGuardPresetFor(name, \&values) \&\&\n        AeriumGuardMatches(prefs, values)) {\n      return name;\n    }\n  }\n  return "custom";\n}\n\n&%' \
+    chrome/browser/browsing_data/chrome_browsing_data_lifetime_manager.cc
+
+sed_i 's%^  // When the service is instantiated, wait a few minutes after Chrome startup$%  pref_change_registrar_.Add(\n      browsing_data::prefs::kAeriumGuardRequestedPreset,\n      base::BindRepeating(\n          [](ChromeBrowsingDataLifetimeManager* manager) {\n            PrefService* prefs = manager->profile_->GetPrefs();\n            const std::string requested = prefs->GetString(\n                browsing_data::prefs::kAeriumGuardRequestedPreset);\n            if (requested.empty()) {\n              return;\n            }\n            prefs->SetString(browsing_data::prefs::kAeriumGuardRequestedPreset,\n                             std::string());\n            AeriumGuardPresetValues values;\n            if (AeriumGuardPresetFor(requested, \&values)) {\n              AeriumGuardApply(prefs, values);\n            }\n            prefs->SetString(browsing_data::prefs::kAeriumGuardActivePreset,\n                             AeriumGuardDetect(prefs));\n          },\n          base::Unretained(this)));\n\n  profile_->GetPrefs()->SetString(\n      browsing_data::prefs::kAeriumGuardActivePreset,\n      AeriumGuardDetect(profile_->GetPrefs()));\n\n&%' \
+    chrome/browser/browsing_data/chrome_browsing_data_lifetime_manager.cc
+
+cat > chrome/android/java/res/xml/aerium_guard_preferences.xml <<'AERIUM_GUARD_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright 2026 The Chromium Authors
+     Use of this source code is governed by a BSD-style license that can be
+     found in the LICENSE file. -->
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+    <Preference
+        android:key="aerium_guard_status"
+        android:persistent="false"
+        android:selectable="false"
+        android:title="@string/aerium_guard_status_title" />
+    <Preference
+        android:key="aerium_guard_recommended"
+        android:persistent="false"
+        android:title="@string/aerium_guard_recommended_title"
+        android:summary="@string/aerium_guard_recommended_summary" />
+    <Preference
+        android:key="aerium_guard_privacy"
+        android:persistent="false"
+        android:title="@string/aerium_guard_privacy_title"
+        android:summary="@string/aerium_guard_privacy_summary" />
+    <Preference
+        android:key="aerium_guard_performance"
+        android:persistent="false"
+        android:title="@string/aerium_guard_performance_title"
+        android:summary="@string/aerium_guard_performance_summary" />
+</PreferenceScreen>
+AERIUM_GUARD_XML
+
+sed_i 's|^  "java/res/xml/appearance_preferences.xml",$|  "java/res/xml/aerium_guard_preferences.xml",\n&|' \
+    chrome/android/chrome_java_resources.gni
+
+cat > chrome/android/java/src/org/chromium/chrome/browser/settings/AeriumGuardFragment.java <<'AERIUM_GUARD_JAVA'
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+package org.chromium.chrome.browser.settings;
+
+import android.os.Bundle;
+
+import androidx.preference.Preference;
+
+import org.chromium.base.supplier.MonotonicObservableSupplier;
+import org.chromium.base.supplier.ObservableSuppliers;
+import org.chromium.base.supplier.SettableMonotonicObservableSupplier;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
+import org.chromium.chrome.R;
+import org.chromium.chrome.browser.settings.search.ChromeBaseSearchIndexProvider;
+import org.chromium.components.browser_ui.settings.SettingsFragment;
+import org.chromium.components.browser_ui.settings.SettingsUtils;
+import org.chromium.components.prefs.PrefService;
+import org.chromium.components.user_prefs.UserPrefs;
+
+@NullMarked
+public class AeriumGuardFragment extends ChromeBaseSettingsFragment {
+    private static final String PREF_STATUS = "aerium_guard_status";
+    private static final String PREF_RECOMMENDED = "aerium_guard_recommended";
+    private static final String PREF_PRIVACY = "aerium_guard_privacy";
+    private static final String PREF_PERFORMANCE = "aerium_guard_performance";
+
+    private static final String REQUESTED_PRESET = "aerium_guard.requested_preset";
+    private static final String ACTIVE_PRESET = "aerium_guard.active_preset";
+
+    private static final String RECOMMENDED = "recommended";
+    private static final String PRIVACY = "privacy";
+    private static final String PERFORMANCE = "performance";
+
+    private final SettableMonotonicObservableSupplier<String> mPageTitle =
+            ObservableSuppliers.createMonotonic();
+
+    @Override
+    public void onCreatePreferences(@Nullable Bundle savedInstanceState, @Nullable String rootKey) {
+        SettingsUtils.addPreferencesFromResource(this, R.xml.aerium_guard_preferences);
+        mPageTitle.set(getString(R.string.aerium_guard_title));
+
+        bind(PREF_RECOMMENDED, RECOMMENDED);
+        bind(PREF_PRIVACY, PRIVACY);
+        bind(PREF_PERFORMANCE, PERFORMANCE);
+        updateStatus();
+    }
+
+    private void bind(String prefKey, String preset) {
+        Preference pref = findPreference(prefKey);
+        if (pref == null) return;
+        pref.setOnPreferenceClickListener(
+                preference -> {
+                    prefs().setString(REQUESTED_PRESET, preset);
+                    updateStatus();
+                    return true;
+                });
+    }
+
+    private PrefService prefs() {
+        return UserPrefs.get(getProfile());
+    }
+
+    private void updateStatus() {
+        Preference status = findPreference(PREF_STATUS);
+        if (status == null) return;
+        String active = prefs().getString(ACTIVE_PRESET);
+        int summary;
+        if (RECOMMENDED.equals(active)) {
+            summary = R.string.aerium_guard_active_recommended;
+        } else if (PRIVACY.equals(active)) {
+            summary = R.string.aerium_guard_active_privacy;
+        } else if (PERFORMANCE.equals(active)) {
+            summary = R.string.aerium_guard_active_performance;
+        } else {
+            summary = R.string.aerium_guard_active_custom;
+        }
+        status.setSummary(getString(summary));
+    }
+
+    @Override
+    public MonotonicObservableSupplier<String> getPageTitle() {
+        return mPageTitle;
+    }
+
+    @Override
+    public @SettingsFragment.AnimationType int getAnimationType() {
+        return SettingsFragment.AnimationType.PROPERTY;
+    }
+
+    public static final ChromeBaseSearchIndexProvider SEARCH_INDEX_DATA_PROVIDER =
+            new ChromeBaseSearchIndexProvider(
+                    AeriumGuardFragment.class.getName(), R.xml.aerium_guard_preferences);
+}
+AERIUM_GUARD_JAVA
+
+sed_i 's|^  "java/src/org/chromium/chrome/browser/browsing_data/BrowsingDataCounterBridge.java",$|  "java/src/org/chromium/chrome/browser/settings/AeriumGuardFragment.java",\n&|' \
+    chrome/android/chrome_java_sources.gni
+
+sed_i 's|^        android:title="@string/appearance_settings" />$|&\n    <Preference\n        android:fragment="org.chromium.chrome.browser.settings.AeriumGuardFragment"\n        android:key="aerium_guard"\n        android:order="21"\n        android:title="@string/aerium_guard_title"\n        android:summary="@string/aerium_guard_summary" />|' \
+    chrome/android/java/res/xml/main_preferences.xml
+
+sed_i 's|^import org.chromium.chrome.browser.browsing_data.ClearBrowsingDataFragment;$|&\nimport org.chromium.chrome.browser.settings.AeriumGuardFragment;|' \
+    $SIPR
+sed_i 's|^                    AboutChromeSettings.SEARCH_INDEX_DATA_PROVIDER,$|&\n                    AeriumGuardFragment.SEARCH_INDEX_DATA_PROVIDER,|' \
+    $SIPR
+
+sed_i 's|      <message name="IDS_AERIUM_MEDIA_TITLE" desc=|      <message name="IDS_AERIUM_GUARD_TITLE" desc="Title of the Aerium Guard settings screen and its row in the main Settings list.">\n        Aerium Guard\n      </message>\n      <message name="IDS_AERIUM_GUARD_SUMMARY" desc="Summary under that row.">\n        Set your privacy and speed options together\n      </message>\n      <message name="IDS_AERIUM_GUARD_STATUS_TITLE" desc="Title of the non-tappable row at the top of the screen that names the mode currently in effect.">\n        Current mode\n      </message>\n      <message name="IDS_AERIUM_GUARD_ACTIVE_RECOMMENDED" desc="Summary of the status row when the live settings match the Recommended mode.">\n        Recommended\n      </message>\n      <message name="IDS_AERIUM_GUARD_ACTIVE_PRIVACY" desc="Summary of the status row when the live settings match the Privacy mode.">\n        Privacy\n      </message>\n      <message name="IDS_AERIUM_GUARD_ACTIVE_PERFORMANCE" desc="Summary of the status row when the live settings match the Performance mode.">\n        Performance\n      </message>\n      <message name="IDS_AERIUM_GUARD_ACTIVE_CUSTOM" desc="Summary of the status row when the live settings match none of the three modes, because they were changed by hand.">\n        Custom\n      </message>\n      <message name="IDS_AERIUM_GUARD_RECOMMENDED_TITLE" desc="Title of the row that applies the Recommended mode.">\n        Recommended\n      </message>\n      <message name="IDS_AERIUM_GUARD_RECOMMENDED_SUMMARY" desc="Summary under the Recommended row, in plain language.">\n        A safe, balanced default: blocks cross-site tracking, keeps pages from loading before you click them, and leaves search suggestions on.\n      </message>\n      <message name="IDS_AERIUM_GUARD_PRIVACY_TITLE" desc="Title of the row that applies the Privacy mode.">\n        Privacy\n      </message>\n      <message name="IDS_AERIUM_GUARD_PRIVACY_SUMMARY" desc="Summary under the Privacy row. Names the tradeoffs rather than hiding them.">\n        Everything in Recommended, plus browsing data cleared when you close Aerium, search suggestions off so nothing you type leaves the browser, HTTPS-First in strict mode, and no non-proxied UDP for video calls. Expect more warnings on sites with self-signed certificates.\n      </message>\n      <message name="IDS_AERIUM_GUARD_PERFORMANCE_TITLE" desc="Title of the row that applies the Performance mode.">\n        Performance\n      </message>\n      <message name="IDS_AERIUM_GUARD_PERFORMANCE_SUMMARY" desc="Summary under the Performance row.">\n        The same privacy protections as Recommended, tuned for speed: pages preload before you click them.\n      </message>\n&|' \
+    chrome/browser/ui/android/strings/android_chrome_strings.grd
+
+echo "[aerium] aerium guard applied"
+
+
 
 AERIUM_MAIN_PREFS=chrome/android/java/res/xml/main_preferences.xml
 perl -0777 -pi -e '
@@ -8132,9 +8292,10 @@ perl -0777 -pi -e '
         homepage => 14,
         tabs => 16,
         aerium_privacy_section => 20,
-        privacy => 21,
-        safety_hub => 22,
-        content_settings => 23,
+        aerium_guard => 21,
+        privacy => 22,
+        safety_hub => 23,
+        content_settings => 24,
         aerium_appearance_section => 30,
         appearance => 31,
         accessibility => 32,

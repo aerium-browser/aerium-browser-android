@@ -217,15 +217,32 @@ full URL, so on desktop the address is reachable by copying that link target but
 is never displayed. Android's ⋮ menu shows it and copies it in one tap. Worth
 evening up; not a hole.
 
-## Onboarding and presets — deliberately desktop-only
+## Onboarding and presets
 
 | | Win | Linux | Android |
 |---|:--:|:--:|:--:|
+| Aerium Guard section in Settings | ✅ | ✅ | ✅ |
+| Recommended / Privacy / Performance modes | ✅ | ✅ | ✅ |
+| Detects which mode the live settings match | ✅ | ✅ | ✅ |
+| Modes also seed chrome://flags entries | ✅ | ✅ | — |
+| Modes also set Memory Saver and Battery Saver | ✅ | ✅ | — |
 | First-run preset chooser with an Apply button | ✅ | ✅ | ❌ |
-| Aerium Guard section in Settings | ✅ | ✅ | ❌ |
 | Aerium Guard shield in the address bar | ✅ | ✅ | ❌ |
 
-The presets exist on desktop because the browser ships with Chromium's defaults
-and needs a way off them. The Android build already *is* the decided set, so
-`theme.sh` documents the choice not to offer them. Revisit the Settings half if
-that reasoning stops holding; do not port the first-run chooser without one.
+The eleven profile prefs behind a mode are the same three ways up on all three
+platforms: the shared privacy floor, and what Privacy and Performance each trade
+for it. What Android does not carry is the two halves that have no Android
+meaning. The flags a desktop mode seeds are ungoogled-chromium entries, and this
+build is Vanadium-based and does not have them. Memory Saver, Battery Saver and
+background mode are local-state prefs registered only for desktop, so there is
+nothing on Android to write.
+
+Android applies a mode from native rather than from the settings fragment, and
+every write is guarded by `FindPreference()`. A pref path Vanadium happens not to
+register is then a skipped write instead of the `CHECK` failure the Java
+`PrefService` would raise.
+
+The first-run chooser stays desktop-only. Desktop ships with Chromium's defaults
+and needs a way off them at first launch; the Android build already *is* the
+decided set, and Guard there is for changing your mind later rather than for
+being asked on the way in.
