@@ -3,7 +3,7 @@
 # Renders the Aerium logo over an existing icon PNG, keeping its dimensions.
 # Usage: icons.sh <path-to-png>
 svg=$(dirname "$0")/aerium.svg
-tile=$(dirname "$0")/aerium_tile.svg
+field='#F2F7FD'
 w=$(identify -format %w "$1")
 
 
@@ -44,15 +44,7 @@ adaptive_pct=48
 legacy_pct=54
 
 render_tile() {
-    rsvg-convert -w $w -h $w "$tile" -o "$1"
-}
-
-render_on_tile() {
-    fg=$((w * $2 / 100))
-    rsvg-convert -w $w -h $w "$tile" -o "$1.bg.png"
-    rsvg-convert -w $fg -h $fg "$svg" -o "$1.fg.png"
-    convert "$1.bg.png" "$1.fg.png" -gravity center -composite "$1"
-    rm -f "$1.bg.png" "$1.fg.png"
+    convert -size ${w}x${w} xc:"$field" "$1"
 }
 
 render_over() {
@@ -68,6 +60,6 @@ case $(basename "$1") in
   layered_app_icon_foreground*)
     render_over "$1" $adaptive_pct none ;;
   *)
-    render_on_tile "$1" $legacy_pct ;;
+    render_over "$1" $legacy_pct "$field" ;;
 esac
 echo "aerium icon: $1 (${w}px)"
