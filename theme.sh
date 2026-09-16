@@ -7190,6 +7190,17 @@ perl -0777 -pi -e '
 
 echo "[aerium] gemini surfaces disabled at GlicEnabling"
 
+PARTNERSHIM=chrome/browser/partnerbookmarks/android/java/src/org/chromium/chrome/browser/partnerbookmarks/PartnerBookmarksShim.java
+perl -0777 -pi -e '
+    s{        reader\.readBookmarks\(bookmarkIterator\);\n}
+     {        reader.onBookmarksRead();\n}
+        or die "[aerium] FATAL: PartnerBookmarksShim.kickOffReading() no longer "
+             . "calls reader.readBookmarks(bookmarkIterator) - upstream "
+             . "restructured the partner bookmark entry point\n";
+' $PARTNERSHIM
+
+echo "[aerium] partner bookmarks never read"
+
 
 # --- A "Support Aerium" row on Settings -> About Aerium, next to Legal
 # information.
