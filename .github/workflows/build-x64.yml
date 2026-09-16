@@ -56,7 +56,7 @@ permissions:
 # before, costs nothing - a resume has no deadline - and leaves superseding to
 # the one event that should do it.
 concurrency:
-  group: aerium-android-build-x64
+  group: build-x64-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'push' }}
 
 jobs:

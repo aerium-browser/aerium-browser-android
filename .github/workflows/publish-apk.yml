@@ -41,7 +41,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: aerium-android-publish-${{ inputs.arch }}
+  group: publish-apk-${{ inputs.arch }}
   cancel-in-progress: false
 
 jobs:
