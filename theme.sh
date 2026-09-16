@@ -7734,8 +7734,8 @@ public class AeriumBackupFragment extends ChromeBaseSettingsFragment {
                                 }
                                 try {
                                     applyBackup(new JSONObject(finalJson));
-                                    showRestartSnackbar(
-                                            R.string.aerium_backup_restore_restart);
+                                    showToast(R.string.aerium_backup_restore_done);
+                                    showRestartSnackbar();
                                 } catch (JSONException e) {
                                     showToast(R.string.aerium_backup_restore_failed);
                                 }
@@ -7743,13 +7743,13 @@ public class AeriumBackupFragment extends ChromeBaseSettingsFragment {
                 });
     }
 
-    private void showRestartSnackbar(int messageResId) {
+    private void showRestartSnackbar() {
         Activity activity = getActivity();
         if (!(activity instanceof SnackbarManageable)) return;
         SnackbarManager manager = ((SnackbarManageable) activity).getSnackbarManager();
         manager.showSnackbar(
                 Snackbar.make(
-                                getString(messageResId),
+                                getString(R.string.aerium_restart_to_apply),
                                 new SnackbarManager.SnackbarController() {
                                     @Override
                                     public void onAction(@Nullable Object actionData) {
@@ -8117,7 +8117,7 @@ sed_i 's|^import org.chromium.chrome.browser.browsing_data.ClearBrowsingDataFrag
 sed_i 's|^                    AboutChromeSettings.SEARCH_INDEX_DATA_PROVIDER,$|&\n                    AeriumBackupFragment.SEARCH_INDEX_DATA_PROVIDER,|' \
     $SIPR
 
-sed_i 's|      <message name="IDS_AERIUM_MEDIA_TITLE" desc=|      <message name="IDS_AERIUM_BACKUP_TITLE" desc="Title of the Backup and restore settings screen, and its row in the main Settings list.">\n        Backup and restore\n      </message>\n      <message name="IDS_AERIUM_BACKUP_SUMMARY" desc="Summary under that row.">\n        Save or bring back your open tabs, site permissions and settings\n      </message>\n      <message name="IDS_AERIUM_BACKUP_EXPORT_TITLE" desc="Row that saves a backup file.">\n        Export backup\n      </message>\n      <message name="IDS_AERIUM_BACKUP_EXPORT_SUMMARY" desc="Summary under that row, naming what is and is not included.">\n        Open tabs, site permissions and Aerium'"'"'s own settings. Not passwords, history or cookies.\n      </message>\n      <message name="IDS_AERIUM_BACKUP_RESTORE_TITLE" desc="Row that reads a previously saved backup file.">\n        Restore from backup\n      </message>\n      <message name="IDS_AERIUM_BACKUP_RESTORE_SUMMARY" desc="Summary under that row.">\n        Adds tabs, permissions and settings from a backup file. Nothing already here is removed.\n      </message>\n      <message name="IDS_AERIUM_BACKUP_EXPORT_DONE" desc="Toast shown after a backup file is written successfully.">\n        Backup saved\n      </message>\n      <message name="IDS_AERIUM_BACKUP_EXPORT_FAILED" desc="Toast shown when saving the backup file failed.">\n        Could not save the backup\n      </message>\n      <message name="IDS_AERIUM_BACKUP_RESTORE_RESTART" desc="Snackbar shown after a backup is restored, offering a relaunch. Says plainly that some of what was restored is only read when the browser starts.">\n        Backup restored. Some of it only takes effect after a restart.\n      </message>\n      <message name="IDS_AERIUM_BACKUP_RESTORE_FAILED" desc="Toast shown when the chosen file could not be read as a backup.">\n        Could not read that backup file\n      </message>\n&|' \
+sed_i 's|      <message name="IDS_AERIUM_MEDIA_TITLE" desc=|      <message name="IDS_AERIUM_BACKUP_TITLE" desc="Title of the Backup and restore settings screen, and its row in the main Settings list.">\n        Backup and restore\n      </message>\n      <message name="IDS_AERIUM_BACKUP_SUMMARY" desc="Summary under that row.">\n        Save or bring back your open tabs, site permissions and settings\n      </message>\n      <message name="IDS_AERIUM_BACKUP_EXPORT_TITLE" desc="Row that saves a backup file.">\n        Export backup\n      </message>\n      <message name="IDS_AERIUM_BACKUP_EXPORT_SUMMARY" desc="Summary under that row, naming what is and is not included.">\n        Open tabs, site permissions and Aerium'"'"'s own settings. Not passwords, history or cookies.\n      </message>\n      <message name="IDS_AERIUM_BACKUP_RESTORE_TITLE" desc="Row that reads a previously saved backup file.">\n        Restore from backup\n      </message>\n      <message name="IDS_AERIUM_BACKUP_RESTORE_SUMMARY" desc="Summary under that row.">\n        Adds tabs, permissions and settings from a backup file. Nothing already here is removed.\n      </message>\n      <message name="IDS_AERIUM_BACKUP_EXPORT_DONE" desc="Toast shown after a backup file is written successfully.">\n        Backup saved\n      </message>\n      <message name="IDS_AERIUM_BACKUP_EXPORT_FAILED" desc="Toast shown when saving the backup file failed.">\n        Could not save the backup\n      </message>\n      <message name="IDS_AERIUM_BACKUP_RESTORE_DONE" desc="Toast shown after a backup file is read and applied successfully.">\n        Backup restored\n      </message>\n      <message name="IDS_AERIUM_BACKUP_RESTORE_FAILED" desc="Toast shown when the chosen file could not be read as a backup.">\n        Could not read that backup file\n      </message>\n&|' \
     chrome/browser/ui/android/strings/android_chrome_strings.grd
 
 echo "[aerium] backup/restore settings screen registered"
@@ -8231,7 +8231,7 @@ public class AeriumGuardFragment extends ChromeBaseSettingsFragment {
                 preference -> {
                     prefs().setString(REQUESTED_PRESET, preset);
                     updateStatus();
-                    showRestartSnackbar(R.string.aerium_guard_applied);
+                    showRestartSnackbar();
                     return true;
                 });
     }
@@ -8240,13 +8240,13 @@ public class AeriumGuardFragment extends ChromeBaseSettingsFragment {
         return UserPrefs.get(getProfile());
     }
 
-    private void showRestartSnackbar(int messageResId) {
+    private void showRestartSnackbar() {
         Activity activity = getActivity();
         if (!(activity instanceof SnackbarManageable)) return;
         SnackbarManager manager = ((SnackbarManageable) activity).getSnackbarManager();
         manager.showSnackbar(
                 Snackbar.make(
-                                getString(messageResId),
+                                getString(R.string.aerium_restart_to_apply),
                                 new SnackbarManager.SnackbarController() {
                                     @Override
                                     public void onAction(@Nullable Object actionData) {
@@ -8303,7 +8303,7 @@ sed_i 's|^import org.chromium.chrome.browser.browsing_data.ClearBrowsingDataFrag
 sed_i 's|^                    AboutChromeSettings.SEARCH_INDEX_DATA_PROVIDER,$|&\n                    AeriumGuardFragment.SEARCH_INDEX_DATA_PROVIDER,|' \
     $SIPR
 
-sed_i 's|      <message name="IDS_AERIUM_MEDIA_TITLE" desc=|      <message name="IDS_AERIUM_GUARD_TITLE" desc="Title of the Aerium Guard settings screen and its row in the main Settings list.">\n        Aerium Guard\n      </message>\n      <message name="IDS_AERIUM_GUARD_SUMMARY" desc="Summary under that row.">\n        Set your privacy and speed options together\n      </message>\n      <message name="IDS_AERIUM_GUARD_STATUS_TITLE" desc="Title of the non-tappable row at the top of the screen that names the mode currently in effect.">\n        Current mode\n      </message>\n      <message name="IDS_AERIUM_GUARD_ACTIVE_RECOMMENDED" desc="Summary of the status row when the live settings match the Recommended mode.">\n        Recommended\n      </message>\n      <message name="IDS_AERIUM_GUARD_ACTIVE_PRIVACY" desc="Summary of the status row when the live settings match the Privacy mode.">\n        Privacy\n      </message>\n      <message name="IDS_AERIUM_GUARD_ACTIVE_PERFORMANCE" desc="Summary of the status row when the live settings match the Performance mode.">\n        Performance\n      </message>\n      <message name="IDS_AERIUM_GUARD_ACTIVE_CUSTOM" desc="Summary of the status row when the live settings match none of the three modes, because they were changed by hand.">\n        Custom\n      </message>\n      <message name="IDS_AERIUM_GUARD_RECOMMENDED_TITLE" desc="Title of the row that applies the Recommended mode.">\n        Recommended\n      </message>\n      <message name="IDS_AERIUM_GUARD_RECOMMENDED_SUMMARY" desc="Summary under the Recommended row, in plain language.">\n        A safe, balanced default: blocks cross-site tracking, keeps pages from loading before you click them, and leaves search suggestions on.\n      </message>\n      <message name="IDS_AERIUM_GUARD_PRIVACY_TITLE" desc="Title of the row that applies the Privacy mode.">\n        Privacy\n      </message>\n      <message name="IDS_AERIUM_GUARD_PRIVACY_SUMMARY" desc="Summary under the Privacy row. Names the tradeoffs rather than hiding them.">\n        Everything in Recommended, plus browsing data cleared when you close Aerium, search suggestions off so nothing you type leaves the browser, HTTPS-First in strict mode, and no non-proxied UDP for video calls. Expect more warnings on sites with self-signed certificates.\n      </message>\n      <message name="IDS_AERIUM_GUARD_PERFORMANCE_TITLE" desc="Title of the row that applies the Performance mode.">\n        Performance\n      </message>\n      <message name="IDS_AERIUM_GUARD_PERFORMANCE_SUMMARY" desc="Summary under the Performance row.">\n        The same privacy protections as Recommended, tuned for speed: pages preload before you click them.\n      </message>\n      <message name="IDS_AERIUM_GUARD_APPLIED" desc="Snackbar shown after a mode is applied, offering a relaunch. Most of a mode takes effect at once, so this says so rather than implying a restart is required.">\n        Mode applied. A few of its settings only take effect after a restart.\n      </message>\n&|' \
+sed_i 's|      <message name="IDS_AERIUM_MEDIA_TITLE" desc=|      <message name="IDS_AERIUM_GUARD_TITLE" desc="Title of the Aerium Guard settings screen and its row in the main Settings list.">\n        Aerium Guard\n      </message>\n      <message name="IDS_AERIUM_GUARD_SUMMARY" desc="Summary under that row.">\n        Set your privacy and speed options together\n      </message>\n      <message name="IDS_AERIUM_GUARD_STATUS_TITLE" desc="Title of the non-tappable row at the top of the screen that names the mode currently in effect.">\n        Current mode\n      </message>\n      <message name="IDS_AERIUM_GUARD_ACTIVE_RECOMMENDED" desc="Summary of the status row when the live settings match the Recommended mode.">\n        Recommended\n      </message>\n      <message name="IDS_AERIUM_GUARD_ACTIVE_PRIVACY" desc="Summary of the status row when the live settings match the Privacy mode.">\n        Privacy\n      </message>\n      <message name="IDS_AERIUM_GUARD_ACTIVE_PERFORMANCE" desc="Summary of the status row when the live settings match the Performance mode.">\n        Performance\n      </message>\n      <message name="IDS_AERIUM_GUARD_ACTIVE_CUSTOM" desc="Summary of the status row when the live settings match none of the three modes, because they were changed by hand.">\n        Custom\n      </message>\n      <message name="IDS_AERIUM_GUARD_RECOMMENDED_TITLE" desc="Title of the row that applies the Recommended mode.">\n        Recommended\n      </message>\n      <message name="IDS_AERIUM_GUARD_RECOMMENDED_SUMMARY" desc="Summary under the Recommended row, in plain language.">\n        A safe, balanced default: blocks cross-site tracking, keeps pages from loading before you click them, and leaves search suggestions on.\n      </message>\n      <message name="IDS_AERIUM_GUARD_PRIVACY_TITLE" desc="Title of the row that applies the Privacy mode.">\n        Privacy\n      </message>\n      <message name="IDS_AERIUM_GUARD_PRIVACY_SUMMARY" desc="Summary under the Privacy row. Names the tradeoffs rather than hiding them.">\n        Everything in Recommended, plus browsing data cleared when you close Aerium, search suggestions off so nothing you type leaves the browser, HTTPS-First in strict mode, and no non-proxied UDP for video calls. Expect more warnings on sites with self-signed certificates.\n      </message>\n      <message name="IDS_AERIUM_GUARD_PERFORMANCE_TITLE" desc="Title of the row that applies the Performance mode.">\n        Performance\n      </message>\n      <message name="IDS_AERIUM_GUARD_PERFORMANCE_SUMMARY" desc="Summary under the Performance row.">\n        The same privacy protections as Recommended, tuned for speed: pages preload before you click them.\n      </message>\n&|' \
     chrome/browser/ui/android/strings/android_chrome_strings.grd
 
 echo "[aerium] aerium guard applied"
