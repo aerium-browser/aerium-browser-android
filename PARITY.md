@@ -189,7 +189,6 @@ that a browser with no phone-home never receives.
 | About page points at the project | ✅ | ✅ | ✅ |
 | Startpage default, nine privacy-first engines offered | ✅ | ✅ | ✅ |
 | Secure DNS menu: Mullvad, Quad9, NextDNS, no Google | ✅ | ✅ | ✅ |
-| Aerogel: a tab with its own throwaway cookie jar | ✅ | ✅ | ❌ |
 | Search widget shows the logo, not the launcher tile | — | — | ✅ |
 | "You and Google" renamed, Google-services block removed | ✅ | ✅ | — |
 
