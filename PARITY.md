@@ -98,17 +98,24 @@ about OLED phone panels and does not carry to a desktop monitor.
 
 | | Win | Linux | Android |
 |---|:--:|:--:|:--:|
-| Own shortcuts grid, not history-derived tiles | ✅ chrome://aerium-newtab | ✅ chrome://aerium-newtab | ✅ speed dial |
-| Background: solid, Aerium navy, or a photo you pick | ✅ | ✅ | ✅ |
-| Clock and date | ✅ | ✅ | ✅ |
-| Greeting, with an optional name | ✅ | ✅ | ✅ |
-| Quote of the day, from a list built into the browser | ✅ | ✅ | ✅ |
+| Own shortcuts grid, not history-derived tiles | ✅ chrome://aerium-newtab | ✅ chrome://aerium-newtab | — extension |
+| Background: solid, Aerium navy, or a photo you pick | ✅ | ✅ | — extension |
+| Clock and date | ✅ | ✅ | — extension |
+| Greeting, with an optional name | ✅ | ✅ | — extension |
+| Quote of the day, from a list built into the browser | ✅ | ✅ | — extension |
+| History-derived Most Visited tiles suppressed | ✅ | ✅ | ✅ |
 
-Two different pages behind one feature set, deliberately: desktop's new tab
-page is a WebUI page whatever we do, so it is one there; Android's is native
-views, matching how the rest of that build is built. Nothing on either one is
-ever fetched - no live backgrounds, no weather, no feeds - which is the line
-this project draws around a page every tab opens on by default.
+Desktop's new tab page is a WebUI page whatever we do, so the feature set above
+is built into it, and nothing on it is ever fetched - no live backgrounds, no
+weather, no feeds - which is the line this project draws around a page every tab
+opens on by default.
+
+Android ships no new tab page of its own. What it ships instead is the ability
+for an extension to be one, through Chromium's own chrome_url_overrides.newtab
+mechanism, which upstream gates behind a flag that assumes extensions are
+desktop-only and this build turns on. With no such extension installed, a new
+tab is the search box and nothing else: the Most Visited tiles stay suppressed,
+so the page never derives anything from browsing history.
 
 ## Performance and battery
 
