@@ -7201,6 +7201,17 @@ perl -0777 -pi -e '
 
 echo "[aerium] partner bookmarks never read"
 
+PARTNERDELEGATE=chrome/browser/partnercustomizations/java/src/org/chromium/chrome/browser/partnercustomizations/CustomizationProviderDelegateUpstreamImpl.java
+perl -0777 -pi -e '
+    s{\n        return sValid;\n    \}}
+     {\n        return false;\n    \}}
+        or die "[aerium] FATAL: CustomizationProviderDelegateUpstreamImpl.isValid() "
+             . "no longer ends in return sValid - upstream restructured the "
+             . "partner customization gate\n";
+' $PARTNERDELEGATE
+
+echo "[aerium] partner customizations never applied"
+
 
 # --- A "Support Aerium" row on Settings -> About Aerium, next to Legal
 # information.
