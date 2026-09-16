@@ -97,13 +97,6 @@ done
 sed_i 's|Copyright <ph name="year">%1$d<ex>2014</ex></ph> Google LLC. All rights reserved.|Aerium. Copyright <ph name="year">%1$d<ex>2014</ex></ph> Dioide. All rights reserved.|' \
     chrome/browser/ui/android/strings/android_chrome_strings.grd
 
-# --- Ungoogled-style privacy default: disable Safe Browsing by default. It
-# is the main recurring Google phone-home on Android (URL/reputation pings);
-# ungoogled-chromium removes it at build level. Left toggleable in
-# Settings -> Privacy and security for users who want it.
-sed -i 's/prefs::kSafeBrowsingEnabled, true,/prefs::kSafeBrowsingEnabled, false,/' \
-    components/safe_browsing/core/common/safe_browsing_prefs.cc
-
 # --- Use the Android Autofill framework by default so third-party password
 # managers (Bitwarden etc.) fill web forms natively instead of relying on
 # flaky accessibility-based compatibility mode. User-changeable in
@@ -657,18 +650,18 @@ sed_i '/^        \/\/ TODO(crbug.com\/40242060): Remove the passwords managed su
 # page load) by default - trades a little latency for meaningfully less
 # background radio/network activity. User-changeable in
 # Settings -> Privacy and security -> Preload pages.
-sed -i 's/static_cast<int>(NetworkPredictionOptions::kDefault),/static_cast<int>(NetworkPredictionOptions::kDisabled),/' \
+sed_i 's/static_cast<int>(NetworkPredictionOptions::kDefault),/static_cast<int>(NetworkPredictionOptions::kDisabled),/' \
     chrome/browser/preloading/preloading_prefs.cc
 
 # Disable Optimization Guide (hints fetching + on-device target prediction
 # model downloads/updates) - periodic background network chatter with no
 # user-facing toggle on Android.
-sed -i 's/BASE_FEATURE(kOptimizationHints, base::FEATURE_ENABLED_BY_DEFAULT);/BASE_FEATURE(kOptimizationHints, base::FEATURE_DISABLED_BY_DEFAULT);/; s/BASE_FEATURE(kOptimizationTargetPrediction, base::FEATURE_ENABLED_BY_DEFAULT);/BASE_FEATURE(kOptimizationTargetPrediction, base::FEATURE_DISABLED_BY_DEFAULT);/' \
+sed_i 's/BASE_FEATURE(kOptimizationHints, base::FEATURE_ENABLED_BY_DEFAULT);/BASE_FEATURE(kOptimizationHints, base::FEATURE_DISABLED_BY_DEFAULT);/; s/BASE_FEATURE(kOptimizationTargetPrediction, base::FEATURE_ENABLED_BY_DEFAULT);/BASE_FEATURE(kOptimizationTargetPrediction, base::FEATURE_DISABLED_BY_DEFAULT);/' \
     components/optimization_guide/core/optimization_guide_features.cc
 
 # Disable Domain Reliability (periodic diagnostic beacons to Google about
 # request failures/latency on Google-owned domains).
-sed -i 's/registry->RegisterBooleanPref(prefs::kDomainReliabilityAllowedByPolicy, true);/registry->RegisterBooleanPref(prefs::kDomainReliabilityAllowedByPolicy, false);/' \
+sed_i 's/registry->RegisterBooleanPref(prefs::kDomainReliabilityAllowedByPolicy, true);/registry->RegisterBooleanPref(prefs::kDomainReliabilityAllowedByPolicy, false);/' \
     components/domain_reliability/domain_reliability_prefs.cc
 
 # Disable Interest Feed V2 (the Discover feed on the New Tab Page) - a
@@ -1340,7 +1333,7 @@ sed_i 's|^    interactive_detector->OnPageHiddenChanged(hidden());$|    interact
 # with a gradual auto-enable heuristic for "typically secure" users that is
 # itself feature-flagged off at this version - so nobody gets it without
 # this flip. User-changeable in Settings -> Privacy and security -> Security.
-sed -i 's/prefs::kHttpsFirstBalancedMode, false,/prefs::kHttpsFirstBalancedMode, true,/' \
+sed_i 's/prefs::kHttpsFirstBalancedMode, false,/prefs::kHttpsFirstBalancedMode, true,/' \
     chrome/browser/ui/browser_ui_prefs.cc
 
 # --- Global Privacy Control (https://w3c.github.io/gpc/). Chromium 152
@@ -1404,7 +1397,7 @@ sed -i '/^const FeatureEntry kFeatureEntries\[\] = {$/a\
      "Registers the Widevine CDM so DRM-protected sites can play back content. Off by default - Aerium flag.",\
      kOsAll, SINGLE_VALUE_TYPE("enable-widevine")},
 ' chrome/browser/about_flags.cc
-sed -i '/^  AddWidevine(cdms);$/c\
+sed_i '/^  AddWidevine(cdms);$/c\
   // Off by default - Aerium doesn'"'"'t bundle Google'"'"'s proprietary CDM, and\
   // registering it unconditionally means every DRM-gated site can silently\
   // probe for it. Users who want DRM playback turn it on at\
@@ -1427,7 +1420,7 @@ sed -i '/^  AddWidevine(cdms);$/c\
 # kFeatureEntries, same as the enable-widevine flag above - no separate
 # ungoogled_flag_choices.h/ungoogled_flag_entries.h indirection needed since
 # Vanadium isn't ungoogled-chromium-based.
-sed -i '/^const FeatureEntry kFeatureEntries\[\] = {$/i\
+sed_i '/^const FeatureEntry kFeatureEntries\[\] = {$/i\
 const FeatureEntry::Choice kExtensionHandlingChoices[] = {\
     {flags_ui::kGenericExperimentChoiceDefault, "", ""},\
     {"Download as regular file",\
@@ -1438,7 +1431,7 @@ const FeatureEntry::Choice kExtensionHandlingChoices[] = {\
      "always-prompt-for-install"},\
 };\
 ' chrome/browser/about_flags.cc
-sed -i '/^const FeatureEntry kFeatureEntries\[\] = {$/a\
+sed_i '/^const FeatureEntry kFeatureEntries\[\] = {$/a\
     {"extension-mime-request-handling",\
      "Handling of extension MIME type requests",\
      "Used when deciding how to handle a request for a CRX or User Script MIME type. Aerium flag, ported from ungoogled-chromium.",\
@@ -1449,10 +1442,10 @@ sed -i '/^const FeatureEntry kFeatureEntries\[\] = {$/a\
 # trusted-site extension downloads unless "always prompt for install" is
 # selected, and treat CRX/user-script downloads as regular files when
 # "download as regular file" is selected.
-sed -i '/^#include "extensions\/buildflags\/buildflags.h"$/i\
+sed_i '/^#include "extensions\/buildflags\/buildflags.h"$/i\
 #include "extensions/browser/extension_util.h"' \
     chrome/browser/download/download_target_determiner.cc
-sed -i '/^  \/\/ Don.t prompt for extension downloads if the installation site is allow$/,/^    return DownloadConfirmationReason::NONE;$/c\
+sed_i '/^  \/\/ Don.t prompt for extension downloads if the installation site is allow$/,/^    return DownloadConfirmationReason::NONE;$/c\
   if (!extensions::util::ShouldDownloadAsRegularFile()) {\
     // Don'"'"'t prompt for extension downloads.\
     if (download_crx_util::IsTrustedExtensionDownload(GetProfile(), *download_) ||\
@@ -1468,7 +1461,7 @@ sed -i '/^bool ExtensionManagement::IsOffstoreInstallAllowed($/,/^    const GURL
     return true;\
   }
 }' chrome/browser/extensions/extension_management.cc
-sed -i '/^bool IsExtensionDownload(const download::DownloadItem\& download_item) {$/i\
+sed_i '/^bool IsExtensionDownload(const download::DownloadItem\& download_item) {$/i\
 bool ShouldDownloadAsRegularFile() {\
     const base::CommandLine\& command_line =\
         *base::CommandLine::ForCurrentProcess();\
@@ -1482,7 +1475,7 @@ bool ShouldDownloadAsRegularFile() {\
 sed -i '/^  if (download_item.GetMimeType() == Extension::kMimeType) {$/{n
 s/^    return true;$/    return !ShouldDownloadAsRegularFile();/
 }' extensions/browser/extension_util.cc
-sed -i '/^\/\/ Returns true if this is an extension download\. This also considers user$/i\
+sed_i '/^\/\/ Returns true if this is an extension download\. This also considers user$/i\
 // Returns true if the user wants all extensions to be downloaded as regular\
 // files.\
 bool ShouldDownloadAsRegularFile();\
@@ -1492,7 +1485,7 @@ bool ShouldDownloadAsRegularFile();\
 # security backstop, not an opt-in feature the way the rest of Aerium's
 # privacy flags are treated, so it stays the one silently-seeded default.
 # Matches Windows/Linux's default-flags.patch exactly (same shared file).
-sed -i 's/^  registry->RegisterListPref(prefs::kAboutFlagsEntries);$/  \/\/ Silently seed just this one flag by default (security backstop - don'"'"'t\
+sed_i 's/^  registry->RegisterListPref(prefs::kAboutFlagsEntries);$/  \/\/ Silently seed just this one flag by default (security backstop - don'"'"'t\
   \/\/ silently download-and-run a CRX\/user-script MIME type without asking\
   \/\/ first). Aerium'"'"'s other recommended privacy flags are listed as opt-in\
   \/\/ choices instead, so picking them is a visible decision.\
@@ -2010,17 +2003,17 @@ sed -i '/^  data: \[$/a\
 # get*ClientRect*() noise: precompute a per-document scale factor, applied to
 # Element.getClientRects()/getBoundingClientRect() and Range.getClientRects()/
 # getBoundingClientRect() readouts.
-sed -i '/^#include "base\/notreached.h"$/a\
+sed_i '/^#include "base\/notreached.h"$/a\
 #include "base/rand_util.h"' \
     third_party/blink/renderer/core/dom/document.cc
-sed -i '/^  DCHECK(agent_);$/a\
+sed_i '/^  DCHECK(agent_);$/a\
   if (RuntimeEnabledFeatures::FingerprintingClientRectsNoiseEnabled()) {\
     // Precompute -0.0003% to 0.0003% noise factor for get*ClientRect*() fingerprinting\
     noise_factor_x_ = 1 + (base::RandDouble() - 0.5) * 0.000003;\
     noise_factor_y_ = 1 + (base::RandDouble() - 0.5) * 0.000003;\
   }' \
     third_party/blink/renderer/core/dom/document.cc
-sed -i '/^SelectorQueryCache& Document::GetSelectorQueryCache() {$/i\
+sed_i '/^SelectorQueryCache& Document::GetSelectorQueryCache() {$/i\
 double Document::GetNoiseFactorX() {\
   return noise_factor_x_;\
 }\
@@ -2030,18 +2023,18 @@ double Document::GetNoiseFactorY() {\
 }\
 ' \
     third_party/blink/renderer/core/dom/document.cc
-sed -i '/^  V8VisibilityState visibilityState() const;$/i\
+sed_i '/^  V8VisibilityState visibilityState() const;$/i\
   // Values for get*ClientRect fingerprint deception\
   double GetNoiseFactorX();\
   double GetNoiseFactorY();\
 ' \
     third_party/blink/renderer/core/dom/document.h
-sed -i '/^  base::ElapsedTimer start_time_;$/a\
+sed_i '/^  base::ElapsedTimer start_time_;$/a\
 \
   double noise_factor_x_ = 1;\
   double noise_factor_y_ = 1;' \
     third_party/blink/renderer/core/dom/document.h
-sed -i '/^    result.emplace_back(quad.BoundingBox());$/i\
+sed_i '/^    result.emplace_back(quad.BoundingBox());$/i\
     if (RuntimeEnabledFeatures::FingerprintingClientRectsNoiseEnabled()) {\
       quad.Scale(GetDocument().GetNoiseFactorX(), GetDocument().GetNoiseFactorY());\
     }' \
@@ -2052,7 +2045,7 @@ sed -i '/AdjustRectForScrollAndAbsoluteZoom(result,/{n;a\
   }
 }' \
     third_party/blink/renderer/core/dom/element.cc
-sed -i '/^  return MakeGarbageCollected<DOMRectList>(quads);$/i\
+sed_i '/^  return MakeGarbageCollected<DOMRectList>(quads);$/i\
   if (RuntimeEnabledFeatures::FingerprintingClientRectsNoiseEnabled()) {\
     for (gfx::QuadF\& quad : quads) {\
       quad.Scale(owner_document_->GetNoiseFactorX(), owner_document_->GetNoiseFactorY());\
@@ -2060,7 +2053,7 @@ sed -i '/^  return MakeGarbageCollected<DOMRectList>(quads);$/i\
   }\
 ' \
     third_party/blink/renderer/core/dom/range.cc
-sed -i 's/^  return DOMRect::FromRectF(BoundingRect());$/  auto rect = BoundingRect();\
+sed_i 's/^  return DOMRect::FromRectF(BoundingRect());$/  auto rect = BoundingRect();\
   if (RuntimeEnabledFeatures::FingerprintingClientRectsNoiseEnabled()) {\
     rect.Scale(owner_document_->GetNoiseFactorX(), owner_document_->GetNoiseFactorY());\
   }\
@@ -2069,11 +2062,11 @@ sed -i 's/^  return DOMRect::FromRectF(BoundingRect());$/  auto rect = BoundingR
 
 # Canvas measureText() noise: scale the returned TextMetrics by the same
 # per-document factor.
-sed -i '/^ private:$/i\
+sed_i '/^ private:$/i\
   void Shuffle(const double factor);\
 ' \
     third_party/blink/renderer/core/html/canvas/text_metrics.h
-sed -i '/^void TextMetrics::Update(const Font\* font,$/i\
+sed_i '/^void TextMetrics::Update(const Font\* font,$/i\
 void TextMetrics::Shuffle(const double factor) {\
   // x-direction\
   width_ *= factor;\
@@ -2093,14 +2086,14 @@ void TextMetrics::Shuffle(const double factor) {\
 }\
 ' \
     third_party/blink/renderer/core/html/canvas/text_metrics.cc
-sed -i '/^\/\/ IWYU pragma: no_include "base\/numerics\/clamped_math.h"$/a\
+sed_i '/^\/\/ IWYU pragma: no_include "base\/numerics\/clamped_math.h"$/a\
 \
 #include "third_party/blink/renderer/core/offscreencanvas/offscreen_canvas.h"\
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"' \
     third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
-sed -i 's/^  return MakeGarbageCollected<TextMetrics>($/  TextMetrics* text_metrics = MakeGarbageCollected<TextMetrics>(/' \
+sed_i 's/^  return MakeGarbageCollected<TextMetrics>($/  TextMetrics* text_metrics = MakeGarbageCollected<TextMetrics>(/' \
     third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
-sed -i 's/^      host->GetPlainTextPainter());$/      host->GetPlainTextPainter());\
+sed_i 's/^      host->GetPlainTextPainter());$/      host->GetPlainTextPainter());\
 \
   \/\/ Scale text metrics if enabled\
   if (RuntimeEnabledFeatures::FingerprintingCanvasMeasureTextNoiseEnabled()) {\
@@ -2119,7 +2112,7 @@ sed -i 's/^      host->GetPlainTextPainter());$/      host->GetPlainTextPainter(
 # Canvas image-data noise: slightly perturb up to 10 pixels of ImageData
 # readback (getImageData/toBlob/toDataURL) - imperceptible visually, breaks
 # byte-for-byte canvas fingerprint hashing.
-sed -i 's/^  include_dirs = \[\]$/  include_dirs = [\
+sed_i 's/^  include_dirs = \[\]$/  include_dirs = [\
     "\/\/third_party\/skia\/include\/private", # For shuffler in graphics\/static_bitmap_image.cc\
   ]/' \
     third_party/blink/renderer/platform/BUILD.gn
@@ -2128,24 +2121,24 @@ sed -i 's/^  include_dirs = \[\]$/  include_dirs = [\
 # warnings-as-errors build (ungoogled-chromium-windows compiles the identical
 # upstream bromite code only because it sets treat_warnings_as_errors=false).
 # File-level opt-out is the mechanism docs/unsafe_buffers.md prescribes.
-sed -i '/^#include "third_party\/blink\/renderer\/platform\/graphics\/static_bitmap_image.h"$/i\
+sed_i '/^#include "third_party\/blink\/renderer\/platform\/graphics\/static_bitmap_image.h"$/i\
 #ifdef UNSAFE_BUFFERS_BUILD\
 // The Bromite canvas shuffler below does raw per-pixel pointer arithmetic.\
 #pragma allow_unsafe_buffers\
 #endif\
 ' \
     third_party/blink/renderer/platform/graphics/static_bitmap_image.cc
-sed -i '/^#include "base\/numerics\/checked_math.h"$/i\
+sed_i '/^#include "base\/numerics\/checked_math.h"$/i\
 #include "base/rand_util.h"\
 #include "base/logging.h"' \
     third_party/blink/renderer/platform/graphics/static_bitmap_image.cc
-sed -i '/^#include "third_party\/blink\/renderer\/platform\/transforms\/affine_transform.h"$/i\
+sed_i '/^#include "third_party\/blink\/renderer\/platform\/transforms\/affine_transform.h"$/i\
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"' \
     third_party/blink/renderer/platform/graphics/static_bitmap_image.cc
-sed -i '/^#include "third_party\/skia\/include\/core\/SkSurface.h"$/a\
+sed_i '/^#include "third_party\/skia\/include\/core\/SkSurface.h"$/a\
 #include "third_party/skia/src/core/SkColorData.h"' \
     third_party/blink/renderer/platform/graphics/static_bitmap_image.cc
-sed -i '/^}  \/\/ namespace blink$/i\
+sed_i '/^}  \/\/ namespace blink$/i\
 // set the component to maximum-delta if it is >= maximum, or add to existing color component (color + delta)\
 #define shuffleComponent(color, max, delta) ( (color) >= (max) ? ((max)-(delta)) : ((color)+(delta)) )\
 \
@@ -2297,15 +2290,15 @@ void StaticBitmapImage::ShuffleSubchannelColorData(const void *addr, const SkIma
 #undef shuffleComponent\
 ' \
     third_party/blink/renderer/platform/graphics/static_bitmap_image.cc
-sed -i '/^  bool IsStaticBitmapImage() const override { return true; }$/i\
+sed_i '/^  bool IsStaticBitmapImage() const override { return true; }$/i\
   static void ShuffleSubchannelColorData(const void *addr, const SkImageInfo\& info, int srcX, int srcY);\
 ' \
     third_party/blink/renderer/platform/graphics/static_bitmap_image.h
-sed -i '/^#include "jpeglib.h"  \/\/ for JPEG_MAX_DIMENSION$/a\
+sed_i '/^#include "jpeglib.h"  \/\/ for JPEG_MAX_DIMENSION$/a\
 #include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"\
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"' \
     third_party/blink/renderer/platform/image-encoders/image_encoder.cc
-sed -i '/^                          double quality) {$/a\
+sed_i '/^                          double quality) {$/a\
   if (RuntimeEnabledFeatures::FingerprintingCanvasImageDataNoiseEnabled()) {\
     // shuffle subchannel color data within the pixmap\
     StaticBitmapImage::ShuffleSubchannelColorData(src.writable_addr(), src.info(), 0, 0);\
@@ -2313,7 +2306,7 @@ sed -i '/^                          double quality) {$/a\
     third_party/blink/renderer/platform/image-encoders/image_encoder.cc
 
 # getImageData() noise (separate call site from toBlob/toDataURL above).
-sed -i '/^      DCHECK(!bounds.intersect(SkIRect::MakeXYWH(sx, sy, sw, sh)));$/a\
+sed_i '/^      DCHECK(!bounds.intersect(SkIRect::MakeXYWH(sx, sy, sw, sh)));$/a\
     }\
     if (read_pixels_successful \&\& RuntimeEnabledFeatures::FingerprintingCanvasImageDataNoiseEnabled()) {\
       StaticBitmapImage::ShuffleSubchannelColorData(image_data_pixmap.addr(), image_data_pixmap.info(), sx, sy);' \
@@ -2324,7 +2317,7 @@ sed -i '/^      DCHECK(!bounds.intersect(SkIRect::MakeXYWH(sx, sy, sw, sh)));$/a
 # fingerprinting signal). Self-contained BASE_FEATURE, no flags UI needed
 # on Android - always on, matching the "Blank" choice Windows seeds by
 # default (empty renderer/vendor strings).
-sed -i '/^namespace blink::features {$/a\
+sed_i '/^namespace blink::features {$/a\
 \
 BASE_FEATURE(kSpoofWebGLInfo, "SpoofWebGLInfo", base::FEATURE_ENABLED_BY_DEFAULT);\
 const char kSpoofWebGLRenderer[] = "renderer";\
@@ -2332,7 +2325,7 @@ const char kSpoofWebGLVendor[] = "vendor";\
 const base::FeatureParam<std::string> kSpoofWebGLRendererParam{\&kSpoofWebGLInfo, kSpoofWebGLRenderer, " "};\
 const base::FeatureParam<std::string> kSpoofWebGLVendorParam{\&kSpoofWebGLInfo, kSpoofWebGLVendor, " "};' \
     third_party/blink/common/features.cc
-sed -i '/^namespace features {$/a\
+sed_i '/^namespace features {$/a\
 BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE(kSpoofWebGLInfo);\
 BLINK_COMMON_EXPORT extern const char kSpoofWebGLRenderer[];\
 BLINK_COMMON_EXPORT extern const char kSpoofWebGLVendor[];\
@@ -4463,13 +4456,13 @@ public class AeriumSiteRulesFragment extends ChromeBaseSettingsFragment {
 }
 AERIUM_SR_JAVA
 
-sed_i 's|^  "java/src/org/chromium/chrome/browser/browsing_data/AeriumClearOnExitFragment.java",$|&\n  "java/src/org/chromium/chrome/browser/browsing_data/AeriumSiteRulesFragment.java",|' \
+sed_i 's|^  "java/src/org/chromium/chrome/browser/browsing_data/BrowsingDataCounterBridge.java",$|&\n  "java/src/org/chromium/chrome/browser/browsing_data/AeriumSiteRulesFragment.java",|' \
     chrome/android/chrome_java_sources.gni
-sed_i 's|^  "java/res/xml/aerium_clear_on_exit_preferences.xml",$|&\n  "java/res/xml/aerium_site_rules_preferences.xml",|' \
+sed_i 's|^  "java/res/xml/appearance_preferences.xml",$|&\n  "java/res/xml/aerium_site_rules_preferences.xml",|' \
     chrome/android/chrome_java_resources.gni
-sed_i 's|^                    AeriumClearOnExitFragment.SEARCH_INDEX_DATA_PROVIDER,$|&\n                    AeriumSiteRulesFragment.SEARCH_INDEX_DATA_PROVIDER,|' \
+sed_i 's|^                    AboutChromeSettings.SEARCH_INDEX_DATA_PROVIDER,$|&\n                    AeriumSiteRulesFragment.SEARCH_INDEX_DATA_PROVIDER,|' \
     $SIPR
-sed_i 's|^import org.chromium.chrome.browser.browsing_data.AeriumClearOnExitFragment;$|&\nimport org.chromium.chrome.browser.browsing_data.AeriumSiteRulesFragment;|' \
+sed_i 's|^import org.chromium.chrome.browser.browsing_data.ClearBrowsingDataFragment;$|&\nimport org.chromium.chrome.browser.browsing_data.AeriumSiteRulesFragment;|' \
     $SIPR
 
 sed_i 's|^      <message name="IDS_AERIUM_CLEAR_ON_EXIT_TITLE" desc=|      <message name="IDS_AERIUM_SITE_RULES_TITLE" desc="Title of the screen listing per-site rules saying when each site'"'"'s data is deleted.">\n        Site rules\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_SUMMARY" desc="Summary under the entry that opens that screen.">\n        When each site'"'"'s data is deleted\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_LIST_TITLE" desc="Header above the list of per-site rules.">\n        Sites\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_ADD" desc="Row that opens a dialog for adding a site, and the title of that dialog.">\n        Add a site\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_EDIT" desc="Title of the dialog shown when an existing site in the list is tapped.">\n        Edit site\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_EMPTY" desc="Shown in place of the list when no sites have been added.">\n        No rules yet. Every site follows the settings on the previous screen.\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_HINT" desc="Hint text in the site field, telling the user what to type.">\n        example.com - covers the whole site, subdomains included\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_INVALID" desc="Error shown under the site field when what was typed cannot be read as a site.">\n        Enter a site, such as example.com\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_SAVE" desc="Button that stores the site being added or edited.">\n        Save\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_REMOVE" desc="Button that deletes the site being edited from the list.">\n        Remove\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_KEEP_SITE_DATA" desc="Data type a kept site can hold on to: cookies and other site storage.">\n        Cookies and site data\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_KEEP_CACHE" desc="Data type a kept site can hold on to: cached files.">\n        Cached images and files\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_KEEP_DOWNLOADS" desc="Data type a kept site can hold on to: its entries in the download list.">\n        Download history\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_KEEP_NOTHING" desc="Summary on a row where every data type was unticked, so the row keeps nothing.">\n        Nothing kept\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_MODE_KEEP" desc="First of two options in the site dialog: this rule protects the site from the deletion that happens when the browser closes.">\n        Keep this site when Aerium closes\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_MODE_EPHEMERAL" desc="Second of two options in the site dialog: this rule clears the site as soon as its last tab is closed, rather than protecting it.">\n        Clear this site as soon as its last tab closes\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_MODE_EPHEMERAL_SUMMARY" desc="Summary shown on a row set to clear the site when its last tab closes.">\n        Cleared when its last tab closes\n      </message>\n      <message name="IDS_AERIUM_EPHEMERAL_CLEAR_CACHE_TITLE" desc="Title of the switch that makes tab-close clearing drop the cached files too.">\n        Also clear cached files\n      </message>\n      <message name="IDS_AERIUM_EPHEMERAL_CLEAR_CACHE_SUMMARY" desc="Summary under that switch. Says which rows it affects and what it costs.">\n        Applies to sites cleared when their last tab closes. Their images, fonts and scripts are fetched again on the next visit.\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_MODE_SESSION" desc="Middle of three options in the site dialog: the site stays signed in while the browser is running and is cleared when it closes.">\n        Keep this site until Aerium closes, then clear it\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_MODE_SESSION_SUMMARY" desc="Summary shown on a row set to be cleared when the browser closes.">\n        Cleared when Aerium closes\n      </message>\n      <message name="IDS_AERIUM_EPHEMERAL_ALL_SITES_TITLE" desc="Title of the switch that clears every site when its last tab closes, leaving the table as the list of exceptions.">\n        Clear every site when its last tab closes\n      </message>\n      <message name="IDS_AERIUM_EPHEMERAL_ALL_SITES_SUMMARY" desc="Summary under that switch. Warns that it signs the user out of everything not listed.">\n        The sites above become the exceptions. Everything else is signed out as soon as you close its last tab.\n      </message>\n      <message name="IDS_AERIUM_EPHEMERAL_DELAY_TITLE" desc="Row that opens a dialog for setting how long to wait after a tab closes before clearing the site.">\n        Wait before clearing\n      </message>\n      <message name="IDS_AERIUM_EPHEMERAL_DELAY_DESC" desc="Explanation in that dialog, saying why a delay is useful and what the range is.">\n        Sign-in pages often open a tab that closes itself, so clearing the instant a tab goes can delete a cookie that was about to be used. A short wait also forgives closing a tab by accident. 0 to 3600 seconds.\n      </message>\n      <message name="IDS_AERIUM_EPHEMERAL_DELAY_SUMMARY" desc="Summary on that row, naming the wait in seconds. The placeholder is a number.">\n        <ph name="SECONDS">%1$d<ex>10</ex></ph> seconds after the last tab closes\n      </message>\n      <message name="IDS_AERIUM_EPHEMERAL_DELAY_IMMEDIATE" desc="Summary on that row when the wait is set to zero.">\n        As soon as the last tab closes\n      </message>\n      <message name="IDS_AERIUM_EPHEMERAL_DELAY_INVALID" desc="Error shown under the field when the number typed is out of range or not a number.">\n        Enter a number of seconds between 0 and 3600\n      </message>\n      <message name="IDS_AERIUM_SITE_RULES_KEEP_EXCEPTION" desc="Summary on a keep row while every other site is being cleared on tab close. The placeholder is the list of data types the row keeps.">\n        Exception: <ph name="TYPES">%1$s<ex>Cookies and site data</ex></ph>\n      </message>\n&|' \
@@ -5792,7 +5785,7 @@ cat > chrome/android/java/res/xml/aerium_media_preferences.xml <<'AERIUM_MEDIA_X
 </PreferenceScreen>
 AERIUM_MEDIA_XML
 
-sed_i 's|^  "java/res/xml/aerium_clear_on_exit_preferences.xml",$|  "java/res/xml/aerium_media_preferences.xml",\n&|' \
+sed_i 's|^  "java/res/xml/appearance_preferences.xml",$|  "java/res/xml/aerium_media_preferences.xml",\n&|' \
     chrome/android/chrome_java_resources.gni
 
 mkdir -p chrome/android/java/src/org/chromium/chrome/browser/settings
@@ -5901,7 +5894,7 @@ public class AeriumMediaFragment extends ChromeBaseSettingsFragment {
 }
 AERIUM_MEDIA_JAVA
 
-sed_i 's|^  "java/src/org/chromium/chrome/browser/browsing_data/AeriumClearOnExitFragment.java",$|  "java/src/org/chromium/chrome/browser/settings/AeriumMediaFragment.java",\n&|' \
+sed_i 's|^  "java/src/org/chromium/chrome/browser/browsing_data/BrowsingDataCounterBridge.java",$|  "java/src/org/chromium/chrome/browser/settings/AeriumMediaFragment.java",\n&|' \
     chrome/android/chrome_java_sources.gni
 
 # The row in Settings, ordered between Appearance (23) and Glic (25).
@@ -5910,9 +5903,9 @@ sed_i 's|^        android:title="@string/appearance_settings" />$|&\n    <Prefer
 
 # Named in the search-index registry, which is also what keeps R8 from
 # stripping a class only ever referenced from XML.
-sed_i 's|^import org.chromium.chrome.browser.browsing_data.AeriumClearOnExitFragment;$|&\nimport org.chromium.chrome.browser.settings.AeriumMediaFragment;|' \
+sed_i 's|^import org.chromium.chrome.browser.browsing_data.ClearBrowsingDataFragment;$|&\nimport org.chromium.chrome.browser.settings.AeriumMediaFragment;|' \
     $SIPR
-sed_i 's|^                    AeriumClearOnExitFragment.SEARCH_INDEX_DATA_PROVIDER,$|&\n                    AeriumMediaFragment.SEARCH_INDEX_DATA_PROVIDER,|' \
+sed_i 's|^                    AboutChromeSettings.SEARCH_INDEX_DATA_PROVIDER,$|&\n                    AeriumMediaFragment.SEARCH_INDEX_DATA_PROVIDER,|' \
     $SIPR
 
 sed_i 's|      <message name="IDS_AERIUM_BOTTOM_BAR_TITLE" desc=|      <message name="IDS_AERIUM_MEDIA_TITLE" desc="Title of the Media settings screen, which holds the DRM and background playback switches.">\n        Media\n      </message>\n      <message name="IDS_AERIUM_BACKGROUND_PLAYBACK_TITLE" desc="Title of the switch that keeps audio and video playing when the browser is not in front.">\n        Background playback\n      </message>\n      <message name="IDS_AERIUM_BACKGROUND_PLAYBACK_SUMMARY" desc="Summary under the background playback switch. Mentions that a restart is needed.">\n        Keep audio and video playing when you switch away from Aerium or turn the screen off. Restart Aerium to apply.\n      </message>\n      <message name="IDS_AERIUM_DRM_TITLE" desc="Title of the switch that turns on playback of DRM-protected video.">\n        Play DRM-protected content\n      </message>\n      <message name="IDS_AERIUM_DRM_SUMMARY" desc="Summary under the DRM switch. Explains that it is off by default and that the CDM is Google proprietary software.">\n        Register the Widevine CDM so sites like Netflix can play protected video. Off by default: the CDM is proprietary Google software that Aerium does not ship, and a browser without one should not tell sites it has one. Restart Aerium to apply.\n      </message>\n&|' \
@@ -7254,7 +7247,7 @@ echo "[aerium] NTP scrollbar hidden"
 # list menu; the range-change below matches that shape wherever it recurs
 # rather than by line number, so it survives either menu changing shape
 # without the other moving.
-sed -i '/^        \/\/ Glic$/,+2c\        // Aerium: no "Ask Gemini" entry in the app menu. See theme.sh.' \
+sed_i '/^        \/\/ Glic$/,+2c\        // Aerium: no "Ask Gemini" entry in the app menu. See theme.sh.' \
     chrome/android/java/src/org/chromium/chrome/browser/tabbed_mode/TabbedAppMenuPropertiesDelegate.java
 
 echo "[aerium] Ask Gemini removed from app menu"
@@ -7464,7 +7457,7 @@ cat > chrome/android/java/res/xml/aerium_backup_preferences.xml <<'AERIUM_BACKUP
 </PreferenceScreen>
 AERIUM_BACKUP_XML
 
-sed_i 's|^  "java/res/xml/aerium_media_preferences.xml",$|  "java/res/xml/aerium_backup_preferences.xml",\n&|' \
+sed_i 's|^  "java/res/xml/appearance_preferences.xml",$|  "java/res/xml/aerium_backup_preferences.xml",\n&|' \
     chrome/android/chrome_java_resources.gni
 
 cat > chrome/android/java/src/org/chromium/chrome/browser/settings/AeriumBackupFragment.java <<'AERIUM_BACKUP_JAVA'
@@ -8090,16 +8083,16 @@ public class AeriumBackupFragment extends ChromeBaseSettingsFragment {
 }
 AERIUM_BACKUP_JAVA
 
-sed_i 's|^  "java/src/org/chromium/chrome/browser/settings/AeriumMediaFragment.java",$|  "java/src/org/chromium/chrome/browser/settings/AeriumBackupFragment.java",\n&|' \
+sed_i 's|^  "java/src/org/chromium/chrome/browser/browsing_data/BrowsingDataCounterBridge.java",$|  "java/src/org/chromium/chrome/browser/settings/AeriumBackupFragment.java",\n&|' \
     chrome/android/chrome_java_sources.gni
 
 sed_i 's|^        android:title="@string/aerium_media_title" />$|&\n    <Preference\n        android:key="aerium_backup"\n        android:order="26"\n        android:fragment="org.chromium.chrome.browser.settings.AeriumBackupFragment"\n        android:title="@string/aerium_backup_title"\n        android:summary="@string/aerium_backup_summary" />|' \
     chrome/android/java/res/xml/main_preferences.xml
 
 SIPR=chrome/android/java/src/org/chromium/chrome/browser/settings/search/SearchIndexProviderRegistry.java
-sed_i 's|^import org.chromium.chrome.browser.settings.AeriumMediaFragment;$|&\nimport org.chromium.chrome.browser.settings.AeriumBackupFragment;|' \
+sed_i 's|^import org.chromium.chrome.browser.browsing_data.ClearBrowsingDataFragment;$|&\nimport org.chromium.chrome.browser.settings.AeriumBackupFragment;|' \
     $SIPR
-sed_i 's|^                    AeriumMediaFragment.SEARCH_INDEX_DATA_PROVIDER,$|&\n                    AeriumBackupFragment.SEARCH_INDEX_DATA_PROVIDER,|' \
+sed_i 's|^                    AboutChromeSettings.SEARCH_INDEX_DATA_PROVIDER,$|&\n                    AeriumBackupFragment.SEARCH_INDEX_DATA_PROVIDER,|' \
     $SIPR
 
 sed_i 's|      <message name="IDS_AERIUM_MEDIA_TITLE" desc=|      <message name="IDS_AERIUM_BACKUP_TITLE" desc="Title of the Backup and restore settings screen, and its row in the main Settings list.">\n        Backup and restore\n      </message>\n      <message name="IDS_AERIUM_BACKUP_SUMMARY" desc="Summary under that row.">\n        Save or bring back your open tabs, site permissions and settings\n      </message>\n      <message name="IDS_AERIUM_BACKUP_EXPORT_TITLE" desc="Row that saves a backup file.">\n        Export backup\n      </message>\n      <message name="IDS_AERIUM_BACKUP_EXPORT_SUMMARY" desc="Summary under that row, naming what is and is not included.">\n        Open tabs, site permissions and Aerium'"'"'s own settings. Not passwords, history or cookies.\n      </message>\n      <message name="IDS_AERIUM_BACKUP_RESTORE_TITLE" desc="Row that reads a previously saved backup file.">\n        Restore from backup\n      </message>\n      <message name="IDS_AERIUM_BACKUP_RESTORE_SUMMARY" desc="Summary under that row.">\n        Adds tabs, permissions and settings from a backup file. Nothing already here is removed.\n      </message>\n      <message name="IDS_AERIUM_BACKUP_EXPORT_DONE" desc="Toast shown after a backup file is written successfully.">\n        Backup saved\n      </message>\n      <message name="IDS_AERIUM_BACKUP_EXPORT_FAILED" desc="Toast shown when saving the backup file failed.">\n        Could not save the backup\n      </message>\n      <message name="IDS_AERIUM_BACKUP_RESTORE_DONE" desc="Toast shown after a backup file is read and applied successfully.">\n        Backup restored\n      </message>\n      <message name="IDS_AERIUM_BACKUP_RESTORE_FAILED" desc="Toast shown when the chosen file could not be read as a backup.">\n        Could not read that backup file\n      </message>\n&|' \

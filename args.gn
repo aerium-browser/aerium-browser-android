@@ -13,6 +13,7 @@ chrome_pgo_phase = 2
 # CI runners - forced back on for performance; watch for exit 137 recurring.
 use_thin_lto = true
 disable_fieldtrial_testing_config = true
+safe_browsing_mode = 0
 ffmpeg_branding = "Chrome"
 proprietary_codecs = true
 enable_vr = false

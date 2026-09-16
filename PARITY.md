@@ -41,7 +41,7 @@ Legend: ✅ shipped · 🟡 partial · ❌ gap · — not applicable on this pla
 | navigator.connection.type reports unknown | — | — | ✅ |
 | window.queryLocalFonts() off (Local Font Access) | ✅ | ✅ | ✅ |
 | Font enumeration by text measurement | ❌ | ❌ | ❌ |
-| Safe Browsing off by default | ✅ | ✅ | ✅ |
+| Safe Browsing off by default | ✅ | ✅ | ✅ compiled out (safe_browsing_mode=0) |
 | Widevine off, toggleable | ✅ | ✅ | ✅ |
 | Passwords and autofill out of the menus and settings | ✅ | ✅ | ✅ |
 | Payment probing off by default | ✅ | ✅ | ✅ |
