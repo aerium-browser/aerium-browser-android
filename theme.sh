@@ -7250,6 +7250,18 @@ sed_i '/^        \/\/ Glic$/,+2c\        // Aerium: no "Ask Gemini" entry in the
 
 echo "[aerium] Ask Gemini removed from app menu"
 
+GLICENABLING=chrome/browser/glic/public/android/java/src/org/chromium/chrome/browser/glic/GlicEnabling.java
+perl -0777 -pi -e '
+    my $n = s{        return GlicEnablingJni\.get\(\)\.(isEnabledByFlags|isProfileEligible|isEnabledForProfile|wasPreviouslyNotAllowed|shouldShowSettingsPage|shouldShowWebActuationToggle|isReadyForProfile)\((?:profile)?\);\n}
+              {        return false;\n}g;
+    die "[aerium] FATAL: expected 7 GlicEnabling gates, rewrote $n - upstream "
+      . "restructured the class, so the Gemini surfaces are no longer all "
+      . "gated in one place\n"
+        unless $n == 7;
+' $GLICENABLING
+
+echo "[aerium] gemini surfaces disabled at GlicEnabling"
+
 
 # --- A "Support Aerium" row on Settings -> About Aerium, next to Legal
 # information.
