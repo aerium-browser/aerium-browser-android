@@ -3,27 +3,9 @@
 # Renders the Aerium logo over an existing icon PNG, keeping its dimensions.
 # Usage: icons.sh <path-to-png>
 svg=$(dirname "$0")/aerium.svg
+tile=$(dirname "$0")/aerium_tile.svg
 w=$(identify -format %w "$1")
 
-# No field behind the mark. The logo is the whole icon.
-#
-# This has now been three things. It was #FFFFFF, on the reasoning that a small
-# mark on a plain light tile reads like the stock Phone, Messages and Camera
-# icons beside it. android issue 13 reported that as "very goofy" and it was:
-# aerium.svg is not a glyph that needs a field, it is a full-colour disc that is
-# already its own tile, so a second tile behind it reads as a border. It then
-# became #111C42, the darkest navy of the mark itself, so that whatever the
-# launcher mask left uncovered was at least a colour the disc already touches.
-#
-# That was still a tile. Asked for directly, against the Windows build as the
-# reference: just the logo, nothing behind it. So there is nothing behind it -
-# the background layer is fully transparent and the legacy bitmaps are drawn on
-# transparency too.
-#
-# This is what the mark is shaped for. A 512 viewBox filled edge to edge by one
-# disc has no corners to lose, so on a circular or squircle mask the result is
-# the disc and only the disc, and there is no field left to show as a rim at
-# any mask shape.
 
 # The logo is a circle that fills its whole 512 viewBox, so these percentages
 # are the circle's diameter as a share of the icon's width.
@@ -58,31 +40,21 @@ w=$(identify -format %w "$1")
 # - so the equivalent of "fills the visible circle" is the full width of the
 # file.
 #
-# BACK TO 36/54, THE SIZES BEFORE 13603cc, because 68/100 shipped in b153 and
-# reads as enormous on a real phone. 68 was derived rather than looked at: the
-# adaptive mask shows a 72dp circle out of a 108dp canvas, 72/108 is 66.7%, so
-# 68 makes the disc exactly fill the visible circle. That is the largest an
-# icon can be without being clipped, not the size it should be - every icon
-# beside it in the launcher leaves a margin inside the mask, and one that does
-# not stands out as oversized rather than as bold.
-#
-# The two changes that got here were made together and only one of them was
-# wrong. 13603cc both enlarged the mark and repainted the field navy; 84538be
-# then removed the field entirely. Removing the field is what android issue 13
-# actually asked for - "no white border" - and it makes the mark read larger on
-# its own, because the border that was making it look small is gone. So the
-# size increase was solving a problem the field removal had already solved.
-#
-# Worth stating plainly: issue 13 also said "make it bigger", and this gives
-# that back. The claim is that it only looked small because of the plate around
-# it, and with the plate gone 36 is the right number. If it still reads small
-# on a device, the useful middle is around 52/72 - a visible margin inside the
-# mask without filling it - rather than a return to 68.
-adaptive_pct=36
+adaptive_pct=48
 legacy_pct=54
 
-# Draws the logo at $2 percent of the icon width, centred on background $3.
-# Pass 'none' for a transparent background.
+render_tile() {
+    rsvg-convert -w $w -h $w "$tile" -o "$1"
+}
+
+render_on_tile() {
+    fg=$((w * $2 / 100))
+    rsvg-convert -w $w -h $w "$tile" -o "$1.bg.png"
+    rsvg-convert -w $fg -h $fg "$svg" -o "$1.fg.png"
+    convert "$1.bg.png" "$1.fg.png" -gravity center -composite "$1"
+    rm -f "$1.bg.png" "$1.fg.png"
+}
+
 render_over() {
     fg=$((w * $2 / 100))
     rsvg-convert -w $fg -h $fg "$svg" -o "$1.fg.png"
@@ -92,32 +64,10 @@ render_over() {
 
 case $(basename "$1") in
   layered_app_icon_background*)
-    # Adaptive icon background layer: fully transparent. The launcher masks the
-    # two layers and leaves transparency transparent - it does not substitute a
-    # plate of its own for an adaptive icon, which is the difference between
-    # this and the legacy case below - so what survives the mask is the
-    # foreground disc by itself.
-    convert -size ${w}x${w} xc:none "$1" ;;
+    render_tile "$1" ;;
   layered_app_icon_foreground*)
-    # Adaptive icon foreground layer: the logo on transparency, because the
-    # background layer above is what supplies the colour behind it.
     render_over "$1" $adaptive_pct none ;;
   *)
-    # Everything else - layered_app_icon.png and app_icon.png - is a legacy,
-    # non-adaptive icon: one square bitmap, no separate background layer.
-    #
-    # Drawn on transparency, at 100%, so the disc inscribes the square exactly
-    # and the only empty pixels are the four corners it cannot reach.
-    #
-    # The honest caveat, since it is the one thing here that is not fully ours
-    # to decide: a launcher that falls back to legacy treatment wraps a
-    # non-adaptive icon in a plate of its own choosing, and a painted field was
-    # how the previous version denied it the chance. That fallback needs an app
-    # with no adaptive icon, and this one has both layers above, so the launcher
-    # uses those. Where the legacy bitmap is still read directly - the task
-    # switcher and parts of Settings on some builds - a plate can come back.
-    # Named rather than left to be discovered: if it does, this line is the one
-    # to change back, and only this line.
-    render_over "$1" $legacy_pct none ;;
+    render_on_tile "$1" $legacy_pct ;;
 esac
 echo "aerium icon: $1 (${w}px)"

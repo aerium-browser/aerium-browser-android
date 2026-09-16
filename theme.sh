@@ -1534,7 +1534,7 @@ AERIUM_QAS_ICON=$AERIUM_QAS/drawable/aerium_widget_icon.xml
 if [ -e "$SCRIPT_DIR/res/layered_app_icon_foreground.xml" ] && [ -d "$AERIUM_QAS/drawable" ]; then
     sed -e 's|android:width="108dp"|android:width="24dp"|' \
         -e 's|android:height="108dp"|android:height="24dp"|' \
-        -e '/^  <group$/,/^      android:translateY="163.84">$/d' \
+        -e '/^  <group$/,/^      android:translateY="133.12">$/d' \
         -e '/^  <\/group>$/d' \
         "$SCRIPT_DIR/res/layered_app_icon_foreground.xml" > "$AERIUM_QAS_ICON"
 
@@ -1546,7 +1546,7 @@ if [ -e "$SCRIPT_DIR/res/layered_app_icon_foreground.xml" ] && [ -d "$AERIUM_QAS
     _out_paths=$(grep -c '<path' "$AERIUM_QAS_ICON")
     if grep -q 'group' "$AERIUM_QAS_ICON"; then
         echo "[aerium] FATAL: the adaptive-icon <group> survived into" \
-             "$AERIUM_QAS_ICON - the widget logo would be scaled to 0.36" >&2
+             "$AERIUM_QAS_ICON - the widget logo would be scaled to 0.48" >&2
         return 1
     fi
     if [ "$_src_paths" != "$_out_paths" ]; then
