@@ -1971,8 +1971,11 @@ if [ -e $SE_DEFS/regional_settings.json ]; then
         return 1
     fi
 fi
-sed_i 's|^constexpr size_t kTopSearchEnginesThreshold = 5;$|constexpr size_t kTopSearchEnginesThreshold = '"$AERIUM_ZZ_ENGINE_COUNT"';|' \
-    components/regional_capabilities/regional_capabilities_utils.cc
+if ! grep -q "kTopSearchEnginesThreshold = $AERIUM_ZZ_ENGINE_COUNT;" \
+        components/regional_capabilities/regional_capabilities_utils.cc 2>/dev/null; then
+    sed_i 's|^constexpr size_t kTopSearchEnginesThreshold = [0-9]\+;$|constexpr size_t kTopSearchEnginesThreshold = '"$AERIUM_ZZ_ENGINE_COUNT"';|' \
+        components/regional_capabilities/regional_capabilities_utils.cc
+fi
 # No sed for the default engine. Vanadium's own
 # 0114-set-default-search-engine-to-DuckDuckGo.patch already points
 # GetPrepopulatedFallbackSearch at duckduckgo.id, which is what we want, so the
