@@ -283,6 +283,13 @@ if [ -f "$AMF" ] && grep -q '^import org.chromium.chrome.browser.ApplicationLife
     echo "[aerium] resume hotfix: ApplicationLifetime import corrected in $AMF"
 fi
 
+ABK=chrome/android/java/src/org/chromium/chrome/browser/settings/AeriumBackupFragment.java
+if [ -f "$ABK" ] && grep -q 'RESTART_SNACKBAR_DURATION_MS' "$ABK" \
+        && ! grep -q '^    private static final int RESTART_SNACKBAR_DURATION_MS' "$ABK"; then
+    sed -i 's|^    private static final int BACKUP_VERSION = 1;$|&\n    private static final int RESTART_SNACKBAR_DURATION_MS = 10000;|' "$ABK"
+    echo "[aerium] resume hotfix: RESTART_SNACKBAR_DURATION_MS declared in $ABK"
+fi
+
 # --- Resume sync for the first-run page: theme.sh only runs during source
 # setup, so a tree saved by an earlier stage keeps whatever version of the
 # page it was built with. Re-emit the header from theme.sh whenever the tree's

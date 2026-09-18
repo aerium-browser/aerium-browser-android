@@ -7515,6 +7515,7 @@ public class AeriumBackupFragment extends ChromeBaseSettingsFragment {
 
     private static final String BACKUP_MIME_TYPE = "application/json";
     private static final int BACKUP_VERSION = 1;
+    private static final int RESTART_SNACKBAR_DURATION_MS = 10000;
 
     // Every Android SharedPreferences key this backs up shares this prefix - see
     // ChromePreferenceKeys, which names every Aerium key "Chrome.Aerium.*". Scanning by prefix
