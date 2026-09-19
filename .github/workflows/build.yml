@@ -66,6 +66,7 @@ jobs:
     timeout-minutes: 350
     outputs:
       finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -85,8 +86,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 350
     needs: build-1
+    if: ${{ !cancelled() && needs.build-1.result != 'skipped'
+            && needs.build-1.outputs.deterministic != 'true' }}
     outputs:
       finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -105,8 +109,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 350
     needs: build-2
+    if: ${{ !cancelled() && needs.build-2.result != 'skipped'
+            && needs.build-2.outputs.deterministic != 'true' }}
     outputs:
       finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -125,8 +132,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 350
     needs: build-3
+    if: ${{ !cancelled() && needs.build-3.result != 'skipped'
+            && needs.build-3.outputs.deterministic != 'true' }}
     outputs:
       finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -145,8 +155,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 350
     needs: build-4
+    if: ${{ !cancelled() && needs.build-4.result != 'skipped'
+            && needs.build-4.outputs.deterministic != 'true' }}
     outputs:
       finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -165,8 +178,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 350
     needs: build-5
+    if: ${{ !cancelled() && needs.build-5.result != 'skipped'
+            && needs.build-5.outputs.deterministic != 'true' }}
     outputs:
       finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -185,8 +201,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 350
     needs: build-6
+    if: ${{ !cancelled() && needs.build-6.result != 'skipped'
+            && needs.build-6.outputs.deterministic != 'true' }}
     outputs:
       finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -205,8 +224,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 350
     needs: build-7
+    if: ${{ !cancelled() && needs.build-7.result != 'skipped'
+            && needs.build-7.outputs.deterministic != 'true' }}
     outputs:
       finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -225,8 +247,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 350
     needs: build-8
+    if: ${{ !cancelled() && needs.build-8.result != 'skipped'
+            && needs.build-8.outputs.deterministic != 'true' }}
     outputs:
       finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -245,8 +270,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 350
     needs: build-9
+    if: ${{ !cancelled() && needs.build-9.result != 'skipped'
+            && needs.build-9.outputs.deterministic != 'true' }}
     outputs:
       finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -265,8 +293,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 350
     needs: build-10
+    if: ${{ !cancelled() && needs.build-10.result != 'skipped'
+            && needs.build-10.outputs.deterministic != 'true' }}
     outputs:
       finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -285,8 +316,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 350
     needs: build-11
+    if: ${{ !cancelled() && needs.build-11.result != 'skipped'
+            && needs.build-11.outputs.deterministic != 'true' }}
     outputs:
       finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -305,8 +339,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 350
     needs: build-12
+    if: ${{ !cancelled() && needs.build-12.result != 'skipped'
+            && needs.build-12.outputs.deterministic != 'true' }}
     outputs:
       finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -325,8 +362,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 350
     needs: build-13
+    if: ${{ !cancelled() && needs.build-13.result != 'skipped'
+            && needs.build-13.outputs.deterministic != 'true' }}
     outputs:
       finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -345,8 +385,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 350
     needs: build-14
+    if: ${{ !cancelled() && needs.build-14.result != 'skipped'
+            && needs.build-14.outputs.deterministic != 'true' }}
     outputs:
       finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -365,8 +408,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 350
     needs: build-15
+    if: ${{ !cancelled() && needs.build-15.result != 'skipped'
+            && needs.build-15.outputs.deterministic != 'true' }}
     outputs:
       finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -385,8 +431,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 350
     needs: build-16
+    if: ${{ !cancelled() && needs.build-16.result != 'skipped'
+            && needs.build-16.outputs.deterministic != 'true' }}
     outputs:
       finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -405,8 +454,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 350
     needs: build-17
+    if: ${{ !cancelled() && needs.build-17.result != 'skipped'
+            && needs.build-17.outputs.deterministic != 'true' }}
     outputs:
       finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -425,8 +477,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 350
     needs: build-18
+    if: ${{ !cancelled() && needs.build-18.result != 'skipped'
+            && needs.build-18.outputs.deterministic != 'true' }}
     outputs:
       finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -445,8 +500,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 350
     needs: build-19
+    if: ${{ !cancelled() && needs.build-19.result != 'skipped'
+            && needs.build-19.outputs.deterministic != 'true' }}
     outputs:
       finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -465,8 +523,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 350
     needs: build-20
+    if: ${{ !cancelled() && needs.build-20.result != 'skipped'
+            && needs.build-20.outputs.deterministic != 'true' }}
     outputs:
       finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -485,8 +546,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 350
     needs: build-21
+    if: ${{ !cancelled() && needs.build-21.result != 'skipped'
+            && needs.build-21.outputs.deterministic != 'true' }}
     outputs:
       finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -505,8 +569,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 350
     needs: build-22
+    if: ${{ !cancelled() && needs.build-22.result != 'skipped'
+            && needs.build-22.outputs.deterministic != 'true' }}
     outputs:
       finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -525,8 +592,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 350
     needs: build-23
+    if: ${{ !cancelled() && needs.build-23.result != 'skipped'
+            && needs.build-23.outputs.deterministic != 'true' }}
     outputs:
       finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -631,7 +701,7 @@ jobs:
   check-completion:
     runs-on: ubuntu-latest
     needs: build-24
-    if: ${{ always() }}
+    if: ${{ !cancelled() }}
     steps:
       - name: Verify build finished
         run: |

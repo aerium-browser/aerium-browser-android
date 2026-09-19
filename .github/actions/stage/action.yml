@@ -20,6 +20,9 @@ outputs:
   finished:
     description: 'true once the signed APK has been produced'
     value: ${{ steps.result.outputs.finished }}
+  deterministic:
+    description: 'true when the build failed in a way that will reproduce, so the next stage must not run'
+    value: ${{ steps.marker.outputs.deterministic }}
 runs:
   using: 'composite'
   steps:
@@ -113,6 +116,21 @@ runs:
         fi
         df -h /
 
+    - name: Size the checkpoint reserve from what the restore cost
+      if: inputs.finished != 'true'
+      shell: bash
+      run: |
+        RESTORE_MIN=$(( ($(date +%s) - ${STAGE_START_TS:-$(date +%s)}) / 60 ))
+        RESERVE=$RESTORE_MIN
+        [ "$RESERVE" -lt 15 ] && RESERVE=15
+        [ "$RESERVE" -gt 90 ] && RESERVE=90
+        echo "CHECKPOINT_RESERVE_MIN=$RESERVE" >> "$GITHUB_ENV"
+        FULL=$(( ${JOB_TIMEOUT_MIN:-350} - RESERVE ))
+        HALF=$(( RESTORE_MIN + (FULL - RESTORE_MIN) / 2 ))
+        echo "AERIUM_HALF_BUDGET_MIN=$HALF" >> "$GITHUB_ENV"
+        echo "[aerium] restore took ${RESTORE_MIN}m; reserving ${RESERVE}m for the checkpoint"
+        echo "[aerium] compiling in two slices, the first ending ${HALF}m into the stage"
+
     - name: Snapshot restored build state
       if: inputs.finished != 'true'
       shell: bash
@@ -165,9 +183,73 @@ runs:
         echo "wrote $D; it is printed by the last step of this job"
         exit 0
 
-    - name: Build
-      id: build
+    - name: Build (first slice)
+      id: build1
       if: inputs.finished != 'true'
+      shell: bash
+      env:
+        STAGE_DIAG: ${{ github.workspace }}/stage-diag.txt
+        # build.sh derives the ABI and rewrites target_cpu in out/Default/args.gn
+        # from this. Everything else about the two builds is the same file.
+        AERIUM_TARGET_CPU: ${{ inputs.arch }}
+        TOTAL_BUDGET_MIN: ${{ env.AERIUM_HALF_BUDGET_MIN }}
+      run: |
+        cd "$GITHUB_WORKSPACE"
+        chmod +x *.sh res/*.sh
+        free -h || true
+        df -h || true
+        set +e
+        ./build.sh --ci
+        code=$?
+        echo "code=$code" >> "$GITHUB_OUTPUT"
+        if [ -f release/finished.marker ]; then echo "done=true" >> "$GITHUB_OUTPUT"; fi
+        df -h || true
+
+    - name: Pack mid-stage checkpoint
+      id: pack-mid
+      if: inputs.finished != 'true' && steps.build1.outputs.code == '0'
+            && steps.build1.outputs.done != 'true'
+      shell: bash
+      run: bash ./.github/scripts/pack-checkpoint.sh
+
+    - name: Pick a checkpoint slot (mid-stage)
+      id: save-slot-mid
+      if: inputs.finished != 'true' && steps.pack-mid.outputs.packed == 'intermediate'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        BASE: build-artifact-android-${{ inputs.arch }}
+      run: bash ./.github/scripts/checkpoint-slot.sh save
+
+    - name: Upload mid-stage checkpoint
+      if: inputs.finished != 'true' && steps.pack-mid.outputs.packed == 'intermediate'
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ steps.save-slot-mid.outputs.target }}
+        path: ${{ github.workspace }}/chromium/artifacts.tar.zst
+        retention-days: 10
+        compression-level: 0
+
+    - name: Retire the previous checkpoint (mid-stage)
+      if: inputs.finished != 'true' && steps.save-slot-mid.outputs.previous_id != ''
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        PREVIOUS_ID: ${{ steps.save-slot-mid.outputs.previous_id }}
+      run: |
+        gh api -X DELETE \
+          "repos/$GITHUB_REPOSITORY/actions/artifacts/$PREVIOUS_ID" \
+          || echo "could not retire artifact $PREVIOUS_ID (non-fatal)"
+
+    - name: Drop the packed mid-stage archive
+      if: inputs.finished != 'true' && steps.pack-mid.outputs.packed == 'intermediate'
+      shell: bash
+      run: rm -f "$GITHUB_WORKSPACE/chromium/artifacts.tar.zst"
+
+    - name: Build (second slice)
+      id: build
+      if: inputs.finished != 'true' && steps.build1.outputs.code == '0'
+            && steps.build1.outputs.done != 'true'
       shell: bash
       env:
         STAGE_DIAG: ${{ github.workspace }}/stage-diag.txt
@@ -184,8 +266,21 @@ runs:
         echo "code=$?" >> "$GITHUB_OUTPUT"
         df -h || true
 
+    - name: Resolve the stage's build result
+      id: code
+      if: inputs.finished != 'true'
+      shell: bash
+      run: |
+        if [ "${{ steps.build1.outputs.code }}" != '0' ]; then
+          echo "code=${{ steps.build1.outputs.code }}" >> "$GITHUB_OUTPUT"
+        elif [ "${{ steps.build1.outputs.done }}" = 'true' ]; then
+          echo "code=0" >> "$GITHUB_OUTPUT"
+        else
+          echo "code=${{ steps.build.outputs.code }}" >> "$GITHUB_OUTPUT"
+        fi
+
     - name: Disk usage breakdown (diagnostic, only on failure)
-      if: inputs.finished != 'true' && steps.build.outputs.code != '0'
+      if: inputs.finished != 'true' && steps.code.outputs.code != '0'
       shell: bash
       run: |
         cd "$GITHUB_WORKSPACE"
@@ -202,87 +297,7 @@ runs:
       id: pack
       if: inputs.finished != 'true'
       shell: bash
-      run: |
-        cd "$GITHUB_WORKSPACE"
-        if [ -f release/finished.marker ]; then
-          echo "packed=finished" >> "$GITHUB_OUTPUT"
-        elif [ -f chromium/src/BUILD.gn ] && [ -f chromium/src/out/Default/args.gn ] && [ -f chromium/src/out/Default/build.ninja ]; then
-          # Save progress even when this stage's build failed, so a fixed
-          # workflow can resume instead of starting over. build.ninja is
-          # required on top of BUILD.gn/args.gn: a tree where gn gen itself
-          # failed (e.g. a bad args.gn flag - run 29985315083) has the first
-          # two but no build graph, and uploading it would overwrite the
-          # previous GOOD checkpoint (the artifact name is shared across
-          # runs with overwrite: true), destroying resumable progress in
-          # exchange for a tree that can't be resumed anyway.
-          EXTRA=""
-          for f in chromium/.gclient_entries chromium/.gclient_previous_sync_commits; do
-            [ -f "$f" ] && EXTRA="$EXTRA $f"
-          done
-          # tar exit code 1 only means files changed while reading - the
-          # archive is still usable, which --warning=no-file-changed and the
-          # `RC -gt 1` check below already handle.
-          #
-          # .siso_fs_state.journal must NOT be excluded. It is not volatile
-          # scratch: it is siso's incremental record of which steps have
-          # completed. build.sh ends every stage with `timeout -s INT`, so
-          # siso is always interrupted and never folds the journal into
-          # .siso_fs_state - the journal IS the state. Excluding it made
-          # every stage start with no incremental knowledge and recompile
-          # the same ~28,300 objects, so a 15-stage run finished at the
-          # exact 38.1% it reached in stage 1 (remaining went 45,981 ->
-          # 46,030). Object files were in the checkpoint all along and were
-          # simply rewritten byte-identically.
-          #
-          # --format=posix is load-bearing, not cosmetic. GNU tar's default
-          # "gnu" format stores mtimes as whole seconds, while siso's
-          # .siso_fs_state keys every recorded output on its NANOSECOND mtime.
-          # A default-format pack/unpack round trip therefore hands the next
-          # stage a tree in which every single file's mtime has been rounded
-          # down to .000000000, so not one entry in the restored state file
-          # matches the file it describes, the whole state is discarded as
-          # stale, and the stage recompiles ~30k objects it already has. Only
-          # the pax format carries sub-second times (verified with GNU tar
-          # 1.35, the version on ubuntu-latest: gnu round-trips
-          # 10:11:12.123456789 as 10:11:12.000000000, posix as
-          # 10:11:12.123456789). The Unpack step needs no matching flag - tar
-          # detects the format when reading.
-          #
-          # --pax-option pays for it: pax otherwise emits an extended header
-          # for every file just to carry atime/ctime, which nothing here
-          # restores or cares about. Dropping those two keeps the archive the
-          # same size as before for whole-second files and only spends the
-          # extra header where a sub-second mtime actually needs preserving.
-          #
-          # Probed against an empty archive first: a stage that reached this
-          # point has ~5 hours of compilation in it, and a tar that refused
-          # the flags would abort the pack and throw all of it away. Falling
-          # back to the old format merely leaves the incremental state
-          # unusable again - the failure we already have - instead of losing
-          # the objects too.
-          TAR_FMT=(--format=posix --pax-option='delete=atime,delete=ctime')
-          if ! tar -c "${TAR_FMT[@]}" -f /dev/null --files-from=/dev/null 2>/dev/null; then
-            echo "WARNING: this tar rejects the pax flags; packing in the default format"
-            TAR_FMT=()
-          fi
-          set +e
-          tar -c -I 'zstd -T0 -3' -f chromium/artifacts.tar.zst \
-            "${TAR_FMT[@]}" \
-            --warning=no-file-changed \
-            --exclude='chromium/artifacts.tar.zst' \
-            chromium/src chromium/.gclient $EXTRA
-          RC=$?
-          set -e
-          if [ $RC -gt 1 ]; then
-            echo "tar failed with exit code $RC"
-            exit $RC
-          fi
-          ls -la chromium/artifacts.tar.zst
-          echo "packed=intermediate" >> "$GITHUB_OUTPUT"
-        else
-          echo "Source setup did not complete; nothing worth saving"
-          echo "packed=none" >> "$GITHUB_OUTPUT"
-        fi
+      run: bash ./.github/scripts/pack-checkpoint.sh
 
     # overwrite: true deletes the existing artifact and then uploads the new
     # one, so anything that interrupts the job in between leaves the run with
@@ -328,6 +343,7 @@ runs:
           || echo "could not retire artifact $PREVIOUS_ID (non-fatal)"
 
     - name: Record that this failure is deterministic
+      id: marker
       # build.sh has already turned the ordinary "ran out of time budget" case
       # into exit 0 (RET=124 -> exit 0), so a non-zero code here can only be a
       # failure that will reproduce: a compile error, a gn gen error, or a
@@ -338,12 +354,13 @@ runs:
       # those are precisely the failures worth resuming. So the presence of
       # this marker is the discriminator auto-resume needs, and it comes from
       # the stage knowing what happened rather than from scraping logs.
-      if: inputs.finished != 'true' && steps.build.outputs.code != '0'
+      if: inputs.finished != 'true' && steps.code.outputs.code != '0'
       shell: bash
       run: |
+        echo "deterministic=true" >> "$GITHUB_OUTPUT"
         mkdir -p "$GITHUB_WORKSPACE/stage-status"
         {
-          echo "exit_code=${{ steps.build.outputs.code }}"
+          echo "exit_code=${{ steps.code.outputs.code }}"
           echo "stage_run_id=$GITHUB_RUN_ID"
           echo "commit=$GITHUB_SHA"
         } > "$GITHUB_WORKSPACE/stage-status/build-error.txt"
@@ -351,7 +368,7 @@ runs:
           >> "$GITHUB_WORKSPACE/stage-status/build-error.txt" 2>/dev/null || true
 
     - name: Upload deterministic-failure marker
-      if: inputs.finished != 'true' && steps.build.outputs.code != '0'
+      if: inputs.finished != 'true' && steps.code.outputs.code != '0'
       uses: actions/upload-artifact@v7
       with:
         name: build-error-android-${{ inputs.arch }}
@@ -477,10 +494,10 @@ runs:
         exit 0
 
     - name: Fail stage if the build failed
-      if: inputs.finished != 'true' && steps.build.outputs.code != '0'
+      if: inputs.finished != 'true' && steps.code.outputs.code != '0'
       shell: bash
       run: |
-        echo "build.sh exited with code ${{ steps.build.outputs.code }} (tree was saved for resume)"
+        echo "build.sh exited with code ${{ steps.code.outputs.code }} (tree was saved for resume)"
         exit 1
 
     - name: Set result
