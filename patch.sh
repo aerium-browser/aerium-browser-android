@@ -332,4 +332,12 @@ perl -0777 -pi -e '
 ' chrome/browser/browser_process_impl.cc
 echo "[aerium] safe_browsing_service() always declared, returning null when Safe Browsing is compiled out"
 
+OTPGUARD=chrome/browser/ui/autofill/chrome_otp_phish_guard_delegate.h
+perl -0777 -pi -e '
+    my $n = s{(  const raw_ref<content::WebContents> web_contents_;\n)(  std::unique_ptr<OtpFillingSafeBrowsingCheckerClient>\n      safe_browsing_checker_client_;\n)}
+             {$1\#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)\n$2\#endif\n}s;
+    die "[aerium] FATAL: expected 1 rewrite in $ARGV, made $n - the member sits outside the SAFE_BROWSING_AVAILABLE guard while its type is only included inside it, so with safe_browsing_mode=0 the destructor cannot delete an incomplete type\n" unless $n == 1;
+' "$OTPGUARD"
+echo "[aerium] OTP phish guard checker client guarded on SAFE_BROWSING_AVAILABLE"
+
 export PATCHED=1
