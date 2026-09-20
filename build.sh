@@ -290,6 +290,23 @@ if [ -f "$ABK" ] && grep -q 'RESTART_SNACKBAR_DURATION_MS' "$ABK" \
     echo "[aerium] resume hotfix: RESTART_SNACKBAR_DURATION_MS declared in $ABK"
 fi
 
+DEEPSCANDIR=components/enterprise/connectors/core/cloud_content_scanning
+for f in multipart_uploader_base.cc files_request_handler_base.cc; do
+    DSF="$DEEPSCANDIR/$f"
+    if [ -f "$DSF" ] && grep -q 'WebUIContentInfoSingleton' "$DSF" \
+            && ! grep -q 'IS_IOS) && BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)' "$DSF"; then
+        perl -0777 -pi -e '
+            s{(\#if !BUILDFLAG\(IS_IOS\)\n)(.*?)(^\#endif)}{
+                my ($open, $body, $close) = ($1, $2, $3);
+                $body =~ /WebUIContentInfoSingleton/
+                    ? "#if !BUILDFLAG(IS_IOS) && BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)\n$body$close"
+                    : "$open$body$close";
+            }gsme;
+        ' "$DSF"
+        echo "[aerium] resume hotfix: deep scan debug reporting guarded in $DSF"
+    fi
+done
+
 # --- Resume sync for the first-run page: theme.sh only runs during source
 # setup, so a tree saved by an earlier stage keeps whatever version of the
 # page it was built with. Re-emit the header from theme.sh whenever the tree's

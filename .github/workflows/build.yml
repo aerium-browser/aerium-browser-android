@@ -62,7 +62,7 @@ concurrency:
 
 jobs:
   build-1:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 350
     outputs:
       finished: ${{ steps.stage.outputs.finished }}
@@ -83,7 +83,7 @@ jobs:
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
 
   build-2:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 350
     needs: build-1
     if: ${{ !cancelled() && needs.build-1.result != 'skipped'
@@ -106,7 +106,7 @@ jobs:
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
 
   build-3:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 350
     needs: build-2
     if: ${{ !cancelled() && needs.build-2.result != 'skipped'
@@ -129,7 +129,7 @@ jobs:
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
 
   build-4:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 350
     needs: build-3
     if: ${{ !cancelled() && needs.build-3.result != 'skipped'
@@ -152,7 +152,7 @@ jobs:
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
 
   build-5:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 350
     needs: build-4
     if: ${{ !cancelled() && needs.build-4.result != 'skipped'
@@ -175,7 +175,7 @@ jobs:
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
 
   build-6:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 350
     needs: build-5
     if: ${{ !cancelled() && needs.build-5.result != 'skipped'
@@ -198,7 +198,7 @@ jobs:
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
 
   build-7:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 350
     needs: build-6
     if: ${{ !cancelled() && needs.build-6.result != 'skipped'
@@ -221,7 +221,7 @@ jobs:
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
 
   build-8:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 350
     needs: build-7
     if: ${{ !cancelled() && needs.build-7.result != 'skipped'
@@ -244,7 +244,7 @@ jobs:
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
 
   build-9:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 350
     needs: build-8
     if: ${{ !cancelled() && needs.build-8.result != 'skipped'
@@ -267,7 +267,7 @@ jobs:
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
 
   build-10:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 350
     needs: build-9
     if: ${{ !cancelled() && needs.build-9.result != 'skipped'
@@ -290,7 +290,7 @@ jobs:
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
 
   build-11:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 350
     needs: build-10
     if: ${{ !cancelled() && needs.build-10.result != 'skipped'
@@ -313,7 +313,7 @@ jobs:
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
 
   build-12:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 350
     needs: build-11
     if: ${{ !cancelled() && needs.build-11.result != 'skipped'
@@ -336,7 +336,7 @@ jobs:
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
 
   build-13:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 350
     needs: build-12
     if: ${{ !cancelled() && needs.build-12.result != 'skipped'
@@ -359,7 +359,7 @@ jobs:
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
 
   build-14:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 350
     needs: build-13
     if: ${{ !cancelled() && needs.build-13.result != 'skipped'
@@ -382,7 +382,7 @@ jobs:
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
 
   build-15:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 350
     needs: build-14
     if: ${{ !cancelled() && needs.build-14.result != 'skipped'
@@ -405,7 +405,7 @@ jobs:
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
 
   build-16:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 350
     needs: build-15
     if: ${{ !cancelled() && needs.build-15.result != 'skipped'
@@ -428,7 +428,7 @@ jobs:
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
 
   build-17:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 350
     needs: build-16
     if: ${{ !cancelled() && needs.build-16.result != 'skipped'
@@ -451,7 +451,7 @@ jobs:
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
 
   build-18:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 350
     needs: build-17
     if: ${{ !cancelled() && needs.build-17.result != 'skipped'
@@ -474,7 +474,7 @@ jobs:
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
 
   build-19:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 350
     needs: build-18
     if: ${{ !cancelled() && needs.build-18.result != 'skipped'
@@ -497,7 +497,7 @@ jobs:
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
 
   build-20:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 350
     needs: build-19
     if: ${{ !cancelled() && needs.build-19.result != 'skipped'
@@ -520,7 +520,7 @@ jobs:
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
 
   build-21:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 350
     needs: build-20
     if: ${{ !cancelled() && needs.build-20.result != 'skipped'
@@ -543,7 +543,7 @@ jobs:
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
 
   build-22:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 350
     needs: build-21
     if: ${{ !cancelled() && needs.build-21.result != 'skipped'
@@ -566,7 +566,7 @@ jobs:
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
 
   build-23:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 350
     needs: build-22
     if: ${{ !cancelled() && needs.build-22.result != 'skipped'
@@ -589,7 +589,7 @@ jobs:
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
 
   build-24:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 350
     needs: build-23
     if: ${{ !cancelled() && needs.build-23.result != 'skipped'
@@ -612,7 +612,7 @@ jobs:
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
 
   publish-release:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: build-24
     if: ${{ needs.build-24.outputs.finished == 'true' }}
     permissions:
@@ -699,7 +699,7 @@ jobs:
             release/SHA256SUMS.txt
 
   check-completion:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: build-24
     if: ${{ !cancelled() }}
     steps:
