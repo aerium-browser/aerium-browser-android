@@ -83,8 +83,9 @@ runs:
       run: bash ./.github/scripts/checkpoint-slot.sh restore
 
     - name: Restore build tree (best effort)
-      if: inputs.finished != 'true' && inputs.from_artifact != 'never' && inputs.restore_run_id == ''
+      if: inputs.finished != 'true' && inputs.from_artifact != 'never'
             && steps.restore-slot.outputs.name != ''
+            && steps.restore-slot.outputs.run_id == ''
       uses: actions/download-artifact@v8
       continue-on-error: true
       with:
@@ -92,14 +93,15 @@ runs:
         path: ${{ github.workspace }}/chromium
 
     - name: Restore build tree from another run (best effort)
-      if: inputs.finished != 'true' && inputs.from_artifact != 'never' && inputs.restore_run_id != ''
+      if: inputs.finished != 'true' && inputs.from_artifact != 'never'
             && steps.restore-slot.outputs.name != ''
+            && steps.restore-slot.outputs.run_id != ''
       uses: actions/download-artifact@v8
       continue-on-error: true
       with:
         name: ${{ steps.restore-slot.outputs.name }}
         path: ${{ github.workspace }}/chromium
-        run-id: ${{ inputs.restore_run_id }}
+        run-id: ${{ steps.restore-slot.outputs.run_id }}
         github-token: ${{ github.token }}
 
     - name: Unpack build tree

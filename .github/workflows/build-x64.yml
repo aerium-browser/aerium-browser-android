@@ -102,6 +102,7 @@ jobs:
           arch: x64
           finished: ${{ needs.build-1.outputs.finished }}
           from_artifact: 'auto'
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
@@ -126,6 +127,7 @@ jobs:
           arch: x64
           finished: ${{ needs.build-2.outputs.finished }}
           from_artifact: 'auto'
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
@@ -150,6 +152,7 @@ jobs:
           arch: x64
           finished: ${{ needs.build-3.outputs.finished }}
           from_artifact: 'auto'
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
@@ -174,6 +177,7 @@ jobs:
           arch: x64
           finished: ${{ needs.build-4.outputs.finished }}
           from_artifact: 'auto'
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
@@ -198,6 +202,7 @@ jobs:
           arch: x64
           finished: ${{ needs.build-5.outputs.finished }}
           from_artifact: 'auto'
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
@@ -222,6 +227,7 @@ jobs:
           arch: x64
           finished: ${{ needs.build-6.outputs.finished }}
           from_artifact: 'auto'
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
@@ -246,6 +252,7 @@ jobs:
           arch: x64
           finished: ${{ needs.build-7.outputs.finished }}
           from_artifact: 'auto'
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
@@ -270,6 +277,7 @@ jobs:
           arch: x64
           finished: ${{ needs.build-8.outputs.finished }}
           from_artifact: 'auto'
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
@@ -294,6 +302,7 @@ jobs:
           arch: x64
           finished: ${{ needs.build-9.outputs.finished }}
           from_artifact: 'auto'
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
@@ -318,6 +327,7 @@ jobs:
           arch: x64
           finished: ${{ needs.build-10.outputs.finished }}
           from_artifact: 'auto'
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
@@ -342,6 +352,7 @@ jobs:
           arch: x64
           finished: ${{ needs.build-11.outputs.finished }}
           from_artifact: 'auto'
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
@@ -366,6 +377,7 @@ jobs:
           arch: x64
           finished: ${{ needs.build-12.outputs.finished }}
           from_artifact: 'auto'
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
@@ -390,6 +402,7 @@ jobs:
           arch: x64
           finished: ${{ needs.build-13.outputs.finished }}
           from_artifact: 'auto'
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
@@ -414,6 +427,7 @@ jobs:
           arch: x64
           finished: ${{ needs.build-14.outputs.finished }}
           from_artifact: 'auto'
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
@@ -438,6 +452,7 @@ jobs:
           arch: x64
           finished: ${{ needs.build-15.outputs.finished }}
           from_artifact: 'auto'
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
@@ -462,6 +477,7 @@ jobs:
           arch: x64
           finished: ${{ needs.build-16.outputs.finished }}
           from_artifact: 'auto'
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
@@ -486,6 +502,7 @@ jobs:
           arch: x64
           finished: ${{ needs.build-17.outputs.finished }}
           from_artifact: 'auto'
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
@@ -510,6 +527,7 @@ jobs:
           arch: x64
           finished: ${{ needs.build-18.outputs.finished }}
           from_artifact: 'auto'
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
@@ -534,6 +552,7 @@ jobs:
           arch: x64
           finished: ${{ needs.build-19.outputs.finished }}
           from_artifact: 'auto'
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
@@ -558,6 +577,7 @@ jobs:
           arch: x64
           finished: ${{ needs.build-20.outputs.finished }}
           from_artifact: 'auto'
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
@@ -582,6 +602,7 @@ jobs:
           arch: x64
           finished: ${{ needs.build-21.outputs.finished }}
           from_artifact: 'auto'
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
@@ -606,6 +627,7 @@ jobs:
           arch: x64
           finished: ${{ needs.build-22.outputs.finished }}
           from_artifact: 'auto'
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
@@ -630,6 +652,7 @@ jobs:
           arch: x64
           finished: ${{ needs.build-23.outputs.finished }}
           from_artifact: 'auto'
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}

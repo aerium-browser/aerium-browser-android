@@ -27,9 +27,6 @@ _mode="${1:?usage: checkpoint-slot.sh restore|save}"
 : "${BASE:?BASE must be set}"
 
 _run_id="$GITHUB_RUN_ID"
-if [ "$_mode" = restore ] && [ -n "${RESTORE_RUN_ID:-}" ]; then
-    _run_id="$RESTORE_RUN_ID"
-fi
 
 # Both slots for this run, oldest first. An expired artifact is not a
 # checkpoint: downloading it fails, so it must not be picked.
@@ -39,20 +36,39 @@ fi
 # none); on save it means the first slot is used, and the worst case is an
 # upload that collides with an existing name and fails loudly, rather than a
 # silent overwrite.
-_slots="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$_run_id/artifacts?per_page=100" \
-    --jq "[.artifacts[]
-           | select(.expired == false)
-           | select(.name == \"$BASE\" or .name == \"$BASE-b\")
-           | {name: .name, id: .id}]
-          | sort_by(.id)" 2>/dev/null || echo '[]')"
+_list_slots() {
+    gh api "repos/$GITHUB_REPOSITORY/actions/runs/$1/artifacts?per_page=100" \
+        --jq "[.artifacts[]
+               | select(.expired == false)
+               | select(.name == \"$BASE\" or .name == \"$BASE-b\")
+               | {name: .name, id: .id}]
+              | sort_by(.id)" 2>/dev/null || echo '[]'
+}
+
+_slots="$(_list_slots "$_run_id")"
 _count="$(jq 'length' <<<"$_slots")"
 echo "[checkpoint-slot] run $_run_id has $_count of {$BASE, $BASE-b}" >&2
 
 if [ "$_mode" = restore ]; then
-    # The newest, or nothing. The caller skips the download when this is empty.
+    # This run's own checkpoint always wins: it is newer than whatever the
+    # dispatch was told to resume from. RESTORE_RUN_ID is the fallback, and it
+    # has to stay available to EVERY stage, not just the first. A stage whose
+    # runner dies before it can upload leaves this run holding nothing, and the
+    # next stage then has only the dispatch's source to go back to - without
+    # this fallback it silently starts from scratch and throws away the very
+    # checkpoint the run was dispatched to continue.
+    _source_run_id=""
     _name="$(jq -r '.[-1].name // ""' <<<"$_slots")"
-    echo "[checkpoint-slot] restoring from: ${_name:-<none>}" >&2
+    if [ -z "$_name" ] && [ -n "${RESTORE_RUN_ID:-}" ] \
+            && [ "$RESTORE_RUN_ID" != "$GITHUB_RUN_ID" ]; then
+        _fallback="$(_list_slots "$RESTORE_RUN_ID")"
+        echo "[checkpoint-slot] this run has none; run $RESTORE_RUN_ID has $(jq 'length' <<<"$_fallback")" >&2
+        _name="$(jq -r '.[-1].name // ""' <<<"$_fallback")"
+        [ -n "$_name" ] && _source_run_id="$RESTORE_RUN_ID"
+    fi
+    echo "[checkpoint-slot] restoring from: ${_name:-<none>} (run ${_source_run_id:-$GITHUB_RUN_ID})" >&2
     echo "name=$_name" >> "$GITHUB_OUTPUT"
+    echo "run_id=$_source_run_id" >> "$GITHUB_OUTPUT"
     exit 0
 fi
 
