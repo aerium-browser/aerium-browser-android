@@ -340,4 +340,12 @@ perl -0777 -pi -e '
 ' "$OTPGUARD"
 echo "[aerium] OTP phish guard checker client guarded on SAFE_BROWSING_AVAILABLE"
 
+PNHANDLER=chrome/browser/notifications/persistent_notification_handler.cc
+perl -0777 -pi -e '
+    my $n = s{\#if BUILDFLAG\(IS_ANDROID\)\n(  safe_browsing::NotificationContentDetectionUkmUtil::)}
+             {\#if BUILDFLAG(IS_ANDROID) && BUILDFLAG(SAFE_BROWSING_AVAILABLE)\n$1}s;
+    die "[aerium] FATAL: expected 1 rewrite in $ARGV, made $n - this block is guarded on IS_ANDROID alone while the safe_browsing headers it needs are included only under SAFE_BROWSING_AVAILABLE, which safe_browsing_mode=0 turns off\n" unless $n == 1;
+' "$PNHANDLER"
+echo "[aerium] suspicious notification UKM guarded on SAFE_BROWSING_AVAILABLE"
+
 export PATCHED=1
