@@ -314,4 +314,22 @@ perl -0777 -pi -e '
 ' "$SBBRIDGE"
 echo "[aerium] external app redirect reporting guarded on SAFE_BROWSING_AVAILABLE"
 
+perl -0777 -pi -e '
+    my $n = s{\#if BUILDFLAG\(SAFE_BROWSING_AVAILABLE\)\n(namespace safe_browsing \{\nclass SafeBrowsingService;\n\})\n\#endif\n}{$1\n};
+    $n += s{\#if BUILDFLAG\(SAFE_BROWSING_AVAILABLE\)\n(  // Returns the SafeBrowsing service\.\n  virtual safe_browsing::SafeBrowsingService\* safe_browsing_service\(\) = 0;\n)\#endif\n}{$1};
+    die "[aerium] FATAL: expected 2 rewrites in $ARGV, made $n - BrowserProcess hides safe_browsing_service() behind SAFE_BROWSING_AVAILABLE, which safe_browsing_mode=0 turns off, while dozens of callers that null-check it are still compiled\n" unless $n == 2;
+' chrome/browser/browser_process.h
+
+perl -0777 -pi -e '
+    my $n = s{\#if BUILDFLAG\(SAFE_BROWSING_AVAILABLE\)\n(  safe_browsing::SafeBrowsingService\* safe_browsing_service\(\) override;\n)\#endif\n}{$1};
+    die "[aerium] FATAL: expected 1 rewrite in $ARGV, made $n\n" unless $n == 1;
+' chrome/browser/browser_process_impl.h
+
+perl -0777 -pi -e '
+    my $n = s{\#if BUILDFLAG\(SAFE_BROWSING_AVAILABLE\)\n(safe_browsing::SafeBrowsingService\*\nBrowserProcessImpl::safe_browsing_service\(\) \{\n)(.*?)\n\}\n\#endif\n}
+             {$1\#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)\n$2\n\#else\n  return nullptr;\n\#endif\n\}\n}s;
+    die "[aerium] FATAL: expected 1 rewrite in $ARGV, made $n\n" unless $n == 1;
+' chrome/browser/browser_process_impl.cc
+echo "[aerium] safe_browsing_service() always declared, returning null when Safe Browsing is compiled out"
+
 export PATCHED=1

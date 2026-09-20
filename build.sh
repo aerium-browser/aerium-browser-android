@@ -317,6 +317,28 @@ if [ -f "$SBBRIDGE" ] && grep -q 'g_browser_process->safe_browsing_service()' "$
     echo "[aerium] resume hotfix: external app redirect reporting guarded in $SBBRIDGE"
 fi
 
+BP=chrome/browser/browser_process.h
+if [ -f "$BP" ] && grep -q '^#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)$' "$BP" \
+        && grep -q 'virtual safe_browsing::SafeBrowsingService\* safe_browsing_service' "$BP"; then
+    perl -0777 -pi -e '
+        my $n = s{\#if BUILDFLAG\(SAFE_BROWSING_AVAILABLE\)\n(namespace safe_browsing \{\nclass SafeBrowsingService;\n\})\n\#endif\n}{$1\n};
+        $n += s{\#if BUILDFLAG\(SAFE_BROWSING_AVAILABLE\)\n(  // Returns the SafeBrowsing service\.\n  virtual safe_browsing::SafeBrowsingService\* safe_browsing_service\(\) = 0;\n)\#endif\n}{$1};
+        die "[aerium] FATAL: expected 2 rewrites in $ARGV, made $n - BrowserProcess hides safe_browsing_service() behind SAFE_BROWSING_AVAILABLE, which safe_browsing_mode=0 turns off, while dozens of callers that null-check it are still compiled\n" unless $n == 2;
+    ' chrome/browser/browser_process.h
+
+    perl -0777 -pi -e '
+        my $n = s{\#if BUILDFLAG\(SAFE_BROWSING_AVAILABLE\)\n(  safe_browsing::SafeBrowsingService\* safe_browsing_service\(\) override;\n)\#endif\n}{$1};
+        die "[aerium] FATAL: expected 1 rewrite in $ARGV, made $n\n" unless $n == 1;
+    ' chrome/browser/browser_process_impl.h
+
+    perl -0777 -pi -e '
+        my $n = s{\#if BUILDFLAG\(SAFE_BROWSING_AVAILABLE\)\n(safe_browsing::SafeBrowsingService\*\nBrowserProcessImpl::safe_browsing_service\(\) \{\n)(.*?)\n\}\n\#endif\n}
+                 {$1\#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)\n$2\n\#else\n  return nullptr;\n\#endif\n\}\n}s;
+        die "[aerium] FATAL: expected 1 rewrite in $ARGV, made $n\n" unless $n == 1;
+    ' chrome/browser/browser_process_impl.cc
+    echo "[aerium] resume hotfix: safe_browsing_service() always declared in $BP and its implementation"
+fi
+
 # --- Resume sync for the first-run page: theme.sh only runs during source
 # setup, so a tree saved by an earlier stage keeps whatever version of the
 # page it was built with. Re-emit the header from theme.sh whenever the tree's
