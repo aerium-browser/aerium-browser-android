@@ -339,6 +339,16 @@ if [ -f "$BP" ] && grep -q '^#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)$' "$BP" \
     echo "[aerium] resume hotfix: safe_browsing_service() always declared in $BP and its implementation"
 fi
 
+OTPGUARD=chrome/browser/ui/autofill/chrome_otp_phish_guard_delegate.h
+if [ -f "$OTPGUARD" ] && grep -q 'safe_browsing_checker_client_;' "$OTPGUARD" \
+        && [ "$(grep -c '^#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)$' "$OTPGUARD")" -lt 2 ]; then
+    perl -0777 -pi -e '
+        s{(  const raw_ref<content::WebContents> web_contents_;\n)(  std::unique_ptr<OtpFillingSafeBrowsingCheckerClient>\n      safe_browsing_checker_client_;\n)}
+         {$1\#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)\n$2\#endif\n}s;
+    ' "$OTPGUARD"
+    echo "[aerium] resume hotfix: OTP phish guard checker client guarded in $OTPGUARD"
+fi
+
 # --- Resume sync for the first-run page: theme.sh only runs during source
 # setup, so a tree saved by an earlier stage keeps whatever version of the
 # page it was built with. Re-emit the header from theme.sh whenever the tree's
