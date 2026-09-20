@@ -348,4 +348,20 @@ perl -0777 -pi -e '
 ' "$PNHANDLER"
 echo "[aerium] suspicious notification UKM guarded on SAFE_BROWSING_AVAILABLE"
 
+INTERSTITIALUTIL=chrome/browser/interstitials/enterprise_util.cc
+perl -0777 -pi -e '
+    my $n = s{(\#include "components/safe_browsing/core/common/features\.h"\n)}
+             {$1\#include "components/safe_browsing/core/common/safe_browsing_prefs.h"\n};
+    die "[aerium] FATAL: expected 1 rewrite in $ARGV, made $n - prefs::kSafeBrowsingProceedAnywayDisabled reaches this file only through a header chain that safe_browsing_mode=0 cuts, so the declaring header has to be included directly\n" unless $n == 1;
+' "$INTERSTITIALUTIL"
+echo "[aerium] safe_browsing_prefs included directly by the interstitial reporting helper"
+
+CDMDELEGATE=chrome/browser/download/chrome_download_manager_delegate.cc
+perl -0777 -pi -e '
+    my $n = s{(bool ChromeDownloadManagerDelegate::ShouldObfuscateDownload\(\n    download::DownloadItem\* item\) \{\n)\#if BUILDFLAG\(ENTERPRISE_CONTENT_ANALYSIS\) \|\| BUILDFLAG\(IS_ANDROID\)\n}
+             {$1\#if (BUILDFLAG(ENTERPRISE_CONTENT_ANALYSIS) || BUILDFLAG(IS_ANDROID)) && BUILDFLAG(SAFE_BROWSING_AVAILABLE)\n}s;
+    die "[aerium] FATAL: expected 1 rewrite in $ARGV, made $n - this body is guarded on IS_ANDROID alone while safe_browsing::ShouldUploadBinaryForDeepScanning is declared in a header included only under SAFE_BROWSING_AVAILABLE, which safe_browsing_mode=0 turns off\n" unless $n == 1;
+' "$CDMDELEGATE"
+echo "[aerium] download obfuscation guarded on SAFE_BROWSING_AVAILABLE"
+
 export PATCHED=1

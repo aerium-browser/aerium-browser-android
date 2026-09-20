@@ -361,6 +361,28 @@ if [ -f "$PNHANDLER" ] \
     echo "[aerium] resume hotfix: suspicious notification UKM guarded in $PNHANDLER"
 fi
 
+INTERSTITIALUTIL=chrome/browser/interstitials/enterprise_util.cc
+if [ -f "$INTERSTITIALUTIL" ] \
+        && grep -q 'prefs::kSafeBrowsingProceedAnywayDisabled' "$INTERSTITIALUTIL" \
+        && ! grep -q 'core/common/safe_browsing_prefs.h' "$INTERSTITIALUTIL"; then
+    perl -0777 -pi -e '
+        s{(\#include "components/safe_browsing/core/common/features\.h"\n)}
+         {$1\#include "components/safe_browsing/core/common/safe_browsing_prefs.h"\n};
+    ' "$INTERSTITIALUTIL"
+    echo "[aerium] resume hotfix: safe_browsing_prefs included directly in $INTERSTITIALUTIL"
+fi
+
+CDMDELEGATE=chrome/browser/download/chrome_download_manager_delegate.cc
+if [ -f "$CDMDELEGATE" ] \
+        && grep -q 'safe_browsing::ShouldUploadBinaryForDeepScanning' "$CDMDELEGATE" \
+        && ! grep -q 'BUILDFLAG(IS_ANDROID)) && BUILDFLAG(SAFE_BROWSING_AVAILABLE)' "$CDMDELEGATE"; then
+    perl -0777 -pi -e '
+        s{(bool ChromeDownloadManagerDelegate::ShouldObfuscateDownload\(\n    download::DownloadItem\* item\) \{\n)\#if BUILDFLAG\(ENTERPRISE_CONTENT_ANALYSIS\) \|\| BUILDFLAG\(IS_ANDROID\)\n}
+         {$1\#if (BUILDFLAG(ENTERPRISE_CONTENT_ANALYSIS) || BUILDFLAG(IS_ANDROID)) && BUILDFLAG(SAFE_BROWSING_AVAILABLE)\n}s;
+    ' "$CDMDELEGATE"
+    echo "[aerium] resume hotfix: download obfuscation guarded in $CDMDELEGATE"
+fi
+
 # --- Resume sync for the first-run page: theme.sh only runs during source
 # setup, so a tree saved by an earlier stage keeps whatever version of the
 # page it was built with. Re-emit the header from theme.sh whenever the tree's
