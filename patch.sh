@@ -364,4 +364,11 @@ perl -0777 -pi -e '
 ' "$CDMDELEGATE"
 echo "[aerium] download obfuscation guarded on SAFE_BROWSING_AVAILABLE"
 
+perl -0777 -pi -e '
+    my $n = s{(bool IsForceSaveToCloud\(download::DownloadDangerType danger_type\) \{\n  return danger_type == download::DOWNLOAD_DANGER_TYPE_FORCE_SAVE_TO_ONEDRIVE \|\|\n         danger_type == download::DOWNLOAD_DANGER_TYPE_FORCE_SAVE_TO_GDRIVE;\n\}\n)}
+             {\#if BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)\n$1\#endif\n}s;
+    die "[aerium] FATAL: expected 1 rewrite in $ARGV, made $n - this anonymous-namespace helper is defined unguarded while both of its callers sit under SAFE_BROWSING_DOWNLOAD_PROTECTION, so safe_browsing_mode=0 leaves it unused under -Werror,-Wunused-function\n" unless $n == 1;
+' "$CDMDELEGATE"
+echo "[aerium] IsForceSaveToCloud guarded on SAFE_BROWSING_DOWNLOAD_PROTECTION"
+
 export PATCHED=1
