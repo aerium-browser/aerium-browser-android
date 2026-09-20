@@ -383,6 +383,16 @@ if [ -f "$CDMDELEGATE" ] \
     echo "[aerium] resume hotfix: download obfuscation guarded in $CDMDELEGATE"
 fi
 
+if [ -f "$CDMDELEGATE" ] \
+        && grep -q '^bool IsForceSaveToCloud(' "$CDMDELEGATE" \
+        && ! perl -0777 -ne 'exit(/\#if BUILDFLAG\(SAFE_BROWSING_DOWNLOAD_PROTECTION\)\nbool IsForceSaveToCloud\(/ ? 0 : 1)' "$CDMDELEGATE"; then
+    perl -0777 -pi -e '
+        s{(bool IsForceSaveToCloud\(download::DownloadDangerType danger_type\) \{\n  return danger_type == download::DOWNLOAD_DANGER_TYPE_FORCE_SAVE_TO_ONEDRIVE \|\|\n         danger_type == download::DOWNLOAD_DANGER_TYPE_FORCE_SAVE_TO_GDRIVE;\n\}\n)}
+         {\#if BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)\n$1\#endif\n}s;
+    ' "$CDMDELEGATE"
+    echo "[aerium] resume hotfix: IsForceSaveToCloud guarded in $CDMDELEGATE"
+fi
+
 # --- Resume sync for the first-run page: theme.sh only runs during source
 # setup, so a tree saved by an earlier stage keeps whatever version of the
 # page it was built with. Re-emit the header from theme.sh whenever the tree's
