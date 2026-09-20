@@ -393,6 +393,8 @@ if [ -f "$CDMDELEGATE" ] \
     echo "[aerium] resume hotfix: IsForceSaveToCloud guarded in $CDMDELEGATE"
 fi
 
+python3 "$SCRIPT_DIR/sb-link-guards.py"
+
 # --- Resume sync for the first-run page: theme.sh only runs during source
 # setup, so a tree saved by an earlier stage keeps whatever version of the
 # page it was built with. Re-emit the header from theme.sh whenever the tree's

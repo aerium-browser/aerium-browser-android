@@ -371,4 +371,6 @@ perl -0777 -pi -e '
 ' "$CDMDELEGATE"
 echo "[aerium] IsForceSaveToCloud guarded on SAFE_BROWSING_DOWNLOAD_PROTECTION"
 
+python3 "$SCRIPT_DIR/sb-link-guards.py"
+
 export PATCHED=1
