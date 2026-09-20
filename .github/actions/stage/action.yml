@@ -368,6 +368,11 @@ runs:
         } > "$GITHUB_WORKSPACE/stage-status/build-error.txt"
         sed -n '1,40p' "$GITHUB_WORKSPACE/chromium/src/out/Default/.siso_failed_targets" \
           >> "$GITHUB_WORKSPACE/stage-status/build-error.txt" 2>/dev/null || true
+        grep -h -A 12 '^\.\./\.\./.*error:' \
+          "$GITHUB_WORKSPACE/chromium/src/out/Default/siso_output" \
+          > "$GITHUB_WORKSPACE/stage-status/compile-errors.txt" 2>/dev/null || true
+        cp "$GITHUB_WORKSPACE/chromium/src/out/Default/siso_output" \
+          "$GITHUB_WORKSPACE/stage-status/siso_output.txt" 2>/dev/null || true
 
     - name: Upload deterministic-failure marker
       if: inputs.finished != 'true' && steps.code.outputs.code != '0'

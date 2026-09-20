@@ -349,6 +349,18 @@ if [ -f "$OTPGUARD" ] && grep -q 'safe_browsing_checker_client_;' "$OTPGUARD" \
     echo "[aerium] resume hotfix: OTP phish guard checker client guarded in $OTPGUARD"
 fi
 
+PNHANDLER=chrome/browser/notifications/persistent_notification_handler.cc
+if [ -f "$PNHANDLER" ] \
+        && grep -q '^#if BUILDFLAG(IS_ANDROID)$' "$PNHANDLER" \
+        && grep -q 'safe_browsing::NotificationContentDetectionUkmUtil::' "$PNHANDLER" \
+        && ! grep -q 'IS_ANDROID) && BUILDFLAG(SAFE_BROWSING_AVAILABLE)' "$PNHANDLER"; then
+    perl -0777 -pi -e '
+        s{\#if BUILDFLAG\(IS_ANDROID\)\n(  safe_browsing::NotificationContentDetectionUkmUtil::)}
+         {\#if BUILDFLAG(IS_ANDROID) && BUILDFLAG(SAFE_BROWSING_AVAILABLE)\n$1}s;
+    ' "$PNHANDLER"
+    echo "[aerium] resume hotfix: suspicious notification UKM guarded in $PNHANDLER"
+fi
+
 # --- Resume sync for the first-run page: theme.sh only runs during source
 # setup, so a tree saved by an earlier stage keeps whatever version of the
 # page it was built with. Re-emit the header from theme.sh whenever the tree's
@@ -519,7 +531,8 @@ if [ $MODE_CI = 1 ]; then
     # backend hangs. With >(...) the exit status below is still timeout's
     # own and the wait stays bounded by the loop that follows.
     timeout -s INT -k 5m ${REMAINING_MIN}m \
-        autoninja -j "${NINJA_JOBS:-2}" -C out/Default chrome_public_apk \
+        autoninja -j "${NINJA_JOBS:-2}" -k "${NINJA_KEEP_GOING:-0}" \
+        -C out/Default chrome_public_apk \
         > >(tee -a "$BUILD_LOG") 2>&1
     RET=$?
     set -e
