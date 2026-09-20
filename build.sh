@@ -307,6 +307,16 @@ for f in multipart_uploader_base.cc files_request_handler_base.cc; do
     fi
 done
 
+SBBRIDGE=chrome/browser/safe_browsing/android/safe_browsing_bridge.cc
+if [ -f "$SBBRIDGE" ] && grep -q 'g_browser_process->safe_browsing_service()' "$SBBRIDGE" \
+        && ! grep -q 'BUILDFLAG(SAFE_BROWSING_AVAILABLE)' "$SBBRIDGE"; then
+    perl -0777 -pi -e '
+        s{(  reinterpret_cast<SafeBrowsingServiceInterface\*>\(\n      g_browser_process->safe_browsing_service\(\)\n?\)?\n?      ->[^;]+;\n)}
+         {#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)\n$1#endif\n}s;
+    ' "$SBBRIDGE"
+    echo "[aerium] resume hotfix: external app redirect reporting guarded in $SBBRIDGE"
+fi
+
 # --- Resume sync for the first-run page: theme.sh only runs during source
 # setup, so a tree saved by an earlier stage keeps whatever version of the
 # page it was built with. Re-emit the header from theme.sh whenever the tree's

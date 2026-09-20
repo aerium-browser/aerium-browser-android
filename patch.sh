@@ -306,4 +306,12 @@ for f in cloud_binary_upload_service_base.cc resumable_uploader_base.cc \
 done
 echo "[aerium] deep scan debug reporting guarded on SAFE_BROWSING_DOWNLOAD_PROTECTION"
 
+SBBRIDGE=chrome/browser/safe_browsing/android/safe_browsing_bridge.cc
+perl -0777 -pi -e '
+    my $n = s{(  reinterpret_cast<SafeBrowsingServiceInterface\*>\(\n      g_browser_process->safe_browsing_service\(\)\n?\)?\n?      ->[^;]+;\n)}
+             {#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)\n$1#endif\n}s;
+    die "[aerium] FATAL: expected 1 safe_browsing_service call in $ARGV, rewrote $n - BrowserProcess only declares safe_browsing_service() under SAFE_BROWSING_AVAILABLE, which safe_browsing_mode=0 turns off\n" unless $n == 1;
+' "$SBBRIDGE"
+echo "[aerium] external app redirect reporting guarded on SAFE_BROWSING_AVAILABLE"
+
 export PATCHED=1
