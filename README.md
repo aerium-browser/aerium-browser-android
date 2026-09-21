@@ -180,10 +180,10 @@ Aerium is a thin layer over other people's work. Full attribution and licence te
 - **[ungoogled-chromium](https://github.com/ungoogled-software/ungoogled-chromium)** is where several of the `chrome://flags` entries get their names and their behaviour.
 - **[Cromite](https://github.com/uazo/cromite)**, by uazo, is where two DNS-over-HTTPS fixes come from: minimal DoH request headers, per RFC 8484, and building a DoH config when the system DNS configuration cannot be read. On Android, behind a VPN or Private DNS, that happens all the time.
 - **[Bromite](https://github.com/bromite/bromite)** wrote the canvas fingerprinting shuffler.
-- **[Titanium Browser](https://github.com/jqssun/android-titanium-browser)**, by jqssun, pioneered the desktop-extensions-on-Android approach this build follows. No code is taken from it.
+- **[Titanium Browser](https://github.com/jqssun/android-titanium-browser)**, by jqssun, formerly Helium. Aerium's whole premise, a Vanadium base carrying desktop extensions on Android, is Titanium's. So are `patch.sh`, `common.sh` and `args.gn`, which began as its scripts and are still synced against it by hand. `theme.sh`, `build.sh`, the icons and the CI are Aerium's own.
 
 The Aerium name, logo and application id are not covered by the GPLv2 grant. See the trademarks section of [NOTICE](NOTICE). The code is yours to take. The identity is not. Fork it under your own name.
 
 ## About
 
-Aerium is built on [GrapheneOS's Vanadium](https://github.com/GrapheneOS/Vanadium) and follows the desktop-extensions approach that [Titanium Browser](https://github.com/jqssun/android-titanium-browser) worked out first, with its own branding, defaults and privacy flags on top. Licensed under [GPLv2](LICENSE).
+Aerium is built on [GrapheneOS's Vanadium](https://github.com/GrapheneOS/Vanadium), starting from [Titanium Browser](https://github.com/jqssun/android-titanium-browser)'s scripts for putting desktop extensions on Android, with its own branding, defaults and privacy flags on top. Licensed under [GPLv2](LICENSE).
