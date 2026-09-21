@@ -9,6 +9,7 @@ on:
       - 'LICENSE'
       - '.github/ISSUE_TEMPLATE/**'
       - '.github/workflows/triage.yml'
+      - '.github/triage-rules.js'
   workflow_dispatch:
     inputs:
       fresh:
