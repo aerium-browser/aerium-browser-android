@@ -2885,7 +2885,7 @@ sed_i 's|^    private static final String AERIUM_PROJECT_URL = "https://aerium-b
 sed_i 's|^        Preference project = findPreference(PREF_AERIUM_PROJECT);$|        Preference patches = findPreference(PREF_AERIUM_PATCHES);\n        if (patches != null) {\n            patches.setOnPreferenceClickListener(\n                    preference -> {\n                        CustomTabActivity.showInfoPage(getActivity(), AERIUM_PATCHES_URL);\n                        return true;\n                    });\n        }\n\n&|' \
     $ACS
 
-sed_i 's|^    <Preference$|    <Preference\n        android:key="aerium_patches"\n        android:title="@string/aerium_patches_title"\n        android:summary="@string/aerium_patches_summary" />\n&|' \
+sed_i '0,/^    <Preference$/s|^    <Preference$|    <Preference\n        android:key="aerium_patches"\n        android:title="@string/aerium_patches_title"\n        android:summary="@string/aerium_patches_summary" />\n&|' \
     chrome/android/java/res/xml/about_chrome_preferences.xml
 
 sed_i 's|^      <message name="IDS_AERIUM_PROJECT_TITLE" desc=|      <message name="IDS_AERIUM_PATCHES_TITLE" desc="Title of the About-page row that opens the list of changes this build makes to Chromium.">\n        What this build changes\n      </message>\n      <message name="IDS_AERIUM_PATCHES_SUMMARY" desc="Summary under that row.">\n        Every patch applied on top of upstream Chromium\n      </message>\n&|' \
