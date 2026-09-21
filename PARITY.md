@@ -224,7 +224,7 @@ evening up; not a hole.
 | Aerium Guard section in Settings | ✅ | ✅ | ✅ |
 | Recommended / Privacy / Performance modes | ✅ | ✅ | ✅ |
 | Detects which mode the live settings match | ✅ | ✅ | ✅ |
-| Modes also seed chrome://flags entries | ✅ | ✅ | — |
+| Modes also seed chrome://flags entries | ✅ | ✅ | ✅ |
 | Modes also set Memory Saver and Battery Saver | ✅ | ✅ | — |
 | First-run preset chooser with an Apply button | ✅ | ✅ | ❌ |
 | Aerium Guard shield in the address bar | ✅ | ✅ | ❌ |
@@ -232,8 +232,13 @@ evening up; not a hole.
 The eleven profile prefs behind a mode are the same three ways up on all three
 platforms: the shared privacy floor, and what Privacy and Performance each trade
 for it. What Android does not carry is the two halves that have no Android
-meaning. The flags a desktop mode seeds are ungoogled-chromium entries, and this
-build is Vanadium-based and does not have them. Memory Saver, Battery Saver and
+meaning. Desktop seeds ungoogled-chromium and bromite entries; Android seeds the
+four of those it actually carries - `disable-search-engine-collection` and
+`remove-client-hints@1` for every mode, plus `force-punycode-hostnames` and
+`increase-incognito-storage-quota@1` for Privacy. The canvas and client-rects
+noise entries have no Android equivalent; `aerium-audio-noise` and
+`spoof-webgl-info` need no seeding because both features are enabled by
+default here. Memory Saver, Battery Saver and
 background mode are local-state prefs registered only for desktop, so there is
 nothing on Android to write.
 
