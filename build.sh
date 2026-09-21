@@ -558,6 +558,21 @@ if [ $MODE_CI = 1 ]; then
     # tee to die on its first write: tee holds the read end of autoninja's
     # stdout pipe, so a dead tee means SIGPIPE straight into the compiler.
     : > "$BUILD_LOG" 2>/dev/null || BUILD_LOG=/dev/null
+
+    aerium_sample_resources() {
+        while :; do
+            printf '[aerium] res %s root_avail=%s build_avail=%s mem_avail=%s swap_free=%s\n' \
+                "$(date -u +%H:%M:%S)" \
+                "$(df -BM --output=avail / 2>/dev/null | tail -1 | tr -d ' ')" \
+                "$(df -BM --output=avail "$SCRIPT_DIR/chromium" 2>/dev/null | tail -1 | tr -d ' ')" \
+                "$(awk '/^MemAvailable:/{printf "%dM", $2/1024}' /proc/meminfo)" \
+                "$(awk '/^SwapFree:/{printf "%dM", $2/1024}' /proc/meminfo)"
+            sleep 120
+        done
+    }
+    aerium_sample_resources &
+    AERIUM_RES_PID=$!
+
     set +e
     # Output goes through a process substitution rather than a plain `|
     # tee` on purpose: a pipe would make the shell block until every
@@ -570,6 +585,8 @@ if [ $MODE_CI = 1 ]; then
         > >(tee -a "$BUILD_LOG") 2>&1
     RET=$?
     set -e
+    kill "$AERIUM_RES_PID" 2>/dev/null || true
+    wait "$AERIUM_RES_PID" 2>/dev/null || true
 
     # Let the build backend finish its own shutdown before force-killing
     # anything.
