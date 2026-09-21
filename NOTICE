@@ -43,12 +43,18 @@ https://github.com/bromite/bromite
 
 The canvas fingerprinting shuffler is Bromite's.
 
-Titanium Browser
+Titanium Browser, formerly Helium Browser
 Copyright (c) jqssun
+Licensed under the GNU General Public License version 2.
 https://github.com/jqssun/android-titanium-browser
 
-Titanium pioneered the desktop-extensions-on-Android approach this build
-follows. No code is taken from it.
+Titanium is where the combination this build rests on comes from: a Vanadium
+base carrying Chromium's desktop extension support on Android. Aerium takes
+more than the idea. patch.sh, common.sh and args.gn originate in Titanium's
+scripts, still carry its structure, and are kept in sync with it by hand, with
+helium/aerium path renames applied. UPDATING.md documents that procedure.
+
+theme.sh, build.sh, res/ and the CI workflows are Aerium's own.
 
 TRADEMARKS
 
