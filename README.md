@@ -33,37 +33,39 @@ Aerium runs on donations and spare time: no ads, no data sales. Scan or copy an 
 <br><a href="https://aerium-browser.github.io/donate/ltc"><code>ltc1q8cpevsanzlmuc0ja8d0eltj72qk55nu7dty59v</code></a>
 </p>
 
-Aerium is a browser for people who'd rather their browser stayed out of the way. No telemetry calling home, no ad platform baked into the settings page. Extensions, including Manifest V2, install straight from the Chrome Web Store, something most Android browsers still can't do. Kiwi Browser used to be the answer to that and stopped receiving updates in January 2026; this picks up where it left off, on a security-hardened Chromium base.
+Aerium is a Chromium browser for Android that leaves you alone. Nothing phones home. There is no ad platform wired into the settings page.
+
+Extensions install from the Chrome Web Store, Manifest V2 included. Hardly any Android browser can do that. Kiwi Browser could, until it stopped getting updates in January 2026. Aerium picks that up again, on a Chromium base GrapheneOS has already hardened.
 
 [**Download for Android**](https://github.com/aerium-browser/aerium-browser-android/releases/latest)
 
 ## Installing and staying updated
 
-The link above is an arm64 APK, the right one for almost every phone and tablet made in the last several years. A few other ways to get and keep it:
+That link gives you an arm64 APK. It is the right one for almost any phone or tablet from the last several years. Other ways to get it and keep it current:
 
-- **[Obtainium](https://github.com/ImranR98/Obtainium)**: add this repository (`aerium-browser/aerium-browser-android`) as an app source and Obtainium tracks new releases and offers the update itself - no manual GitHub visits. Obtainium is itself sideloaded (F-Droid, or its own APK from its releases page), which fits a de-googled setup better than an app store.
-- **x86_64** (emulators, x86 tablets, Chromebooks that run Android apps): a separate build, kept off the main release feed on purpose so the in-app updater never offers arm64 phones an APK that can't install on them. Find the newest one on the [releases page](https://github.com/aerium-browser/aerium-browser-android/releases) under a tag containing `-x64-`. If none is recent enough, ask in an issue - it's built on request, not on every version.
-- Aerium also checks for a new release once a day on its own and notifies you - **Settings** needs opening, but nothing else does.
+- **[Obtainium](https://github.com/ImranR98/Obtainium)**. Add this repository (`aerium-browser/aerium-browser-android`) as an app source. Obtainium then watches for releases and offers you the update, so you never have to check GitHub. You sideload Obtainium itself, from F-Droid or its own releases page, which suits a de-googled phone better than an app store does.
+- **x86_64**, for emulators, x86 tablets and Chromebooks running Android apps. This one is deliberately kept off the main release feed, so the in-app updater never hands an arm64 phone an APK it cannot install. Look on the [releases page](https://github.com/aerium-browser/aerium-browser-android/releases) for a tag with `-x64-` in it. These are built on request rather than every version, so open an issue if the newest is too old.
+- Aerium checks for a new release once a day by itself and tells you when there is one. You open **Settings** to start the update. Nothing else is needed.
 
 ## What you get
 
-- **Extensions that actually work.** Manifest V2 support and Chrome Web Store access, plus Opera and Microsoft Edge add-on stores, and `.crx` files straight from a GitHub release, which is where an extension that is on no store usually lives. You still see the permissions prompt before anything installs.
-- **Your password manager, working properly.** Android's own autofill framework is on by default, so Bitwarden and similar apps fill forms natively instead of falling back to flaky accessibility tricks.
-- **Search that works from the first keystroke.** DuckDuckGo is the default engine, with Startpage, Brave Search, Mojeek, Qwant, Ecosia, degoog and the two DuckDuckGo no-JS variants ready to pick in Settings, plus any other engine addable by hand.
-- **Its own look, and a true-black dark mode.** Aerium ships its own palette instead of taking colours from your wallpaper. Dark mode can go fully black: on an OLED screen a black pixel is switched off and draws no power. There are separate switches for the browser itself and for web pages under **Settings → Appearance → Theme**.
-- **Media that keeps playing.** Leave the browser or turn the screen off and video and audio carry on. Chromium suspends media in a hidden page on Android, and Aerium doesn't. For sites that pause themselves the moment they're told they've gone to the background, YouTube included, a page that's making sound goes on believing it's still on screen. This only applies while sound is actually playing: a silent background tab is slowed down and put to sleep exactly as before.
-- **Safe Browsing off by default.** It's the one Android feature that phones home to Google on every page you visit. Turn it back on in Settings if you want it.
-- **Lighter by default.** Background network chatter, including hint prefetching, the Discover feed's background refresh, and domain reliability pings, is off out of the box. The name comes from aerogel, the lightest solid there is.
-- **Per-site rules for when your data goes.** Under **Settings → Privacy and security → Site rules**, each site can be kept, kept only until you close Aerium, or cleared the moment its last tab closes. There's a switch to invert it: clear *every* site on tab close and treat the list as your exceptions, which is how Cookie AutoDelete works. A short delay before clearing means a sign-in redirect through a self-closing tab doesn't lose the cookie it was about to use.
-- **Downloads on your terms.** Hand a download to ADM, 1DM or another download manager instead of fetching it here (**Settings → Downloads**), and copy any finished download's source link from its ⋮ menu.
-- **HTTPS by default.** Balanced Mode upgrades navigations to HTTPS automatically, without the disruptive full-site warnings of strict HTTPS-only enforcement.
-- **Global Privacy Control sent by default.** The `Sec-GPC` opt-out signal and `navigator.globalPrivacyControl`, recognized under CCPA but still not implemented in stock Chromium, are on for every page, no toggle needed.
-- **Canvas, text-measurement, and WebGL fingerprinting resistance on by default.** Canvas readbacks and `getClientRects()`/`measureText()` get a barely-perceptible noise; WebGL's renderer/vendor strings return generic values instead of your actual GPU. No toggle needed.
-- **DRM off by default, your call either way.** Widevine isn't registered until you turn it on in **Settings → Media**. Nothing is fetched from Google until you flip that switch.
+- **Extensions that actually work.** Manifest V2 and the Chrome Web Store, plus the Opera and Microsoft Edge add-on stores. You can also load a `.crx` from a GitHub release, which is usually where an extension lives if it is on no store at all. You still get the permissions prompt before anything installs.
+- **Your password manager, working properly.** Android's autofill framework is on by default. Bitwarden and the rest fill forms natively instead of falling back on flaky accessibility tricks.
+- **Search that works from the first keystroke.** DuckDuckGo is the default. Startpage, Brave Search, Mojeek, Qwant, Ecosia, degoog and the two DuckDuckGo no-JS variants are all there in Settings, and you can add your own.
+- **Its own look, and a true black dark mode.** Aerium ships a palette of its own rather than pulling colours off your wallpaper. Dark mode goes fully black if you want it, and on an OLED screen a black pixel is simply off and costs nothing. The browser and web pages have separate switches, under **Settings → Appearance → Theme**.
+- **Media that keeps playing.** Switch apps or turn the screen off and the audio carries on. Chromium suspends media in a hidden page on Android. Aerium does not. Some sites pause themselves the moment they are told they have gone to the background, YouTube among them, so a page making sound is allowed to go on believing it is still on screen. This only holds while sound is actually playing. A silent background tab still gets throttled and put to sleep exactly as before.
+- **Safe Browsing off by default.** It is the one Android feature that reports to Google on every page you open. Turn it back on in Settings if you want it.
+- **Lighter by default.** Background chatter is off out of the box: hint prefetching, the Discover feed's background refresh, domain reliability pings. The name comes from aerogel, the lightest solid there is.
+- **Per-site rules for when your data goes.** Under **Settings → Privacy and security → Site rules** you can keep a site, keep it only until you close Aerium, or clear it the moment its last tab closes. A switch inverts the whole thing: clear *every* site on tab close and treat your list as the exceptions, the way Cookie AutoDelete does it. Clearing waits a moment first, so a sign-in that redirects through a self-closing tab does not lose the cookie it was about to use.
+- **Downloads on your terms.** Hand a download off to ADM, 1DM or another manager instead of fetching it here, under **Settings → Downloads**. You can copy any finished download's source link from its ⋮ menu.
+- **HTTPS by default.** Balanced Mode upgrades navigations to HTTPS on its own, without the full-site warnings that make strict HTTPS-only so disruptive.
+- **Global Privacy Control sent by default.** The `Sec-GPC` opt-out signal and `navigator.globalPrivacyControl` go out on every page, with no toggle to find. CCPA recognises them. Stock Chromium still does not implement them.
+- **Canvas, text measurement and WebGL fingerprinting resistance on by default.** Canvas readbacks, `getClientRects()` and `measureText()` all get noise you will never notice. WebGL reports generic renderer and vendor strings rather than your actual GPU. Nothing to switch on.
+- **DRM off by default, your call either way.** Widevine is not registered until you turn it on in **Settings → Media**, and nothing is fetched from Google until you do.
 
 ## Using extensions
 
-Open the [Chrome Web Store](https://chromewebstore.google.com/), switch on **Desktop site** from the <kbd>⋮</kbd> menu, and install as normal. A few worth knowing about, all free and open-source:
+Open the [Chrome Web Store](https://chromewebstore.google.com/), turn on **Desktop site** from the <kbd>⋮</kbd> menu, and install as you normally would. A few worth knowing about, all free and open source:
 
 - **[uBlock Origin](https://chromewebstore.google.com/detail/ublock-origin/cjpalhdlnbpafiamejdnhcphjbkeiagm) (recommended)**, or its [latest release straight from GitHub](https://github.com/gorhill/uBlock/releases/latest) if you'd rather sideload it. Content blocking that doesn't get in your way. Install this one first.
 - [**uBlock Origin Lite**](https://chromewebstore.google.com/detail/ublock-origin-lite/ddkjiahejlhfcafbddmgiahcphecmpfh), from the same author with the same filter lists, a lighter footprint if that's what you'd rather trade for.
@@ -78,13 +80,13 @@ Pin an extension's icon to the toolbar from the <kbd>⋮</kbd> menu next to it i
 
 ## Why the download is large
 
-The APK is around 300 MB, which is bigger than most browsers. Two reasons, both deliberate.
+The APK runs to about 300 MB, well above most browsers. There are two reasons for it, and neither is an accident.
 
-**Extensions.** Supporting Chrome Web Store extensions on Android means building Chromium's *desktop* browser for Android rather than its phone build, and that carries the whole extension system and desktop UI layer with it. The browser engine alone is roughly 218 MB of the APK. Almost no other Android browser offers extensions; this is what it costs.
+**Extensions.** Running Chrome Web Store extensions on Android means building Chromium's *desktop* browser for Android instead of its phone build. That drags in the entire extension system and the desktop UI layer. The engine alone accounts for roughly 218 MB. Almost no other Android browser offers extensions at all, and this is the price of it.
 
-**The engine isn't compressed inside the package.** Android can map an uncompressed library straight out of the APK, which starts faster and avoids keeping a second unpacked copy on your device. Compressing it would roughly halve the download and give up both benefits, and it also means the installed size stays close to the download size rather than doubling it.
+**The engine is not compressed inside the package.** Android can map an uncompressed library straight out of the APK. It starts faster that way, and your phone does not end up storing a second unpacked copy. Compressing it would roughly halve the download and cost you both of those. It also keeps the installed size close to the download size instead of nearly doubling it.
 
-What Aerium does cut is anything it isn't using: around 20 MB of Android XR and ARCore libraries that Chromium packs in by default for features Aerium disables.
+What Aerium does strip out is anything it never touches, including about 20 MB of Android XR and ARCore libraries that Chromium packs in by default for features this build disables anyway.
 
 ## Other things worth knowing
 
@@ -93,7 +95,7 @@ What Aerium does cut is anything it isn't using: around 20 MB of Android XR and 
 
 ## Privacy protections and flags
 
-Most of what other builds put behind a flag, Aerium applies on Android by default. There is no switch to find because there is nothing to turn on:
+Most of what other builds hide behind a flag is simply on here. There is no switch to hunt for because there is nothing to turn on:
 
 - **Canvas fingerprinting**: image-data readback and `measureText()` are both perturbed.
 - **`getClientRects()` / `getBoundingClientRect()`**: perturbed by a factor drawn once per document.
@@ -133,7 +135,7 @@ And one upstream Chromium flag worth knowing:
 
 ### The list this README used to carry
 
-Earlier versions of this file listed a dozen flags under *More privacy flags to consider*. That list was copied from the desktop builds, and most of it was never true here: the desktop builds are based on ungoogled-chromium and inherit its flag entries, while this one is based on GrapheneOS's Vanadium and has none of them. Searching `chrome://flags` for those names finds nothing, which is why `#enable-parallel-downloading`, the only entry that came from upstream Chromium rather than from ungoogled, was the only one anybody could find.
+Earlier versions of this file listed a dozen flags under *More privacy flags to consider*. That list came straight from the desktop builds, and most of it was never true here. Those builds are based on ungoogled-chromium and inherit its flag entries. This one is based on GrapheneOS's Vanadium and inherits none of them. Search `chrome://flags` for those names and you find nothing, which is why `#enable-parallel-downloading` was the only one anyone could ever locate: it came from upstream Chromium, not from ungoogled.
 
 What actually happened to each:
 
@@ -157,7 +159,7 @@ The four marked *ported* carry ungoogled-chromium's own flag names, and are off 
 
 ## Building
 
-Every push to `main` builds automatically on GitHub Actions, split across sequential jobs to fit a full compile inside the free tier's per-job time limit. Every finished build is published as a release.
+Every push to `main` kicks off a build on GitHub Actions. It is split across sequential jobs so a full compile fits inside the free tier's per-job time limit. Whatever finishes gets published as a release.
 
 Want your own signed build?
 
@@ -167,21 +169,21 @@ Want your own signed build?
 
 ## Contributing
 
-Issues and pull requests are welcome. See [UPDATING.md](UPDATING.md) for how the build stays in sync with upstream releases.
+Issues and pull requests are welcome. [UPDATING.md](UPDATING.md) covers how the build keeps up with upstream releases.
 
 ## Credits
 
-Aerium is a thin layer on other people's work. Full attribution and licence terms are in [NOTICE](NOTICE).
+Aerium is a thin layer over other people's work. Full attribution and licence terms live in [NOTICE](NOTICE).
 
 - **[Chromium](https://www.chromium.org/)** is the browser. Everything here is a modification of its source, under its **BSD-3-Clause** licence.
-- **[Vanadium](https://github.com/GrapheneOS/Vanadium)**, by GrapheneOS, is the security-hardened base: 312 patches applied before any of Aerium's own. They are **GPL-2.0-only**, which is why Aerium is GPLv2 — inherited, not chosen.
+- **[Vanadium](https://github.com/GrapheneOS/Vanadium)**, by GrapheneOS, is the hardened base. Its 312 patches go on before any of Aerium's own. They are **GPL-2.0-only**, and that is why Aerium is GPLv2. The licence was inherited, not picked.
 - **[ungoogled-chromium](https://github.com/ungoogled-software/ungoogled-chromium)** is where several of the `chrome://flags` entries get their names and their behaviour.
-- **[Cromite](https://github.com/uazo/cromite)**, by uazo, is the source of two DNS-over-HTTPS fixes: minimal DoH request headers per RFC 8484, and building a DoH config when the system DNS configuration is unreadable — which on Android, behind a VPN or Private DNS, is routine.
+- **[Cromite](https://github.com/uazo/cromite)**, by uazo, is where two DNS-over-HTTPS fixes come from: minimal DoH request headers, per RFC 8484, and building a DoH config when the system DNS configuration cannot be read. On Android, behind a VPN or Private DNS, that happens all the time.
 - **[Bromite](https://github.com/bromite/bromite)** wrote the canvas fingerprinting shuffler.
 - **[Titanium Browser](https://github.com/jqssun/android-titanium-browser)**, by jqssun, pioneered the desktop-extensions-on-Android approach this build follows. No code is taken from it.
 
-The Aerium name, logo, and application id are not covered by the GPLv2 grant — see the trademarks section of [NOTICE](NOTICE). The code is free to take; the identity is not. Fork it under your own name.
+The Aerium name, logo and application id are not covered by the GPLv2 grant. See the trademarks section of [NOTICE](NOTICE). The code is yours to take. The identity is not. Fork it under your own name.
 
 ## About
 
-Aerium is built on [GrapheneOS's Vanadium](https://github.com/GrapheneOS/Vanadium), following the desktop-extensions approach pioneered by [Titanium Browser](https://github.com/jqssun/android-titanium-browser), with Aerium's own branding, defaults, and privacy-parity flags layered on top. Licensed under [GPLv2](LICENSE).
+Aerium is built on [GrapheneOS's Vanadium](https://github.com/GrapheneOS/Vanadium) and follows the desktop-extensions approach that [Titanium Browser](https://github.com/jqssun/android-titanium-browser) worked out first, with its own branding, defaults and privacy flags on top. Licensed under [GPLv2](LICENSE).
