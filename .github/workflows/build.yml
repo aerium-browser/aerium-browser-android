@@ -10,6 +10,7 @@ on:
       - '.github/ISSUE_TEMPLATE/**'
       - '.github/workflows/triage.yml'
       - '.github/triage-rules.js'
+      - 'NOTICE'
   workflow_dispatch:
     inputs:
       fresh:

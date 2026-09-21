@@ -169,6 +169,19 @@ Want your own signed build?
 
 Issues and pull requests are welcome. See [UPDATING.md](UPDATING.md) for how the build stays in sync with upstream releases.
 
+## Credits
+
+Aerium is a thin layer on other people's work. Full attribution and licence terms are in [NOTICE](NOTICE).
+
+- **[Chromium](https://www.chromium.org/)** is the browser. Everything here is a modification of its source, under its **BSD-3-Clause** licence.
+- **[Vanadium](https://github.com/GrapheneOS/Vanadium)**, by GrapheneOS, is the security-hardened base: 312 patches applied before any of Aerium's own. They are **GPL-2.0-only**, which is why Aerium is GPLv2 — inherited, not chosen.
+- **[ungoogled-chromium](https://github.com/ungoogled-software/ungoogled-chromium)** is where several of the `chrome://flags` entries get their names and their behaviour.
+- **[Cromite](https://github.com/uazo/cromite)**, by uazo, is the source of two DNS-over-HTTPS fixes: minimal DoH request headers per RFC 8484, and building a DoH config when the system DNS configuration is unreadable — which on Android, behind a VPN or Private DNS, is routine.
+- **[Bromite](https://github.com/bromite/bromite)** wrote the canvas fingerprinting shuffler.
+- **[Titanium Browser](https://github.com/jqssun/android-titanium-browser)**, by jqssun, pioneered the desktop-extensions-on-Android approach this build follows. No code is taken from it.
+
+The Aerium name, logo, and application id are not covered by the GPLv2 grant — see the trademarks section of [NOTICE](NOTICE). The code is free to take; the identity is not. Fork it under your own name.
+
 ## About
 
 Aerium is built on [GrapheneOS's Vanadium](https://github.com/GrapheneOS/Vanadium), following the desktop-extensions approach pioneered by [Titanium Browser](https://github.com/jqssun/android-titanium-browser), with Aerium's own branding, defaults, and privacy-parity flags layered on top. Licensed under [GPLv2](LICENSE).

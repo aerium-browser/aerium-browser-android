@@ -81,10 +81,11 @@ BUILD_LOG="${BUILD_LOG:-$SCRIPT_DIR/chromium/build_stdout.log}"
 # small root filesystem: vpython venvs alone are multiple GB and overflow the
 # CI runner's root disk otherwise. Not part of the stage artifact; they are
 # recreated cheaply on each stage.
-mkdir -p chromium/.vpython-root chromium/.cipd-cache chromium/.tmp
+mkdir -p chromium/.vpython-root chromium/.cipd-cache chromium/.tmp chromium/.cache
 export VPYTHON_VIRTUALENV_ROOT="$SCRIPT_DIR/chromium/.vpython-root"
 export CIPD_CACHE_DIR="$SCRIPT_DIR/chromium/.cipd-cache"
 export TMPDIR="$SCRIPT_DIR/chromium/.tmp"
+export XDG_CACHE_HOME="$SCRIPT_DIR/chromium/.cache"
 
 # --- system dependencies: needed on every (fresh) CI runner -----------------
 sudo apt-get update
@@ -561,9 +562,18 @@ if [ $MODE_CI = 1 ]; then
 
     aerium_sample_resources() {
         while :; do
+            _root_avail=$(df -BM --output=avail / 2>/dev/null | tail -1 | tr -d ' ')
+            case "${_root_avail%M}" in
+                ''|*[!0-9]*) : ;;
+                *) if [ "${_root_avail%M}" -lt 3072 ]; then
+                       printf '[aerium] WARNING root filesystem down to %s - the runner agent is killed when this reaches zero, and the stage dies with no uploaded log\n' \
+                           "$_root_avail"
+                       du -xhd1 / 2>/dev/null | sort -rh | head -12
+                   fi ;;
+            esac
             printf '[aerium] res %s root_avail=%s build_avail=%s mem_avail=%s swap_free=%s\n' \
                 "$(date -u +%H:%M:%S)" \
-                "$(df -BM --output=avail / 2>/dev/null | tail -1 | tr -d ' ')" \
+                "$_root_avail" \
                 "$(df -BM --output=avail "$SCRIPT_DIR/chromium" 2>/dev/null | tail -1 | tr -d ' ')" \
                 "$(awk '/^MemAvailable:/{printf "%dM", $2/1024}' /proc/meminfo)" \
                 "$(awk '/^SwapFree:/{printf "%dM", $2/1024}' /proc/meminfo)"
