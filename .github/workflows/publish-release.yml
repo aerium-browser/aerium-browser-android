@@ -1,0 +1,81 @@
+name: publish-release
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Build run ID whose aerium-android-arm64 artifact should be published. Find it in the run URL.'
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: publish-release-${{ inputs.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: false
+
+      - name: Download APK artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: aerium-android-arm64
+          path: release
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ secrets.RELEASE_TOKEN || github.token }}
+
+      - name: Resolve version and build number
+        id: ver
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
+        run: |
+          set -euo pipefail
+          V="$(cat release/version.txt 2>/dev/null || true)"
+          [ -z "$V" ] && V="$(ls release/aerium-*-arm64-v8a.apk | sed -E 's/.*aerium-([0-9.]+)-arm64.*/\1/' | head -n1)"
+          B="$(curl -sS -H "Authorization: Bearer $GH_TOKEN" \
+                "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/runs/${{ inputs.run_id }}" \
+                | sed -n 's/.*"run_number": *\([0-9]*\).*/\1/p' | head -n1)"
+          [ -z "$B" ] && B="${{ github.run_number }}"
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "build=$B" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: $V  build: $B"
+
+      - name: Compute checksum
+        run: |
+          set -euo pipefail
+          cd release
+          sha256sum aerium-*-arm64-v8a.apk > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Compose release notes
+        run: |
+          set -euo pipefail
+          V="${{ steps.ver.outputs.version }}"
+          awk -v v="$V" 'BEGIN{f=0} /^## /{ if (f) exit; if ($2 == v) { f=1; next } } f' \
+            CHANGELOG.md > /tmp/notes.md || true
+          if [ -s /tmp/notes.md ]; then
+            echo "Using the CHANGELOG.md section for $V:"
+            cat /tmp/notes.md
+          else
+            echo "No CHANGELOG.md section for $V - publishing with generated notes only."
+          fi
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          token: ${{ secrets.RELEASE_TOKEN || github.token }}
+          tag_name: v${{ steps.ver.outputs.version }}-b${{ steps.ver.outputs.build }}
+          name: Aerium ${{ steps.ver.outputs.version }} (arm64, build ${{ steps.ver.outputs.build }})
+          body_path: /tmp/notes.md
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            release/aerium-*-arm64-v8a.apk
+            release/SHA256SUMS.txt

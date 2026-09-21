@@ -660,7 +660,7 @@ jobs:
   publish-release:
     runs-on: ubuntu-24.04
     needs: build-24
-    if: ${{ needs.build-24.outputs.finished == 'true' }}
+    if: ${{ !cancelled() && needs.build-24.outputs.finished == 'true' }}
     permissions:
       contents: write
     steps:
