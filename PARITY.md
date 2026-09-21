@@ -234,8 +234,8 @@ platforms: the shared privacy floor, and what Privacy and Performance each trade
 for it. What Android does not carry is the two halves that have no Android
 meaning. Desktop seeds ungoogled-chromium and bromite entries; Android seeds the
 four of those it actually carries - `disable-search-engine-collection` and
-`remove-client-hints@1` for every mode, plus `force-punycode-hostnames` and
-`increase-incognito-storage-quota@1` for Privacy. The canvas and client-rects
+`remove-client-hints@1` for every mode, plus `force-punycode-hostnames`,
+`aerium-time-zone@1` and `increase-incognito-storage-quota@1` for Privacy. The canvas and client-rects
 noise entries have no Android equivalent; `aerium-audio-noise` and
 `spoof-webgl-info` need no seeding because both features are enabled by
 default here. Memory Saver, Battery Saver and
