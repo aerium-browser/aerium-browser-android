@@ -1,0 +1,43 @@
+name: Feature request
+description: Suggest something Aerium should do
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Aerium stays lightweight. If an extension or a user script can already do it,
+        that is the better answer than a patch we carry across every Chromium release.
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Before requesting
+      options:
+        - label: An extension or user script cannot already do this.
+          required: true
+        - label: I searched this tracker and this is not already requested.
+          required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the situation you hit, not the solution you have in mind.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What should Aerium do?
+    validations:
+      required: true
+
+  - type: input
+    id: prior-art
+    attributes:
+      label: Does another browser do this?
+      description: Naming one that already does it makes this much easier to judge.
+      placeholder: "Brave does X; Cromite has flag Y"
+    validations:
+      required: false
