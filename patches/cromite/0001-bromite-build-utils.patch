@@ -1,0 +1,841 @@
+From: uazo <uazo@users.noreply.github.com>
+Date: Fri, 9 Jun 2023 15:11:46 +0000
+Subject: bromite build utils
+
+---
+ build/android/gyp/java_cpp_enum.py            |  34 +++++-
+ build/android/gyp/util/build_utils.py         |  25 +++-
+ build/bromite/bromite_utils.gni               |  79 +++++++++++++
+ build/bromite/gyp/cpp_bromite_include.py      |  35 ++++++
+ build/bromite/gyp/cpp_bromite_include.pydeps  |   9 ++
+ build/bromite/gyp/java_bromite_impl.py        | 107 ++++++++++++++++++
+ build/bromite/gyp/java_bromite_impl.pydeps    |   9 ++
+ build/config/BUILDCONFIG.gn                   |   2 +
+ build/config/android/rules.gni                |   6 +-
+ .../ChromeAccessibilitySettingsDelegate.java  |   5 +
+ chrome/browser/flags/BUILD.gn                 |   8 +-
+ .../flags/android/cromite_native_utils.cc     |  94 +++++++++++++++
+ .../flags/android/cromite_native_utils.h      |  14 +++
+ .../browser/flags/CromiteNativeUtils.java     |  46 ++++++++
+ mojo/public/tools/mojom/mojom_parser.py       |  26 ++++-
+ tools/grit/grit/grd_reader.py                 |  27 ++++-
+ tools/grit/grit_rule.gni                      |   2 +-
+ tools/grit/preprocess_if_expr.py              |  32 +++++-
+ 18 files changed, 540 insertions(+), 20 deletions(-)
+ create mode 100644 build/bromite/bromite_utils.gni
+ create mode 100644 build/bromite/gyp/cpp_bromite_include.py
+ create mode 100644 build/bromite/gyp/cpp_bromite_include.pydeps
+ create mode 100644 build/bromite/gyp/java_bromite_impl.py
+ create mode 100644 build/bromite/gyp/java_bromite_impl.pydeps
+ create mode 100755 chrome/browser/flags/android/cromite_native_utils.cc
+ create mode 100755 chrome/browser/flags/android/cromite_native_utils.h
+ create mode 100755 chrome/browser/flags/android/java/src/org/chromium/chrome/browser/flags/CromiteNativeUtils.java
+
+diff --git a/build/android/gyp/java_cpp_enum.py b/build/android/gyp/java_cpp_enum.py
+--- a/build/android/gyp/java_cpp_enum.py
++++ b/build/android/gyp/java_cpp_enum.py
+@@ -6,6 +6,7 @@
+ 
+ import argparse
+ import collections
++import os
+ from datetime import date
+ import re
+ from string import Template
+@@ -244,6 +245,7 @@ class DirectiveSet:
+ 
+ 
+ class HeaderParser:
++    include_re = re.compile(r'#include "(.*)"')
+     single_line_comment_re = re.compile(r'\s*//\s*([^\n]*)')
+     multi_line_comment_start_re = re.compile(r'\s*/\*')
+     enum_line_re = re.compile(r'^\s*(\w+)(\s*\=\s*([^,\n]+))?,?')
+@@ -274,7 +276,7 @@ class HeaderParser:
+         r'^\s*(?:\[cpp.*\])?\s*enum.*{(?P<enum_entries>.*)}.*$'
+     )
+ 
+-    def __init__(self, lines, path=''):
++    def __init__(self, lines, options, path=''):
+         self._lines = java_cpp_utils.PreprocessIfBlocks(lines)
+         self._path = path
+         self._enum_definitions = []
+@@ -284,6 +286,7 @@ class HeaderParser:
+         self._generator_directives = DirectiveSet()
+         self._multi_line_generator_directive = None
+         self._current_enum_entry = ''
++        self._options = options
+ 
+     def _ApplyGeneratorDirectives(self):
+         self._generator_directives.UpdateDefinition(self._current_definition)
+@@ -312,6 +315,22 @@ class HeaderParser:
+                 + self._path
+             )
+ 
++        # Handles the management of #include files.
++        include_line = HeaderParser.include_re.match(line)
++        if include_line:
++            include_file = include_line.groups()[0]
++            if not include_file.endswith('.inc'):
++                raise Exception(
++                    'Include file "' + include_file + '" must end with .inc'
++                )
++
++            file_to_include = os.path.join(self._options.gen_dir, include_file)
++            if not os.path.exists(file_to_include):
++                file_to_include = os.path.join(self._options.root_dir, include_file)
++            with open(file_to_include, encoding='utf-8') as include_file_handle:
++                for new_line in include_file_handle:
++                    self._ParseEnumLine(new_line)
++            return
+         enum_comment = HeaderParser.single_line_comment_re.match(line)
+         if enum_comment:
+             comment = enum_comment.groups()[0]
+@@ -429,9 +448,9 @@ class HeaderParser:
+                 )
+ 
+ 
+-def DoGenerate(source_paths):
++def DoGenerate(source_paths, options):
+     for source_path in source_paths:
+-        enum_definitions = DoParseHeaderFile(source_path)
++        enum_definitions = DoParseHeaderFile(source_path, options)
+         if not enum_definitions:
+             raise Exception(
+                 'No enums found in %s\n'
+@@ -446,11 +465,11 @@ def DoGenerate(source_paths):
+             yield output_path, output
+ 
+ 
+-def DoParseHeaderFile(path):
++def DoParseHeaderFile(path, options):
+     with open(path, encoding='utf-8') as f:
+         lines = f.readlines()
+         preprocessed_lines = java_cpp_utils.ProcessListMacros(lines)
+-        return HeaderParser(preprocessed_lines, path).ParseDefinitions()
++        return HeaderParser(preprocessed_lines, options, path).ParseDefinitions()
+ 
+ 
+ def GenerateOutput(source_path, enum_definition):
+@@ -542,11 +561,14 @@ def DoMain(argv):
+         'input_paths', nargs='+', help='Path to at least one input file.'
+     )
+ 
++    parser.add_argument('--gen_dir', help='Indicates the path to the generated file')
++    parser.add_argument('--root_dir', help='Indicates the path to the build root')
++
+     options = parser.parse_args(argv)
+ 
+     with action_helpers.atomic_output(options.srcjar) as f:
+         with zipfile.ZipFile(f, 'w', zipfile.ZIP_STORED) as srcjar:
+-            for output_path, data in DoGenerate(options.input_paths):
++            for output_path, data in DoGenerate(options.input_paths, options):
+                 zip_helpers.add_to_zip_hermetic(srcjar, output_path, data=data)
+ 
+ 
+diff --git a/build/android/gyp/util/build_utils.py b/build/android/gyp/util/build_utils.py
+--- a/build/android/gyp/util/build_utils.py
++++ b/build/android/gyp/util/build_utils.py
+@@ -438,4 +438,27 @@ def ReadSourcesList(sources_list_file_name):
+     Note that this function should not be used to parse response files.
+     """
+     with open(sources_list_file_name, encoding='utf-8') as f:
+-        return [file_name.strip() for file_name in f]
++        files = [file_name.strip() for file_name in f]
++        # Allows inclusion of all files in the indicated folder
++        # in the sources of java-related gn targets.
++        # "include_all_directory.java" is a special name and must exist in the
++        # folder since gn checks for its existence, but it will not be
++        # included in the list.
++        # example:
++        #
++        #   sources += [
++        #     "java/src/org/chromium/components/browser_ui/site_settings/impl/include_all_directory.java",
++        #   ]
++        #
++        # will include in source all files found in
++        #   "java/src/org/chromium/components/browser_ui/site_settings/impl"
++        include_dirs = [f for f in files if f.endswith('include_all_directory.java')]
++        for include_file in include_dirs:
++            directory = os.path.dirname(include_file)
++            for root, dirs, directory_files in os.walk(directory):
++                for directory_file in directory_files:
++                    files.append(os.path.join(directory, directory_file))
++            files = [f for f in files if not f.endswith('include_all_directory.java')
++                     and not f.endswith('.java.tmpl')]
++
++        return files
+\ No newline at end of file
+diff --git a/build/bromite/bromite_utils.gni b/build/bromite/bromite_utils.gni
+new file mode 100644
+--- /dev/null
++++ b/build/bromite/bromite_utils.gni
+@@ -0,0 +1,79 @@
++import("//build/config/python.gni")
++
++# generates the file specified in ouput_file containing
++# the inclusion of all .inc files found in the folder
++# specified
++#
++# Parameters
++#   directories (required)
++#       A list of folders from which to extract the .inc files
++#
++#   output_file (required)
++#       The name of the include file to be generated
++#
++# Example
++#
++# cpp_bromite_include("bromite_content_settings") {
++#   directories = [ "bromite_content_settings/placeholder.txt" ]
++#   output_file = "bromite_content_settings.inc"
++# }
++#
++template("cpp_bromite_include") {
++  action_with_pydeps(target_name) {
++    forward_variables_from(invoker,
++                           TESTONLY_AND_VISIBILITY + [
++                                 "deps",
++                                 "inputs",
++                               ])
++    script = "//build/bromite/gyp/cpp_bromite_include.py"
++
++    _rebased_directories = rebase_path(invoker.inputs, root_build_dir)
++    _output = "$target_gen_dir/" + invoker.output_file
++    _output_rebased = rebase_path(_output)
++
++    args = [
++      "--output=$_output_rebased",
++    ]
++    args += _rebased_directories
++
++    outputs = [ _output ]
++  }
++}
++
++# allows the generation of the java file needed for
++# the inclusion of the defined site settings
++# in separate files
++# used by content settings patch
++template("java_bromite_impl") {
++  action_with_pydeps(target_name) {
++    forward_variables_from(invoker,
++                           TESTONLY_AND_VISIBILITY + [
++                                 "deps",
++                                 "inputs",
++                                 "namespace",
++                                 "static_classes",
++                               ])
++    script = "//build/bromite/gyp/java_bromite_impl.py"
++    namespace = ""
++    static_classes = false
++
++    _srcjar_path = "${target_gen_dir}/${target_name}.srcjar"
++    _rebased_srcjar_path = rebase_path(_srcjar_path, root_build_dir)
++    _rebased_directories = rebase_path(invoker.inputs, root_build_dir)
++    _rebased_template = rebase_path(invoker.template, root_build_dir)
++    _namespace = invoker.namespace
++    _static_classes = invoker.static_classes
++
++    args = [
++      "--srcjar=$_rebased_srcjar_path",
++      "--template=$_rebased_template",
++      "--namespace=$_namespace",
++    ]
++    if (_static_classes) {
++      args += [ "--static_classes", ]
++    }
++    args += _rebased_directories
++
++    outputs = [ _srcjar_path ]
++  }
++}
+diff --git a/build/bromite/gyp/cpp_bromite_include.py b/build/bromite/gyp/cpp_bromite_include.py
+new file mode 100644
+--- /dev/null
++++ b/build/bromite/gyp/cpp_bromite_include.py
+@@ -0,0 +1,35 @@
++#!/usr/bin/env python3
++
++import argparse
++import os
++import re
++import sys
++
++def _Main(argv):
++  parser = argparse.ArgumentParser()
++
++  parser.add_argument('--output',
++                      required=True,
++                      help='The path at which to generate the .inc file')
++
++  parser.add_argument(
++      'inputs', nargs='+', help='Input folder(s)', metavar='INPUTFILE')
++  args = parser.parse_args(argv)
++
++  for include_file in args.inputs:
++    directory = os.path.dirname(include_file)
++    files = []
++    for root, dirs, directory_files in os.walk(directory):
++      for directory_file in sorted(directory_files):
++        files.append(os.path.join(directory, directory_file))
++
++    files = [f for f in files if f.endswith('.inc')]
++
++  with open(args.output, 'w') as f:
++    for file in files:
++      f.write("#include \"" + file + "\"\n")
++    f.write("\n")
++
++
++if __name__ == '__main__':
++  _Main(sys.argv[1:])
+diff --git a/build/bromite/gyp/cpp_bromite_include.pydeps b/build/bromite/gyp/cpp_bromite_include.pydeps
+new file mode 100644
+--- /dev/null
++++ b/build/bromite/gyp/cpp_bromite_include.pydeps
+@@ -0,0 +1,9 @@
++# Generated by running:
++#   build/print_python_deps.py --root build/bromite/gyp --output build/bromite/gyp/cpp_bromite_include.pydeps build/bromite/gyp/cpp_bromite_include.py
++../../action_helpers.py
++../../android/gyp/util/__init__.py
++../../android/gyp/util/build_utils.py
++../../android/gyp/util/java_cpp_utils.py
++../../gn_helpers.py
++../../zip_helpers.py
++cpp_bromite_include.py
+diff --git a/build/bromite/gyp/java_bromite_impl.py b/build/bromite/gyp/java_bromite_impl.py
+new file mode 100644
+--- /dev/null
++++ b/build/bromite/gyp/java_bromite_impl.py
+@@ -0,0 +1,107 @@
++#!/usr/bin/env python3
++
++import argparse
++import os
++import re
++import sys
++import zipfile
++
++sys.path.append('build/android/gyp')
++sys.path.append('../../build/android/gyp')
++
++from util import build_utils
++from util import java_cpp_utils
++import action_helpers  # build_utils adds //build to sys.path.
++import zip_helpers
++
++def _GenerateOutput(template, source_paths, template_path, strings,
++                    namespace, static_classes):
++  description_template = """
++// This following string constants were inserted by
++//     {SCRIPT_NAME}
++// Directory
++//     {SOURCE_PATHS}
++// Template
++//     {TEMPLATE_PATH}
++
++"""
++  values = {
++      'SCRIPT_NAME': java_cpp_utils.GetScriptName(),
++      'SOURCE_PATHS': ',\n//    '.join(source_paths),
++      'TEMPLATE_PATH': template_path,
++  }
++  description = description_template.format(**values)
++
++  import_clause = '\n'.join(
++      ['import ' + namespace + '.' + f + ';' for f in strings])
++
++  if static_classes:
++    add_clause = '\n\t'.join(['\tadd(' + f + '.getInstance());' for f in strings])
++  else:
++    add_clause = '\n\t'.join(['\tadd(new ' + f + '());' for f in strings])
++
++  values = {
++      'DESCRIPTION': description,
++      'ADD_CLAUSE': add_clause,
++      'IMPORT_CLAUSE': import_clause,
++  }
++  return template.format(**values)
++
++
++def _Generate(source_paths, template_path, namespace, static_classes):
++  with open(template_path) as f:
++    lines = f.readlines()
++
++  template = ''.join(lines)
++  package, class_name = java_cpp_utils.ParseTemplateFile(template)
++  output_path = java_cpp_utils.GetJavaFilePath(package, class_name)
++  strings = []
++
++  for directory in source_paths:
++    if not directory.endswith('include_all_directory.java'):
++      raise Exception("input path not ends with 'include_all_directory.java'")
++    for root, dirs, directory_files in os.walk(os.path.dirname(directory)):
++      for directory_file in sorted(directory_files):
++        strings.append(directory_file)
++
++  strings = [f.replace('.java', '') for f in strings
++             if not f.endswith('include_all_directory.java') and
++                not f.endswith('.java.tmpl') ]
++
++  output = _GenerateOutput(template, source_paths, template_path, strings,
++                           namespace, static_classes)
++
++  return output, output_path
++
++
++def _Main(argv):
++  parser = argparse.ArgumentParser()
++
++  parser.add_argument('--srcjar',
++                      required=True,
++                      help='The path at which to generate the .srcjar file')
++
++  parser.add_argument('--template',
++                      required=True,
++                      help='The template file with which to generate the Java '
++                      'class.')
++
++  parser.add_argument(
++      '--namespace', required=True, help='Output namespace')
++  parser.add_argument(
++      '--static_classes', action="store_true",
++      default=False,
++      help='True to use getInstance() method')
++  parser.add_argument(
++      'inputs', nargs='+', help='Input folder(s)', metavar='INPUTFILE')
++  args = parser.parse_args(argv)
++
++  with action_helpers.atomic_output(args.srcjar) as f:
++    with zipfile.ZipFile(f, 'w', zipfile.ZIP_STORED) as srcjar:
++      data, path = _Generate(args.inputs, args.template,
++                             args.namespace, args.static_classes)
++      zip_helpers.add_to_zip_hermetic(srcjar, path, data=data)
++
++
++if __name__ == '__main__':
++  _Main(sys.argv[1:])
+diff --git a/build/bromite/gyp/java_bromite_impl.pydeps b/build/bromite/gyp/java_bromite_impl.pydeps
+new file mode 100644
+--- /dev/null
++++ b/build/bromite/gyp/java_bromite_impl.pydeps
+@@ -0,0 +1,9 @@
++# Generated by running:
++#   build/print_python_deps.py --root build/bromite/gyp --output build/bromite/gyp/java_bromite_impl.pydeps build/bromite/gyp/java_bromite_impl.py
++../../action_helpers.py
++../../android/gyp/util/__init__.py
++../../android/gyp/util/build_utils.py
++../../android/gyp/util/java_cpp_utils.py
++../../gn_helpers.py
++../../zip_helpers.py
++java_bromite_impl.py
+diff --git a/build/config/BUILDCONFIG.gn b/build/config/BUILDCONFIG.gn
+--- a/build/config/BUILDCONFIG.gn
++++ b/build/config/BUILDCONFIG.gn
+@@ -871,3 +871,5 @@ if (is_component_build) {
+ set_defaults("component") {
+   configs = default_component_configs
+ }
++
++import("//build/bromite/bromite_utils.gni")
+diff --git a/build/config/android/rules.gni b/build/config/android/rules.gni
+--- a/build/config/android/rules.gni
++++ b/build/config/android/rules.gni
+@@ -234,6 +234,10 @@ if (!is_robolectric && enable_java_templates) {
+       _rebased_sources = rebase_path(invoker.sources, root_build_dir)
+ 
+       args = [ "--srcjar=$_rebased_srcjar_path" ] + _rebased_sources
++      _root_gen_dir = rebase_path(root_gen_dir)
++      _root_dir = rebase_path(root_build_dir)
++      args += [ "--gen_dir=$_root_gen_dir",
++                "--root_dir=$_root_dir" ]
+       outputs = [ _srcjar_path ]
+     }
+   }
+@@ -288,7 +292,7 @@ if (!is_robolectric && enable_java_templates) {
+   #   my.java.package.
+   template("java_cpp_strings") {
+     action_with_pydeps(target_name) {
+-      forward_variables_from(invoker, TESTONLY_AND_VISIBILITY + [ "sources" ])
++      forward_variables_from(invoker, TESTONLY_AND_VISIBILITY + [ "sources", "deps" ])
+ 
+       # The sources aren't compiled so don't check their dependencies.
+       check_includes = false
+diff --git a/chrome/android/java/src/org/chromium/chrome/browser/accessibility/settings/ChromeAccessibilitySettingsDelegate.java b/chrome/android/java/src/org/chromium/chrome/browser/accessibility/settings/ChromeAccessibilitySettingsDelegate.java
+--- a/chrome/android/java/src/org/chromium/chrome/browser/accessibility/settings/ChromeAccessibilitySettingsDelegate.java
++++ b/chrome/android/java/src/org/chromium/chrome/browser/accessibility/settings/ChromeAccessibilitySettingsDelegate.java
+@@ -16,6 +16,11 @@ import org.chromium.components.dom_distiller.core.DistilledPagePrefs;
+ import org.chromium.components.user_prefs.UserPrefs;
+ import org.chromium.content_public.browser.BrowserContextHandle;
+ 
++import org.chromium.chrome.browser.flags.ChromeFeatureList;
++import org.chromium.chrome.browser.flags.CromiteNativeUtils;
++import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
++import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
++
+ /** The Chrome implementation of AccessibilitySettingsDelegate. */
+ @NullMarked
+ public class ChromeAccessibilitySettingsDelegate implements AccessibilitySettingsDelegate {
+diff --git a/chrome/browser/flags/BUILD.gn b/chrome/browser/flags/BUILD.gn
+--- a/chrome/browser/flags/BUILD.gn
++++ b/chrome/browser/flags/BUILD.gn
+@@ -7,7 +7,8 @@ import("//extensions/buildflags/buildflags.gni")
+ import("//third_party/jni_zero/jni_zero.gni")
+ 
+ android_library("java") {
+-  sources = [
++  sources = [ "android/java/src/org/chromium/chrome/browser/flags/CromiteNativeUtils.java" ]
++  sources += [
+     "android/java/src/org/chromium/chrome/browser/flags/ChromeFeatureList.java",
+     "android/java/src/org/chromium/chrome/browser/flags/ChromeFeatureMap.java",
+     "android/java/src/org/chromium/chrome/browser/flags/ChromeSessionState.java",
+@@ -33,7 +34,8 @@ android_library("java") {
+ }
+ 
+ generate_jni("jni_headers") {
+-  sources = [
++  sources = [ "android/java/src/org/chromium/chrome/browser/flags/CromiteNativeUtils.java" ]
++  sources += [
+     "android/java/src/org/chromium/chrome/browser/flags/ChromeFeatureMap.java",
+     "android/java/src/org/chromium/chrome/browser/flags/ChromeSessionState.java",
+   ]
+@@ -41,6 +43,8 @@ generate_jni("jni_headers") {
+ 
+ static_library("flags_android") {
+   sources = [
++    "android/cromite_native_utils.cc",
++    "android/cromite_native_utils.h",
+     "android/chrome_feature_list.h",
+     "android/chrome_session_state.cc",
+     "android/chrome_session_state.h",
+diff --git a/chrome/browser/flags/android/cromite_native_utils.cc b/chrome/browser/flags/android/cromite_native_utils.cc
+new file mode 100755
+--- /dev/null
++++ b/chrome/browser/flags/android/cromite_native_utils.cc
+@@ -0,0 +1,94 @@
++#include "chrome/browser/flags/android/cromite_native_utils.h"
++
++#include "chrome/browser/browser_process.h"
++#include "chrome/browser/about_flags.h"
++#include "chrome/browser/flags/jni_headers/CromiteNativeUtils_jni.h"
++#include "components/webui/flags/pref_service_flags_storage.h"
++
++#include "base/android/jni_string.h"
++
++using base::android::JavaRef;
++
++static void JNI_CromiteNativeUtils_SetEnabled(JNIEnv* env,
++    const JavaRef<jstring>& featureName, bool isEnabled) {
++  flags_ui::PrefServiceFlagsStorage flags_storage(
++      g_browser_process->local_state());
++  std::set<std::string> entries = flags_storage.GetFlags();
++
++  auto internal_name = base::android::ConvertJavaStringToUTF8(env, featureName);
++  entries.erase(internal_name);
++  entries.erase(internal_name + "@1"); // enabled
++  entries.erase(internal_name + "@2"); // disabled
++
++  bool is_switch = false;
++  if (const flags_ui::FeatureEntry* entry =
++        about_flags::GetCurrentFlagsState()->FindFeatureEntryByName(
++          internal_name)) {
++    if (entry->type == flags_ui::FeatureEntry::SINGLE_DISABLE_VALUE) {
++      entries.erase(entry->switches.command_line_switch);
++      if (isEnabled) {
++        entries.insert(entry->switches.command_line_switch);
++      }
++      is_switch = true;
++    } else if (entry->type == flags_ui::FeatureEntry::ENABLE_DISABLE_VALUE) {
++      entries.erase(entry->switches.command_line_switch);
++      entries.erase(entry->switches.disable_command_line_switch);
++      if (isEnabled) {
++        entries.insert(entry->switches.disable_command_line_switch);
++      }
++      is_switch = true;
++    }
++  }
++
++  if (!is_switch) {
++    if (isEnabled) {
++      entries.insert(internal_name + "@1");
++    } else {
++      entries.insert(internal_name + "@2");
++    }
++  }
++
++  flags_storage.SetFlags(entries);
++  flags_storage.CommitPendingWrites();
++}
++
++static jboolean JNI_CromiteNativeUtils_IsFlagEnabled(JNIEnv* env,
++    const JavaRef<jstring>& featureName) {
++  auto internal_name = base::android::ConvertJavaStringToUTF8(env, featureName);
++
++  flags_ui::PrefServiceFlagsStorage flags_storage(
++      g_browser_process->local_state());
++  std::set<std::string> entries = flags_storage.GetFlags();
++
++  if (const flags_ui::FeatureEntry* entry =
++        about_flags::GetCurrentFlagsState()->FindFeatureEntryByName(
++          internal_name)) {
++    if (entry->type == flags_ui::FeatureEntry::SINGLE_DISABLE_VALUE &&
++        entries.count(entry->switches.command_line_switch)) {
++      return true;
++    } else if (entry->type == flags_ui::FeatureEntry::ENABLE_DISABLE_VALUE &&
++               entries.count(entry->switches.disable_command_line_switch)) {
++      return true;
++    }
++  }
++
++  const std::string enabled_entry = internal_name + "@1";
++  if (entries.count(enabled_entry))
++    return true;
++
++  const std::string disabled_entry = internal_name + "@2";
++  if (entries.count(disabled_entry))
++    return false;
++
++  if (const flags_ui::FeatureEntry* entry =
++        about_flags::GetCurrentFlagsState()->FindFeatureEntryByName(
++          internal_name)) {
++    if (const base::Feature* feature = entry->feature.feature) {
++      return feature->default_state == base::FEATURE_ENABLED_BY_DEFAULT;
++    }
++  }
++
++  return false;
++}
++
++DEFINE_JNI(CromiteNativeUtils)
+diff --git a/chrome/browser/flags/android/cromite_native_utils.h b/chrome/browser/flags/android/cromite_native_utils.h
+new file mode 100755
+--- /dev/null
++++ b/chrome/browser/flags/android/cromite_native_utils.h
+@@ -0,0 +1,14 @@
++#ifndef CHROME_BROWSER_FLAGS_ANDROID_CROMITE_NATIVE_UTILS_H_
++#define CHROME_BROWSER_FLAGS_ANDROID_CROMITE_NATIVE_UTILS_H_
++
++#include <jni.h>
++
++#include "base/feature_list.h"
++
++namespace chrome {
++namespace android {
++
++}  // namespace android
++}  // namespace chrome
++
++#endif  // CHROME_BROWSER_FLAGS_ANDROID_CROMITE_NATIVE_UTILS_H_
+diff --git a/chrome/browser/flags/android/java/src/org/chromium/chrome/browser/flags/CromiteNativeUtils.java b/chrome/browser/flags/android/java/src/org/chromium/chrome/browser/flags/CromiteNativeUtils.java
+new file mode 100755
+--- /dev/null
++++ b/chrome/browser/flags/android/java/src/org/chromium/chrome/browser/flags/CromiteNativeUtils.java
+@@ -0,0 +1,46 @@
++package org.chromium.chrome.browser.flags;
++
++import org.chromium.components.cached_flags.CachedFlagsSharedPreferences;
++import org.chromium.components.cached_flags.CachedFlag;
++import org.chromium.chrome.browser.flags.ChromeFeatureList;
++
++import org.jni_zero.CalledByNative;
++import org.jni_zero.NativeMethods;
++
++public class CromiteNativeUtils {
++    /**
++     * Allows the modification of the flag value on the java side.
++     * Currently only the feature flag with on / off values is managed.
++     *
++     * @param featureName the feature name from ChromeFeatureList.
++     * @param flagName the flag name name from about_flags.cc.
++     */
++    public static void setFlagEnabled(String flagName, Boolean newValue) {
++        CachedFlag cachedFlag = ChromeFeatureList.sAllCachedFlags.get(flagName);
++        setFlagEnabled(cachedFlag == null
++                        ? ""
++                        : cachedFlag.getFeatureName(), flagName, newValue);
++    }
++
++    public static void setFlagEnabled(String featureName, String flagName, Boolean newValue) {
++        CromiteNativeUtilsJni.get().setEnabled(flagName, newValue);
++
++        if (!featureName.isEmpty()) {
++            CachedFlag cachedFlag = ChromeFeatureList.sAllCachedFlags.get(featureName);
++            String preferenceName = cachedFlag.getSharedPreferenceKey();
++
++            CachedFlagsSharedPreferences.getInstance().writeBoolean(preferenceName, newValue);
++            cachedFlag.setValueReturnedOverride(newValue);
++        }
++    }
++
++    public static boolean isFlagEnabled(String featureName) {
++        return CromiteNativeUtilsJni.get().isFlagEnabled(featureName);
++    }
++
++    @NativeMethods
++    public interface Natives {
++        void setEnabled(String featureName, boolean newValue);
++        boolean isFlagEnabled(String featureName);
++    }
++}
+diff --git a/mojo/public/tools/mojom/mojom_parser.py b/mojo/public/tools/mojom/mojom_parser.py
+--- a/mojo/public/tools/mojom/mojom_parser.py
++++ b/mojo/public/tools/mojom/mojom_parser.py
+@@ -20,6 +20,7 @@ import os
+ import os.path
+ import sys
+ import traceback
++import re
+ from collections import defaultdict
+ 
+ from mojom.generate import module
+@@ -203,14 +204,33 @@ def _CollectAllowedImportsFromBuildMetadata(build_metadata_filename):
+   return allowed_imports
+ 
+ 
++def _ResolveInclude(mojom_abspath, input_root_paths):
++  mojom_abspath = _ResolveRelativeImportPath(mojom_abspath, mojom_abspath,
++                                             input_root_paths)
++  with open(mojom_abspath, encoding='utf-8') as f:
++    src = f.read()
++
++    lines = src.splitlines()
++    for idx, i in enumerate(lines):
++      if i.startswith("#include"):
++        include_file = re.findall(r'"([^"]*)"', i)[0]
++        if include_file.startswith("../../"):
++          include_file = include_file[6::]
++        lines[idx] = _ResolveInclude(include_file, input_root_paths)
++
++  return "\n".join(lines)
++
++
+ # multiprocessing helper.
+-def _ParseAstHelper(mojom_abspath, mojom_path, enabled_features):
++def _ParseAstHelper(mojom_abspath, mojom_path, enabled_features,
++                    input_root_paths):
+   with open(mojom_abspath, encoding='utf-8') as f:
++    src = _ResolveInclude(mojom_abspath, input_root_paths)
+     # Label the AST with the relative mojom_path, not the absolute path. This
+     # filename is baked into the serialized .mojom-module (via source
+     # locations), so an abspath would make the module vary by build root and
+     # break remote-cache hits for downstream bindings actions.
+-    ast = parser.Parse(f.read(), mojom_path)
++    ast = parser.Parse(src, mojom_path)
+     conditional_features.RemoveDisabledDefinitions(ast, enabled_features)
+     return mojom_abspath, ast
+ 
+@@ -336,7 +356,7 @@ def _ParseMojoms(
+ 
+   logging.info('Parsing %d .mojom into ASTs', len(mojom_files_to_parse))
+   map_args = (
+-    (mojom_abspath, mojom_path, enabled_features)
++    (mojom_abspath, mojom_path, enabled_features, input_root_paths)
+     for mojom_abspath, mojom_path in mojom_files_to_parse.items()
+   )
+   for mojom_abspath, ast in _Shard(_ParseAstHelper, map_args):
+diff --git a/tools/grit/grit/grd_reader.py b/tools/grit/grit/grd_reader.py
+--- a/tools/grit/grit/grd_reader.py
++++ b/tools/grit/grit/grd_reader.py
+@@ -106,11 +106,28 @@ class GrdContentHandler(xml.sax.handler.ContentHandler):
+         raise exception.FileNotFound(partname)
+       # Exceptions propagate to the handler in grd_reader.Parse().
+       oldsource = self.source
+-      try:
+-        self.source = partname
+-        xml.sax.parse(partname, GrdPartContentHandler(self))
+-      finally:
+-        self.source = oldsource
++      # modifies the behavior of
++      #    <part file="folder" />
++      # allowing the inclusion of all grdp files found in the folder
++      # specified.
++      # the file value must end with "/placeholder.txt"
++      if partname.endswith("/placeholder.txt"):
++        partname = os.path.dirname(partname)
++        for root, dirs, files in os.walk(partname):
++          for file in files:
++            filepath = os.path.join(partname, file)
++            if filepath.endswith(".grdp"):
++              try:
++                self.source = partname
++                xml.sax.parse(filepath, GrdPartContentHandler(self))
++              finally:
++                self.source = oldsource
++      else:
++        try:
++          self.source = partname
++          xml.sax.parse(partname, GrdPartContentHandler(self))
++        finally:
++          self.source = oldsource
+ 
+     if self.debug:
+       print("End parsing of element %s" % name)
+diff --git a/tools/grit/grit_rule.gni b/tools/grit/grit_rule.gni
+--- a/tools/grit/grit_rule.gni
++++ b/tools/grit/grit_rule.gni
+@@ -360,7 +360,7 @@ template("grit") {
+       _gritdeps_lines = read_file(invoker.gritdeps, "list lines")
+       _gritdeps_entries = filter_exclude(_gritdeps_lines, [ "#*" ])
+       inputs += rebase_path(_gritdeps_entries, ".", "//")
+-      deps += [ ":$_check_gritdeps_target" ]
++      #deps += [ ":$_check_gritdeps_target" ]
+     }
+   }
+ 
+diff --git a/tools/grit/preprocess_if_expr.py b/tools/grit/preprocess_if_expr.py
+--- a/tools/grit/preprocess_if_expr.py
++++ b/tools/grit/preprocess_if_expr.py
+@@ -8,6 +8,7 @@ import io
+ import json
+ import os
+ import sys
++import re
+ 
+ # For Node, EvaluateExpression
+ import grit.node.base
+@@ -74,6 +75,35 @@ def ExtensionForComments(input_file):
+     extension = '.html'
+   return extension
+ 
++def _extract_template_from_dir(html_file):
++  template = ''
++  directory = os.path.dirname(html_file)
++  for root, dirs, directory_files in os.walk(directory):
++    for directory_file in directory_files:
++      if directory_file.endswith(".html"):
++        template += _extract_template(os.path.join(directory, directory_file))
++
++  return template
++
++def _extract_template(html_file):
++  include_re = re.compile(r'^\s*<include\s*path="(.*)"\s*/>')
++  with io.open(html_file, encoding='utf-8', mode='r') as f:
++    lines = f.readlines()
++
++    template_lines = []
++    for line in lines:
++      include_line = include_re.match(line)
++      if include_line:
++        include_file = include_line.groups()[0]
++        file_to_include = os.path.join(os.path.dirname(html_file), include_file)
++        if file_to_include.endswith("placeholder.txt"):
++          line = _extract_template_from_dir(file_to_include)
++        else:
++          line = _extract_template(file_to_include)
++      template_lines.append(line)
++
++    template = ''.join(template_lines)
++    return template
+ 
+ def main(argv):
+   parser = argparse.ArgumentParser()
+@@ -98,7 +128,7 @@ def main(argv):
+     in_path = os.path.join(in_folder, input_file)
+     content = ""
+     with open(in_path, encoding='utf-8') as f:
+-      content = f.read()
++      content = _extract_template(in_path)
+ 
+     removal_comments_extension = None  # None means no removal comments
+     if args.enable_removal_comments:
+--
