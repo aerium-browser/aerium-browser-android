@@ -3,80 +3,126 @@ name: triage
 on:
   issues:
     types: [opened, edited, reopened]
+  workflow_dispatch:
+    inputs:
+      sweep:
+        description: Re-evaluate every open issue
+        type: boolean
+        default: true
+      dry_run:
+        description: Report what would change without changing it
+        type: boolean
+        default: true
 
 permissions:
   issues: write
 
 concurrency:
-  group: triage-${{ github.event.issue.number }}
+  group: triage-${{ github.event.issue.number || github.run_id }}
   cancel-in-progress: true
 
 jobs:
   check:
     runs-on: ubuntu-24.04
-    if: ${{ !contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.issue.author_association) }}
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/github-script@v7
+        env:
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
         with:
           script: |
+            const rules = require(`${process.env.GITHUB_WORKSPACE}/.github/triage-rules.js`);
+
             const LABEL = 'needs-info';
-            const issue = context.payload.issue;
-            const body = issue.body || '';
+            const EXEMPT = ['OWNER', 'MEMBER', 'COLLABORATOR'];
+            const sweep = context.eventName === 'workflow_dispatch';
+            const dryRun = process.env.DRY_RUN === 'true';
 
-            const code = (body.match(/```[\s\S]*?```/g) || []).join(' ').trim();
+            const CLOSING_NOTE = {
+              'blank-required-field': blank =>
+                `This was closed automatically because a required section was left empty: **${blank.join('**, **')}**.`,
+              'no-template': () =>
+                'This was closed automatically because it was not filed through an issue form. Open a new report and fill the form in.',
+              'too-thin': () =>
+                'This was closed automatically because it does not contain enough to act on. A screenshot or a one-line description is not a bug report.',
+            };
 
-            const prose = body
-              .replace(/```[\s\S]*?```/g, ' ')
-              .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
-              .replace(/<img[^>]*>/gi, ' ')
-              .replace(/https?:\/\/\S+/g, ' ')
-              .replace(/^\s*###?#?\s.*$/gm, ' ')
-              .replace(/[-*]\s*\[[xX ]\]/g, ' ')
-              .replace(/_No response_/g, ' ')
-              .replace(/\s+/g, ' ')
-              .trim();
+            async function judge(issue) {
+              if (EXEMPT.includes(issue.author_association)) return null;
+              if (issue.pull_request) return null;
 
-            const sufficient = prose.length >= 60 || code.length >= 120;
-            const labels = (issue.labels || []).map(l => l.name);
-            const flagged = labels.includes(LABEL);
-
-            if (!sufficient && issue.state === 'open') {
-              if (!flagged) {
-                await github.rest.issues.createComment({
-                  ...context.repo, issue_number: issue.number,
-                  body: [
-                    'This was closed automatically because it does not contain enough to act on.',
-                    '',
-                    'A screenshot on its own is not a bug report. To reopen this, **edit the issue**',
-                    'and include:',
-                    '',
-                    '- the Aerium version from Settings > About Aerium',
-                    '- your device and Android version',
-                    '- numbered steps to reproduce, from a fresh launch',
-                    '- what you expected, and what happened instead',
-                    '- for a crash, the `FATAL EXCEPTION` block from `adb logcat -d`',
-                    '',
-                    'It reopens by itself once the description is filled in.',
-                  ].join('\n'),
-                });
-                await github.rest.issues.addLabels({
-                  ...context.repo, issue_number: issue.number, labels: [LABEL],
-                });
-              }
-              await github.rest.issues.update({
-                ...context.repo, issue_number: issue.number,
-                state: 'closed', state_reason: 'not_planned',
+              const labels = (issue.labels || []).map(l => (typeof l === 'string' ? l : l.name));
+              const flagged = labels.includes(LABEL);
+              const verdict = rules.evaluate({
+                body: issue.body || '',
+                labels,
+                strict: !sweep,
               });
-              return;
+
+              if (!verdict.sufficient && issue.state === 'open') {
+                const note = CLOSING_NOTE[verdict.reason](verdict.blank);
+                if (dryRun) return `would close #${issue.number} (${verdict.reason}${verdict.blank.length ? ': ' + verdict.blank.join(', ') : ''})`;
+                if (!flagged) {
+                  await github.rest.issues.createComment({
+                    ...context.repo, issue_number: issue.number,
+                    body: [
+                      note,
+                      '',
+                      'To reopen this, **edit the issue** and include:',
+                      '',
+                      '- the Aerium version from Settings > About Aerium',
+                      '- your device and Android version',
+                      '- numbered steps to reproduce, from a fresh launch',
+                      '- what you expected, and what happened instead',
+                      '- for a crash, the `FATAL EXCEPTION` block from `adb logcat -d`',
+                      '',
+                      'It reopens by itself once the description is filled in.',
+                    ].join('\n'),
+                  });
+                  await github.rest.issues.addLabels({
+                    ...context.repo, issue_number: issue.number, labels: [LABEL],
+                  });
+                }
+                await github.rest.issues.update({
+                  ...context.repo, issue_number: issue.number,
+                  state: 'closed', state_reason: 'not_planned',
+                });
+                return `closed #${issue.number} (${verdict.reason})`;
+              }
+
+              if (verdict.sufficient && flagged) {
+                if (dryRun) return `would reopen #${issue.number}`;
+                await github.rest.issues.removeLabel({
+                  ...context.repo, issue_number: issue.number, name: LABEL,
+                }).catch(() => {});
+                if (issue.state === 'closed') {
+                  await github.rest.issues.update({
+                    ...context.repo, issue_number: issue.number, state: 'open',
+                  });
+                }
+                return `reopened #${issue.number}`;
+              }
+
+              return null;
             }
 
-            if (sufficient && flagged) {
-              await github.rest.issues.removeLabel({
-                ...context.repo, issue_number: issue.number, name: LABEL,
-              }).catch(() => {});
-              if (issue.state === 'closed') {
-                await github.rest.issues.update({
-                  ...context.repo, issue_number: issue.number, state: 'open',
-                });
+            const actions = [];
+
+            if (sweep) {
+              const issues = await github.paginate(github.rest.issues.listForRepo, {
+                ...context.repo, state: 'open', per_page: 100,
+              });
+              for (const issue of issues) {
+                const result = await judge(issue);
+                if (result) actions.push(result);
               }
+            } else {
+              const result = await judge(context.payload.issue);
+              if (result) actions.push(result);
             }
+
+            await core.summary
+              .addHeading(dryRun ? 'Triage (dry run)' : 'Triage')
+              .addRaw(actions.length ? actions.map(a => `- ${a}`).join('\n') : '- no action')
+              .write();
