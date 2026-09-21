@@ -5,8 +5,16 @@ body:
   - type: markdown
     attributes:
       value: |
-        Aerium stays lightweight. If an extension or a user script can already do it,
-        that is the better answer than a patch we carry across every Chromium release.
+        **A bot reads this before a human does.** A request with nothing in it gets
+        closed automatically, and closed requests that nobody fills in are deleted
+        eventually. Say enough that someone can judge the idea.
+
+        Aerium stays lightweight. If an extension or a user script can already do
+        it, that beats a patch somebody has to carry across every Chromium release
+        for years.
+
+        And this is a spare-time project. A request here is a suggestion, never an
+        order. Suggestions get read. Orders get closed.
 
   - type: checkboxes
     id: checklist
