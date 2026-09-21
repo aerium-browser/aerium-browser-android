@@ -67,6 +67,19 @@ runs:
         remove-docker-images: 'true'
         build-mount-path: '${{ github.workspace }}/chromium'
 
+    - name: Reclaim root filesystem space
+      if: inputs.finished != 'true'
+      shell: bash
+      run: |
+        before=$(df -BM --output=avail / | tail -1 | tr -d ' ')
+        for d in /opt/hostedtoolcache /usr/local/share/powershell /usr/share/swift; do
+          [ -e "$d" ] && sudo rm -rf "$d"
+        done
+        sudo apt-get clean || true
+        after=$(df -BM --output=avail / | tail -1 | tr -d ' ')
+        echo "[aerium] root avail ${before} -> ${after}"
+        df -h /
+
     # The checkpoint alternates between two slots - see "Pick a checkpoint
     # slot" below for why - so which name holds the current one depends on how
     # many stages have run. Artifact ids increase monotonically, so the largest

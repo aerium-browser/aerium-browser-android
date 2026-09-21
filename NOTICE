@@ -1,0 +1,67 @@
+Aerium
+Copyright (c) 2026 Dioide
+
+This product includes modifications to Chromium source code.
+
+Chromium
+Copyright (c) The Chromium Authors
+Licensed under the BSD 3-Clause License.
+https://chromium.googlesource.com/chromium/src/+/main/LICENSE
+
+Vanadium
+Copyright (c) 2016-2026 GrapheneOS
+Licensed under the GNU General Public License version 2 only.
+https://github.com/GrapheneOS/Vanadium
+
+Aerium for Android is built by applying Vanadium's patch series - 312 patches -
+to Chromium, and then Aerium's own changes on top. Vanadium's patches are
+GPL-2.0-only, so this build and the scripts that produce it are distributed
+under the same terms. That is why LICENSE is the GPLv2 and not Chromium's own
+BSD licence: it is inherited, not chosen.
+
+ungoogled-chromium
+Licensed under the BSD 3-Clause License.
+https://github.com/ungoogled-software/ungoogled-chromium
+
+Several chrome://flags entries here carry ungoogled-chromium's flag names and
+do the same job as theirs.
+
+Cromite
+Copyright (c) uazo and contributors
+Licensed under the GNU General Public License version 3.
+https://github.com/uazo/cromite
+
+Two DNS-over-HTTPS changes are ported from Cromite: sending only the headers a
+DoH query needs, per RFC 8484 section 6.1, and building a DoH configuration
+from an explicit server and secure mode when the system DNS configuration is
+unreadable.
+
+Bromite
+Copyright (c) Bromite contributors
+Licensed under the GNU General Public License version 3.
+https://github.com/bromite/bromite
+
+The canvas fingerprinting shuffler is Bromite's.
+
+Titanium Browser
+Copyright (c) jqssun
+https://github.com/jqssun/android-titanium-browser
+
+Titanium pioneered the desktop-extensions-on-Android approach this build
+follows. No code is taken from it.
+
+TRADEMARKS
+
+"Aerium", the Aerium logo (res/aerium.svg and the icons generated from it), and
+the application id io.dioide.aerium are not covered by the GPLv2 grant above.
+The licence covers the code; it does not grant the identity of the project.
+
+A fork, a rebuild, or a redistribution carrying modifications must use its own
+name, its own logo, and its own application id. The source is free to take and
+that is the point of shipping it - but a build someone else has changed should
+not reach a user looking like this one. Mozilla and the Chromium project place
+the same condition on their own marks, for the same reason.
+
+Chromium is a trademark of Google LLC. Aerium is an independent project and is
+not affiliated with, endorsed by, or sponsored by Google LLC or the Chromium
+project.
