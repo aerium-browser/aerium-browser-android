@@ -6677,7 +6677,7 @@ perl -0777 -pi -e '
                . "opens with ntpShowing - upstream restructured it\n";
 ' chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/ToolbarPositionController.java
 
-sed_i 's|        setBackgroundColor(ChromeSemanticColorUtils.getHomeSurfaceBackgroundColor(getContext()));|&\n\n        if (!org.chromium.chrome.browser.toolbar.settings.AddressBarPreference\n                .isToolbarConfiguredToShowOnTop()) {\n            setPadding(\n                    getPaddingLeft(),\n                    0,\n                    getPaddingRight(),\n                    getPaddingBottom()\n                            + getResources()\n                                    .getDimensionPixelSize(R.dimen.toolbar_height_no_shadow));\n        }|' \
+sed_i 's|        setBackgroundColor(ChromeSemanticColorUtils.getHomeSurfaceBackgroundColor(getContext()));|&\n\n        if (!org.chromium.chrome.browser.toolbar.settings.AddressBarPreference\n                .isToolbarConfiguredToShowOnTop()) {\n            setPadding(\n                    getPaddingLeft(),\n                    getPaddingTop(),\n                    getPaddingRight(),\n                    getPaddingBottom()\n                            + getResources()\n                                    .getDimensionPixelSize(R.dimen.toolbar_height_no_shadow));\n        }|' \
     chrome/android/java/src/org/chromium/chrome/browser/ntp/NewTabPageLayout.java
 
 echo "[aerium] new tab page left to extensions"
