@@ -166,11 +166,6 @@ EOF
     replace "$SCRIPT_DIR/vanadium/patches" "vanadium" "aerium"
     git am --whitespace=nowarn --keep-non-patch $SCRIPT_DIR/vanadium/patches/*.patch
 
-    for cromite_patch in $SCRIPT_DIR/patches/cromite/*.patch; do
-        echo "[aerium] applying $(basename "$cromite_patch")"
-        patch -p1 --no-backup-if-mismatch --forward -F2 -i "$cromite_patch"
-    done
-
     gclient sync -D --no-history --nohooks
     gclient runhooks
     rm -rf third_party/angle/third_party/VK-GL-CTS/
