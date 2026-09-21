@@ -9,7 +9,7 @@
 [![release](https://img.shields.io/github/v/release/aerium-browser/aerium-browser-android)](https://github.com/aerium-browser/aerium-browser-android/releases/latest)
 [![released](https://img.shields.io/github/release-date/aerium-browser/aerium-browser-android?label=released)](https://github.com/aerium-browser/aerium-browser-android/releases/latest)
 [![downloads](https://img.shields.io/github/downloads/aerium-browser/aerium-browser-android/total?label=downloads)](https://github.com/aerium-browser/aerium-browser-android/releases)
-[![license](https://img.shields.io/badge/License-GPLv2-blue.svg)](LICENSE)
+[![license](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Donate XMR](https://img.shields.io/badge/XMR-Donate-FF6600?logo=monero&logoColor=white)](https://aerium-browser.github.io/donate/xmr)
 [![Donate LTC](https://img.shields.io/badge/LTC-Donate-345D9D?logo=litecoin&logoColor=white)](https://aerium-browser.github.io/donate/ltc)
 
@@ -171,4 +171,4 @@ Issues and pull requests are welcome. See [UPDATING.md](UPDATING.md) for how the
 
 ## About
 
-Aerium is built on [GrapheneOS's Vanadium](https://github.com/GrapheneOS/Vanadium), following the desktop-extensions approach pioneered by [Titanium Browser](https://github.com/jqssun/android-titanium-browser), with Aerium's own branding, defaults, and privacy-parity flags layered on top. Licensed under [GPLv2](LICENSE).
+Aerium is built on [GrapheneOS's Vanadium](https://github.com/GrapheneOS/Vanadium), following the desktop-extensions approach pioneered by [Titanium Browser](https://github.com/jqssun/android-titanium-browser), with Aerium's own branding, defaults, and privacy-parity flags layered on top. Per-site timezone control comes from [Cromite](https://github.com/uazo/cromite). Aerium's own code is GPL-2.0-or-later; because Cromite's patches are GPL-3.0-only, the combined work is distributed under [GPLv3](LICENSE).
