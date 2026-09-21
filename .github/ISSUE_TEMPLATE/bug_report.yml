@@ -5,8 +5,19 @@ body:
   - type: markdown
     attributes:
       value: |
-        Reports without a version, a device and steps to reproduce get closed automatically.
-        Filling this in properly is what makes a bug fixable.
+        **A bot reads this before a human does.** It closes issues it cannot work
+        from, and it goes by whether the form is filled in, because it has no way
+        to tell a real report from an empty one. Fill the fields in and nothing
+        happens to your issue. Leave them half empty and it closes with a comment
+        saying what was missing. Edit the issue and it reopens on its own.
+
+        Closed issues that nobody ever comes back to fill in get deleted after a
+        while, so a screenshot with "doesn't work" under it will not survive.
+
+        One more thing, said plainly. Aerium is a spare-time project, not a
+        company with a support desk. Nobody here is under any obligation to fix
+        anything. Describe what happened and someone will probably look. Write it
+        like an order and nobody will.
 
   - type: checkboxes
     id: checklist
