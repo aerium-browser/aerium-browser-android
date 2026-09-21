@@ -613,6 +613,13 @@ sed -i 's/BASE_FEATURE(kInterestFeedV2, base::FEATURE_ENABLED_BY_DEFAULT);/BASE_
 sed -i 's/BASE_FEATURE(kSafetyHub, base::FEATURE_ENABLED_BY_DEFAULT);/BASE_FEATURE(kSafetyHub, base::FEATURE_DISABLED_BY_DEFAULT);/' \
     components/safety_check/features.cc
 
+perl -0777 -pi -e '
+    my $n = s{(developer::SafetyCheckWarningReason GetSafetyCheckWarningReason\(\n    const Extension& extension,\n    Profile\* profile,\n    bool unpublished_only\) \{\n).*?\n\}\n}
+             {$1  return developer::SafetyCheckWarningReason::kNone;\n\}\n}s;
+    die "[aerium] FATAL: expected 1 rewrite in $ARGV, made $n - the extension safety check no longer has the shape this expects\n" unless $n == 1;
+' chrome/browser/extensions/extension_safety_check_utils.cc
+echo "[aerium] extension safety check reports no warnings"
+
 # --- Auto-darken web content, offered but off. Chromium already implements
 # this end to end: RadioButtonGroupThemePreference draws a "darken websites"
 # checkbox under Settings -> Appearance -> Theme whenever the theme is Dark or
