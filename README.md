@@ -58,7 +58,7 @@ The link above is an arm64 APK, the right one for almost every phone and tablet 
 - **Downloads on your terms.** Hand a download to ADM, 1DM or another download manager instead of fetching it here (**Settings → Downloads**), and copy any finished download's source link from its ⋮ menu.
 - **HTTPS by default.** Balanced Mode upgrades navigations to HTTPS automatically, without the disruptive full-site warnings of strict HTTPS-only enforcement.
 - **Global Privacy Control sent by default.** The `Sec-GPC` opt-out signal and `navigator.globalPrivacyControl`, recognized under CCPA but still not implemented in stock Chromium, are on for every page, no toggle needed.
-- **Canvas, text-measurement, and WebGL fingerprinting resistance on by default.** Canvas readbacks and `getClientRects()`/`measureText()` get a barely-perceptible noise; WebGL's renderer/vendor strings return generic values instead of your actual GPU. Same protections Windows Aerium ships, no toggle needed.
+- **Canvas, text-measurement, and WebGL fingerprinting resistance on by default.** Canvas readbacks and `getClientRects()`/`measureText()` get a barely-perceptible noise; WebGL's renderer/vendor strings return generic values instead of your actual GPU. No toggle needed.
 - **DRM off by default, your call either way.** Widevine isn't registered until you turn it on in **Settings → Media**. Nothing is fetched from Google until you flip that switch.
 
 ## Using extensions
@@ -153,7 +153,7 @@ What actually happened to each:
 | `#increase-incognito-storage-quota` | **Ported.** |
 | `#popups-to-tabs` | Nothing to port. Chrome on Android has no popup windows; `window.open` with features already lands in a tab. |
 
-The four marked *ported* now carry the same flag name they have on Windows and Linux, and are off by default there and here. The rest of ungoogled-chromium's flag set is either desktop-only UI or still to come; open an issue naming one if you want it next.
+The four marked *ported* carry ungoogled-chromium's own flag names, and are off by default. The rest of ungoogled-chromium's flag set is either desktop-only UI or still to come; open an issue naming one if you want it next.
 
 ## Building
 
