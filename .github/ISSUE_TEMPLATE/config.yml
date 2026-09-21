@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Chromium bug tracker
+    url: https://issues.chromium.org/issues
+    about: If it also happens in Chrome or another Chromium browser, report it upstream instead.
+  - name: Aerium project site
+    url: https://aerium-browser.github.io
+    about: Downloads, documentation and what this build changes.
