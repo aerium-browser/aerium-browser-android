@@ -65,6 +65,7 @@ runs:
         remove-haskell: 'true'
         remove-codeql: 'true'
         remove-docker-images: 'true'
+        remove-docker-images: 'true'
         build-mount-path: '${{ github.workspace }}/chromium'
 
     # The checkpoint alternates between two slots - see "Pick a checkpoint
