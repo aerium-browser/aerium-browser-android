@@ -8175,6 +8175,24 @@ cat > chrome/android/java/res/xml/aerium_guard_preferences.xml <<'AERIUM_GUARD_X
         android:persistent="false"
         android:title="@string/aerium_guard_security_title"
         android:summary="@string/aerium_guard_security_summary" />
+    <PreferenceCategory
+        android:key="aerium_guard_profiles"
+        android:title="@string/aerium_guard_profiles_title" />
+    <Preference
+        android:key="aerium_guard_profile_save"
+        android:persistent="false"
+        android:title="@string/aerium_guard_profile_save_title"
+        android:summary="@string/aerium_guard_profile_save_summary" />
+    <Preference
+        android:key="aerium_guard_profile_import"
+        android:persistent="false"
+        android:title="@string/aerium_guard_profile_import_title"
+        android:summary="@string/aerium_guard_profile_import_summary" />
+    <Preference
+        android:key="aerium_guard_profile_paste"
+        android:persistent="false"
+        android:title="@string/aerium_guard_profile_paste_title"
+        android:summary="@string/aerium_guard_profile_paste_summary" />
 </PreferenceScreen>
 AERIUM_GUARD_XML
 
@@ -8189,13 +8207,31 @@ cat > chrome/android/java/src/org/chromium/chrome/browser/settings/AeriumGuardFr
 package org.chromium.chrome.browser.settings;
 
 import android.app.Activity;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
+import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
+import android.text.InputType;
+import android.text.TextUtils;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.LinearLayout;
+import android.widget.Toast;
 
+import androidx.appcompat.app.AlertDialog;
 import androidx.preference.Preference;
+import androidx.preference.PreferenceCategory;
 
+import org.json.JSONException;
+
+import org.chromium.base.ContextUtils;
 import org.chromium.base.supplier.MonotonicObservableSupplier;
 import org.chromium.base.supplier.ObservableSuppliers;
 import org.chromium.base.supplier.SettableMonotonicObservableSupplier;
+import org.chromium.base.task.PostTask;
+import org.chromium.base.task.TaskTraits;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.R;
@@ -8212,6 +8248,13 @@ import org.chromium.components.content_settings.ContentSettingsType;
 import org.chromium.components.prefs.PrefService;
 import org.chromium.components.user_prefs.UserPrefs;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+
 @NullMarked
 public class AeriumGuardFragment extends ChromeBaseSettingsFragment {
     private static final String PREF_STATUS = "aerium_guard_status";
@@ -8219,6 +8262,10 @@ public class AeriumGuardFragment extends ChromeBaseSettingsFragment {
     private static final String PREF_PRIVACY = "aerium_guard_privacy";
     private static final String PREF_PERFORMANCE = "aerium_guard_performance";
     private static final String PREF_SECURITY = "aerium_guard_security";
+    private static final String PREF_PROFILES = "aerium_guard_profiles";
+    private static final String PREF_PROFILE_SAVE = "aerium_guard_profile_save";
+    private static final String PREF_PROFILE_IMPORT = "aerium_guard_profile_import";
+    private static final String PREF_PROFILE_PASTE = "aerium_guard_profile_paste";
 
     private static final String REQUESTED_PRESET = "aerium_guard.requested_preset";
     private static final String ACTIVE_PRESET = "aerium_guard.active_preset";
@@ -8227,11 +8274,19 @@ public class AeriumGuardFragment extends ChromeBaseSettingsFragment {
     private static final String PRIVACY = "privacy";
     private static final String PERFORMANCE = "performance";
     private static final String SECURITY = "security";
+    private static final String CUSTOM = "custom";
+
+    private static final int REQUEST_IMPORT = 4231;
+    private static final int REQUEST_EXPORT = 4232;
+    private static final String PROFILE_MIME_TYPE = "application/json";
 
     private static final int RESTART_SNACKBAR_DURATION_MS = 10000;
 
     private final SettableMonotonicObservableSupplier<String> mPageTitle =
             ObservableSuppliers.createMonotonic();
+
+    private @Nullable PreferenceCategory mProfileList;
+    private @Nullable AeriumGuardProfile mPendingExport;
 
     @Override
     public void onCreatePreferences(@Nullable Bundle savedInstanceState, @Nullable String rootKey) {
@@ -8242,7 +8297,24 @@ public class AeriumGuardFragment extends ChromeBaseSettingsFragment {
         bind(PREF_PRIVACY, PRIVACY);
         bind(PREF_PERFORMANCE, PERFORMANCE);
         bind(PREF_SECURITY, SECURITY);
+
+        mProfileList = findPreference(PREF_PROFILES);
+        onClick(PREF_PROFILE_SAVE, this::showSaveDialog);
+        onClick(PREF_PROFILE_IMPORT, this::startImport);
+        onClick(PREF_PROFILE_PASTE, this::importFromClipboard);
+
+        rebuildProfiles();
         updateStatus();
+    }
+
+    private void onClick(String key, Runnable action) {
+        Preference pref = findPreference(key);
+        if (pref == null) return;
+        pref.setOnPreferenceClickListener(
+                preference -> {
+                    action.run();
+                    return true;
+                });
     }
 
     private void bind(String prefKey, String preset) {
@@ -8256,6 +8328,10 @@ public class AeriumGuardFragment extends ChromeBaseSettingsFragment {
                                 ContentSettingsType.JAVASCRIPT_JIT,
                                 ContentSetting.BLOCK);
                     }
+                    ContextUtils.getAppSharedPreferences()
+                            .edit()
+                            .remove(AeriumGuardProfile.ACTIVE_PROFILE_KEY)
+                            .apply();
                     prefs().setString(REQUESTED_PRESET, preset);
                     updateStatus();
                     showRestartSnackbar();
@@ -8265,6 +8341,311 @@ public class AeriumGuardFragment extends ChromeBaseSettingsFragment {
 
     private PrefService prefs() {
         return UserPrefs.get(getProfile());
+    }
+
+    private Context getStyledContext() {
+        return getPreferenceManager().getContext();
+    }
+
+    private void rebuildProfiles() {
+        PreferenceCategory list = mProfileList;
+        if (list == null) return;
+        list.removeAll();
+        List<AeriumGuardProfile> profiles = AeriumGuardProfile.loadAll();
+        if (profiles.isEmpty()) {
+            Preference empty = new Preference(getStyledContext());
+            empty.setTitle(R.string.aerium_guard_profiles_empty);
+            empty.setSelectable(false);
+            list.addPreference(empty);
+            return;
+        }
+        for (AeriumGuardProfile profile : profiles) {
+            Preference row = new Preference(getStyledContext());
+            row.setTitle(profile.getName());
+            row.setSummary(R.string.aerium_guard_profile_row_summary);
+            row.setOnPreferenceClickListener(
+                    preference -> {
+                        showProfileActions(profile);
+                        return true;
+                    });
+            list.addPreference(row);
+        }
+    }
+
+    private void showProfileActions(AeriumGuardProfile profile) {
+        CharSequence[] actions = {
+            getString(R.string.aerium_guard_profile_apply),
+            getString(R.string.aerium_guard_profile_share),
+            getString(R.string.aerium_guard_profile_export),
+            getString(R.string.aerium_guard_profile_delete),
+        };
+        new AlertDialog.Builder(getStyledContext(), R.style.ThemeOverlay_BrowserUI_AlertDialog)
+                .setTitle(profile.getName())
+                .setItems(
+                        actions,
+                        (dialog, which) -> {
+                            if (which == 0) {
+                                confirmApply(profile);
+                            } else if (which == 1) {
+                                share(profile);
+                            } else if (which == 2) {
+                                startExport(profile);
+                            } else {
+                                confirmDelete(profile);
+                            }
+                        })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
+
+    private void confirmApply(AeriumGuardProfile profile) {
+        List<String> flags = profile.getFlags();
+        String message =
+                flags.isEmpty()
+                        ? getString(R.string.aerium_guard_profile_apply_message, profile.getName())
+                        : getString(
+                                R.string.aerium_guard_profile_apply_message_flags,
+                                profile.getName(),
+                                TextUtils.join(", ", flags));
+        new AlertDialog.Builder(getStyledContext(), R.style.ThemeOverlay_BrowserUI_AlertDialog)
+                .setTitle(R.string.aerium_guard_profile_apply)
+                .setMessage(message)
+                .setPositiveButton(
+                        R.string.aerium_guard_profile_apply,
+                        (dialog, which) -> {
+                            profile.apply(getProfile());
+                            prefs().setString(ACTIVE_PRESET, CUSTOM);
+                            ContextUtils.getAppSharedPreferences()
+                                    .edit()
+                                    .putString(
+                                            AeriumGuardProfile.ACTIVE_PROFILE_KEY,
+                                            profile.getName())
+                                    .apply();
+                            updateStatus();
+                            showRestartSnackbar();
+                        })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
+
+    private void confirmDelete(AeriumGuardProfile profile) {
+        new AlertDialog.Builder(getStyledContext(), R.style.ThemeOverlay_BrowserUI_AlertDialog)
+                .setMessage(getString(R.string.aerium_guard_profile_delete_message, profile.getName()))
+                .setPositiveButton(
+                        R.string.aerium_guard_profile_delete,
+                        (dialog, which) -> {
+                            AeriumGuardProfile.remove(profile.getName());
+                            rebuildProfiles();
+                            updateStatus();
+                        })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
+
+    private void showSaveDialog() {
+        Context context = getStyledContext();
+        int padding = Math.round(24 * context.getResources().getDisplayMetrics().density);
+        EditText input = new EditText(context);
+        input.setSingleLine(true);
+        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+        input.setHint(R.string.aerium_guard_profile_name_title);
+        LinearLayout layout = new LinearLayout(context);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(padding, padding, padding, 0);
+        layout.addView(input);
+
+        AlertDialog dialog =
+                new AlertDialog.Builder(context, R.style.ThemeOverlay_BrowserUI_AlertDialog)
+                        .setTitle(R.string.aerium_guard_profile_save_title)
+                        .setView(layout)
+                        .setPositiveButton(R.string.aerium_guard_profile_save, null)
+                        .setNegativeButton(android.R.string.cancel, null)
+                        .create();
+        dialog.show();
+        Button positive = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+        if (positive == null) return;
+        positive.setOnClickListener(
+                view -> {
+                    String name = AeriumGuardProfile.sanitizeName(input.getText().toString());
+                    if (name.isEmpty()) {
+                        input.setError(getString(R.string.aerium_guard_profile_name_invalid));
+                        return;
+                    }
+                    try {
+                        AeriumGuardProfile.addOrReplace(
+                                AeriumGuardProfile.snapshot(getProfile(), name));
+                    } catch (JSONException e) {
+                        return;
+                    }
+                    ContextUtils.getAppSharedPreferences()
+                            .edit()
+                            .putString(AeriumGuardProfile.ACTIVE_PROFILE_KEY, name)
+                            .apply();
+                    rebuildProfiles();
+                    updateStatus();
+                    showToast(R.string.aerium_guard_profile_saved);
+                    dialog.dismiss();
+                });
+    }
+
+    private void startImport() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("*/*");
+        try {
+            startActivityForResult(intent, REQUEST_IMPORT);
+        } catch (RuntimeException e) {
+        }
+    }
+
+    private void importFromClipboard() {
+        Context context = getContext();
+        if (context == null) return;
+        ClipboardManager clipboard =
+                (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
+        ClipData clip = clipboard == null ? null : clipboard.getPrimaryClip();
+        if (clip == null || clip.getItemCount() == 0) {
+            showToast(R.string.aerium_guard_profile_invalid);
+            return;
+        }
+        CharSequence text = clip.getItemAt(0).coerceToText(context);
+        addImported(text == null ? "" : text.toString());
+    }
+
+    private void addImported(String text) {
+        AeriumGuardProfile profile = AeriumGuardProfile.parse(text);
+        if (profile == null) {
+            showToast(R.string.aerium_guard_profile_invalid);
+            return;
+        }
+        if (profile.getName().isEmpty()) {
+            profile = profile.withName(getString(R.string.aerium_guard_profile_default_name));
+        }
+        AeriumGuardProfile.addOrReplace(profile);
+        rebuildProfiles();
+        updateStatus();
+        showToast(R.string.aerium_guard_profile_added);
+    }
+
+    private void share(AeriumGuardProfile profile) {
+        String json;
+        try {
+            json = profile.toJson().toString(2);
+        } catch (JSONException e) {
+            return;
+        }
+        Intent send = new Intent(Intent.ACTION_SEND);
+        send.setType("text/plain");
+        send.putExtra(Intent.EXTRA_SUBJECT, profile.getName());
+        send.putExtra(Intent.EXTRA_TEXT, json);
+        try {
+            startActivity(
+                    Intent.createChooser(send, getString(R.string.aerium_guard_profile_share)));
+        } catch (RuntimeException e) {
+        }
+    }
+
+    private void startExport(AeriumGuardProfile profile) {
+        mPendingExport = profile;
+        String fileName = profile.getName().replaceAll("[^A-Za-z0-9._-]+", "-");
+        Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType(PROFILE_MIME_TYPE);
+        intent.putExtra(
+                Intent.EXTRA_TITLE,
+                (fileName.isEmpty() ? "aerium-guard-profile" : fileName) + ".json");
+        try {
+            startActivityForResult(intent, REQUEST_EXPORT);
+        } catch (RuntimeException e) {
+            mPendingExport = null;
+        }
+    }
+
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        AeriumGuardProfile pending = mPendingExport;
+        mPendingExport = null;
+        if (resultCode != Activity.RESULT_OK || data == null) return;
+        Uri uri = data.getData();
+        if (uri == null) return;
+        if (requestCode == REQUEST_IMPORT) {
+            readProfile(uri);
+        } else if (requestCode == REQUEST_EXPORT && pending != null) {
+            writeProfile(uri, pending);
+        }
+    }
+
+    private void readProfile(Uri uri) {
+        Context context = getContext();
+        if (context == null) return;
+        PostTask.postTask(
+                TaskTraits.BEST_EFFORT_MAY_BLOCK,
+                () -> {
+                    String text = null;
+                    try (InputStream in = context.getContentResolver().openInputStream(uri)) {
+                        if (in == null) throw new IOException("no input stream for " + uri);
+                        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+                        byte[] chunk = new byte[8192];
+                        int read;
+                        while ((read = in.read(chunk)) != -1) {
+                            buffer.write(chunk, 0, read);
+                            if (buffer.size() > 1024 * 1024) {
+                                throw new IOException("profile file too large");
+                            }
+                        }
+                        text = buffer.toString(StandardCharsets.UTF_8.name());
+                    } catch (IOException e) {
+                    }
+                    String result = text;
+                    PostTask.postTask(
+                            TaskTraits.UI_DEFAULT,
+                            () -> {
+                                if (result == null) {
+                                    showToast(R.string.aerium_guard_profile_invalid);
+                                    return;
+                                }
+                                addImported(result);
+                            });
+                });
+    }
+
+    private void writeProfile(Uri uri, AeriumGuardProfile profile) {
+        Context context = getContext();
+        if (context == null) return;
+        byte[] bytes;
+        try {
+            bytes = profile.toJson().toString(2).getBytes(StandardCharsets.UTF_8);
+        } catch (JSONException e) {
+            showToast(R.string.aerium_guard_profile_export_failed);
+            return;
+        }
+        PostTask.postTask(
+                TaskTraits.BEST_EFFORT_MAY_BLOCK,
+                () -> {
+                    boolean ok;
+                    try (OutputStream out = context.getContentResolver().openOutputStream(uri)) {
+                        if (out == null) throw new IOException("no output stream for " + uri);
+                        out.write(bytes);
+                        ok = true;
+                    } catch (IOException e) {
+                        ok = false;
+                    }
+                    boolean success = ok;
+                    PostTask.postTask(
+                            TaskTraits.UI_DEFAULT,
+                            () ->
+                                    showToast(
+                                            success
+                                                    ? R.string.aerium_guard_profile_exported
+                                                    : R.string.aerium_guard_profile_export_failed));
+                });
+    }
+
+    private void showToast(int resId) {
+        Context context = getContext();
+        if (context == null) return;
+        Toast.makeText(context, resId, Toast.LENGTH_LONG).show();
     }
 
     private void showRestartSnackbar() {
@@ -8290,19 +8671,26 @@ public class AeriumGuardFragment extends ChromeBaseSettingsFragment {
         Preference status = findPreference(PREF_STATUS);
         if (status == null) return;
         String active = prefs().getString(ACTIVE_PRESET);
-        int summary;
+        String summary;
         if (RECOMMENDED.equals(active)) {
-            summary = R.string.aerium_guard_active_recommended;
+            summary = getString(R.string.aerium_guard_active_recommended);
         } else if (PRIVACY.equals(active)) {
-            summary = R.string.aerium_guard_active_privacy;
+            summary = getString(R.string.aerium_guard_active_privacy);
         } else if (PERFORMANCE.equals(active)) {
-            summary = R.string.aerium_guard_active_performance;
+            summary = getString(R.string.aerium_guard_active_performance);
         } else if (SECURITY.equals(active) && isJitBlocked()) {
-            summary = R.string.aerium_guard_active_security;
+            summary = getString(R.string.aerium_guard_active_security);
         } else {
-            summary = R.string.aerium_guard_active_custom;
+            AeriumGuardProfile profile =
+                    AeriumGuardProfile.find(
+                            ContextUtils.getAppSharedPreferences()
+                                    .getString(AeriumGuardProfile.ACTIVE_PROFILE_KEY, null));
+            summary =
+                    profile != null && profile.matches(getProfile())
+                            ? getString(R.string.aerium_guard_active_profile, profile.getName())
+                            : getString(R.string.aerium_guard_active_custom);
         }
-        status.setSummary(getString(summary));
+        status.setSummary(summary);
     }
 
     private boolean isJitBlocked() {
@@ -8327,7 +8715,396 @@ public class AeriumGuardFragment extends ChromeBaseSettingsFragment {
 }
 AERIUM_GUARD_JAVA
 
-sed_i 's|^  "java/src/org/chromium/chrome/browser/browsing_data/BrowsingDataCounterBridge.java",$|  "java/src/org/chromium/chrome/browser/settings/AeriumGuardFragment.java",\n&|' \
+cat > chrome/android/java/src/org/chromium/chrome/browser/settings/AeriumGuardProfile.java <<'AERIUM_GUARD_PROFILE_JAVA'
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+package org.chromium.chrome.browser.settings;
+
+import android.content.SharedPreferences;
+
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import org.chromium.base.ContextUtils;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
+import org.chromium.chrome.browser.prefs.LocalStatePrefs;
+import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.components.browser_ui.site_settings.WebsitePreferenceBridge;
+import org.chromium.components.content_settings.ContentSetting;
+import org.chromium.components.content_settings.ContentSettingsType;
+import org.chromium.components.prefs.PrefService;
+import org.chromium.components.user_prefs.UserPrefs;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.regex.Pattern;
+
+@NullMarked
+final class AeriumGuardProfile {
+    static final String PROFILES_KEY = "Chrome.Aerium.GuardProfiles";
+    static final String ACTIVE_PROFILE_KEY = "Chrome.Aerium.GuardActiveProfile";
+
+    private static final int FORMAT_VERSION = 1;
+    private static final String KEY_FORMAT = "aerium_guard_profile";
+    private static final String KEY_NAME = "name";
+    private static final String KEY_SETTINGS = "settings";
+    private static final String KEY_FLAGS = "flags";
+    private static final String KEY_JAVASCRIPT_JIT = "javascript_jit";
+    private static final int MAX_NAME_LENGTH = 60;
+    private static final int MAX_FLAGS = 1000;
+    private static final Pattern FLAG_PATTERN = Pattern.compile("[A-Za-z0-9][A-Za-z0-9_.-]*(@[0-9]+)?");
+
+    private static final String FLAGS_PREF = "browser.enabled_labs_experiments";
+    private static final int PREF_TYPE_BOOLEAN = 1;
+    private static final int PREF_TYPE_INTEGER = 2;
+    private static final int PREF_TYPE_STRING = 4;
+    private static final int PREF_TYPE_LIST = 7;
+
+    private static final int KIND_BOOLEAN = 0;
+    private static final int KIND_BOOLEAN_AS_INTEGER = 1;
+    private static final int KIND_INTEGER_CHOICE = 2;
+    private static final int KIND_STRING_CHOICE = 3;
+
+    private static final class Field {
+        final String mKey;
+        final String mPref;
+        final int mKind;
+        final String[] mChoices;
+        final int[] mValues;
+
+        Field(String key, String pref, int kind, String[] choices, int[] values) {
+            mKey = key;
+            mPref = pref;
+            mKind = kind;
+            mChoices = choices;
+            mValues = values;
+        }
+
+        int prefType() {
+            if (mKind == KIND_BOOLEAN) return PREF_TYPE_BOOLEAN;
+            if (mKind == KIND_STRING_CHOICE) return PREF_TYPE_STRING;
+            return PREF_TYPE_INTEGER;
+        }
+
+        boolean accepts(Object value) {
+            if (mKind == KIND_BOOLEAN || mKind == KIND_BOOLEAN_AS_INTEGER) {
+                return value instanceof Boolean;
+            }
+            return value instanceof String && Arrays.asList(mChoices).contains(value);
+        }
+
+        @Nullable Object read(PrefService prefs) {
+            if (prefs.getPrefType(mPref) != prefType()) return null;
+            switch (mKind) {
+                case KIND_BOOLEAN:
+                    return prefs.getBoolean(mPref);
+                case KIND_BOOLEAN_AS_INTEGER:
+                    return prefs.getInteger(mPref) != mValues[1];
+                case KIND_INTEGER_CHOICE:
+                    int live = prefs.getInteger(mPref);
+                    for (int i = 0; i < mValues.length; i++) {
+                        if (mValues[i] == live) return mChoices[i];
+                    }
+                    return null;
+                default:
+                    String value = prefs.getString(mPref);
+                    return Arrays.asList(mChoices).contains(value) ? value : null;
+            }
+        }
+
+        void write(PrefService prefs, Object value) {
+            if (prefs.getPrefType(mPref) != prefType() || prefs.isManagedPreference(mPref)) return;
+            switch (mKind) {
+                case KIND_BOOLEAN:
+                    prefs.setBoolean(mPref, (Boolean) value);
+                    break;
+                case KIND_BOOLEAN_AS_INTEGER:
+                    prefs.setInteger(mPref, ((Boolean) value) ? mValues[0] : mValues[1]);
+                    break;
+                case KIND_INTEGER_CHOICE:
+                    prefs.setInteger(mPref, mValues[Arrays.asList(mChoices).indexOf(value)]);
+                    break;
+                default:
+                    prefs.setString(mPref, (String) value);
+                    break;
+            }
+        }
+    }
+
+    private static Field bool(String key, String pref) {
+        return new Field(key, pref, KIND_BOOLEAN, new String[0], new int[0]);
+    }
+
+    private static final Field[] FIELDS = {
+        bool("do_not_track", "enable_do_not_track"),
+        new Field(
+                "third_party_cookies",
+                "profile.cookie_controls_mode",
+                KIND_INTEGER_CHOICE,
+                new String[] {"allow", "block", "block_in_incognito"},
+                new int[] {0, 1, 2}),
+        new Field(
+                "preload_pages",
+                "net.network_prediction_options",
+                KIND_BOOLEAN_AS_INTEGER,
+                new String[0],
+                new int[] {0, 2}),
+        bool("clear_data_on_exit", "browser.clear_data.aerium_clear_on_exit"),
+        bool("search_suggestions", "search.suggest_enabled"),
+        bool("https_only", "https_only_mode_enabled"),
+        bool("https_first_balanced", "https_first_balanced_mode_enabled"),
+        new Field(
+                "webrtc_ip_handling",
+                "webrtc.ip_handling_policy",
+                KIND_STRING_CHOICE,
+                new String[] {
+                    "default",
+                    "default_public_and_private_interfaces",
+                    "default_public_interface_only",
+                    "disable_non_proxied_udp"
+                },
+                new int[0]),
+        bool("hyperlink_auditing", "enable_a_ping"),
+        bool("error_page_suggestions", "alternate_error_pages.enabled"),
+        bool("payment_method_detection", "payments.can_make_payment_enabled"),
+    };
+
+    private final String mName;
+    private final JSONObject mSettings;
+    private final List<String> mFlags;
+
+    private AeriumGuardProfile(String name, JSONObject settings, List<String> flags) {
+        mName = name;
+        mSettings = settings;
+        mFlags = flags;
+    }
+
+    String getName() {
+        return mName;
+    }
+
+    List<String> getFlags() {
+        return Collections.unmodifiableList(mFlags);
+    }
+
+    AeriumGuardProfile withName(String name) {
+        return new AeriumGuardProfile(name, mSettings, mFlags);
+    }
+
+    static String sanitizeName(String name) {
+        String singleLine = name.replaceAll("\\s+", " ").trim();
+        return singleLine.length() > MAX_NAME_LENGTH
+                ? singleLine.substring(0, MAX_NAME_LENGTH).trim()
+                : singleLine;
+    }
+
+    static @Nullable AeriumGuardProfile parse(String text) {
+        try {
+            JSONObject root = new JSONObject(text.trim());
+            if (root.optInt(KEY_FORMAT, -1) != FORMAT_VERSION) return null;
+            String name = sanitizeName(root.optString(KEY_NAME, ""));
+
+            JSONObject settings = new JSONObject();
+            if (root.has(KEY_SETTINGS)) {
+                JSONObject raw = root.optJSONObject(KEY_SETTINGS);
+                if (raw == null) return null;
+                for (Field field : FIELDS) {
+                    if (!raw.has(field.mKey)) continue;
+                    Object value = raw.get(field.mKey);
+                    if (!field.accepts(value)) return null;
+                    settings.put(field.mKey, value);
+                }
+                if (raw.has(KEY_JAVASCRIPT_JIT)) {
+                    Object value = raw.get(KEY_JAVASCRIPT_JIT);
+                    if (!(value instanceof Boolean)) return null;
+                    settings.put(KEY_JAVASCRIPT_JIT, value);
+                }
+            }
+
+            List<String> flags = new ArrayList<>();
+            if (root.has(KEY_FLAGS)) {
+                JSONArray raw = root.optJSONArray(KEY_FLAGS);
+                if (raw == null || raw.length() > MAX_FLAGS) return null;
+                for (int i = 0; i < raw.length(); i++) {
+                    Object entry = raw.get(i);
+                    if (!(entry instanceof String)) return null;
+                    String flag = (String) entry;
+                    if (!FLAG_PATTERN.matcher(flag).matches()) return null;
+                    if (!flags.contains(flag)) flags.add(flag);
+                }
+            }
+
+            if (settings.length() == 0 && flags.isEmpty()) return null;
+            return new AeriumGuardProfile(name, settings, flags);
+        } catch (JSONException e) {
+            return null;
+        }
+    }
+
+    JSONObject toJson() throws JSONException {
+        JSONObject root = new JSONObject();
+        root.put(KEY_FORMAT, FORMAT_VERSION);
+        root.put(KEY_NAME, mName);
+        root.put(KEY_SETTINGS, new JSONObject(mSettings.toString()));
+        JSONArray flags = new JSONArray();
+        for (String flag : mFlags) flags.put(flag);
+        root.put(KEY_FLAGS, flags);
+        return root;
+    }
+
+    static AeriumGuardProfile snapshot(Profile profile, String name) throws JSONException {
+        PrefService prefs = UserPrefs.get(profile);
+        JSONObject settings = new JSONObject();
+        for (Field field : FIELDS) {
+            Object value = field.read(prefs);
+            if (value != null) settings.put(field.mKey, value);
+        }
+        settings.put(KEY_JAVASCRIPT_JIT, isJitAllowed(profile));
+        List<String> flags = new ArrayList<>();
+        for (String flag : liveFlags()) {
+            if (flags.size() < MAX_FLAGS
+                    && FLAG_PATTERN.matcher(flag).matches()
+                    && !flags.contains(flag)) {
+                flags.add(flag);
+            }
+        }
+        return new AeriumGuardProfile(name, settings, flags);
+    }
+
+    void apply(Profile profile) {
+        PrefService prefs = UserPrefs.get(profile);
+        for (Field field : FIELDS) {
+            Object value = mSettings.opt(field.mKey);
+            if (value != null) field.write(prefs, value);
+        }
+        if (mSettings.has(KEY_JAVASCRIPT_JIT)
+                && !WebsitePreferenceBridge.isContentSettingManaged(
+                        profile, ContentSettingsType.JAVASCRIPT_JIT)) {
+            WebsitePreferenceBridge.setDefaultContentSetting(
+                    profile,
+                    ContentSettingsType.JAVASCRIPT_JIT,
+                    mSettings.optBoolean(KEY_JAVASCRIPT_JIT)
+                            ? ContentSetting.ALLOW
+                            : ContentSetting.BLOCK);
+        }
+        seedFlags();
+    }
+
+    boolean matches(Profile profile) {
+        PrefService prefs = UserPrefs.get(profile);
+        for (Field field : FIELDS) {
+            Object wanted = mSettings.opt(field.mKey);
+            if (wanted != null && !wanted.equals(field.read(prefs))) return false;
+        }
+        if (mSettings.has(KEY_JAVASCRIPT_JIT)
+                && mSettings.optBoolean(KEY_JAVASCRIPT_JIT) != isJitAllowed(profile)) {
+            return false;
+        }
+        return liveFlags().containsAll(mFlags);
+    }
+
+    private static boolean isJitAllowed(Profile profile) {
+        return WebsitePreferenceBridge.getDefaultContentSetting(
+                        profile, ContentSettingsType.JAVASCRIPT_JIT)
+                != ContentSetting.BLOCK;
+    }
+
+    private static List<String> liveFlags() {
+        PrefService localState = LocalStatePrefs.get();
+        if (localState == null || localState.getPrefType(FLAGS_PREF) != PREF_TYPE_LIST) {
+            return new ArrayList<>();
+        }
+        return new ArrayList<>(Arrays.asList(localState.getStringList(FLAGS_PREF)));
+    }
+
+    private void seedFlags() {
+        if (mFlags.isEmpty()) return;
+        PrefService localState = LocalStatePrefs.get();
+        if (localState == null || localState.getPrefType(FLAGS_PREF) != PREF_TYPE_LIST) return;
+        List<String> flags = liveFlags();
+        boolean changed = false;
+        for (String flag : mFlags) {
+            if (!flags.contains(flag)) {
+                flags.add(flag);
+                changed = true;
+            }
+        }
+        if (changed) localState.setStringList(FLAGS_PREF, flags.toArray(new String[0]));
+    }
+
+    static List<AeriumGuardProfile> loadAll() {
+        List<AeriumGuardProfile> profiles = new ArrayList<>();
+        String raw = ContextUtils.getAppSharedPreferences().getString(PROFILES_KEY, null);
+        if (raw == null) return profiles;
+        try {
+            JSONArray array = new JSONArray(raw);
+            for (int i = 0; i < array.length(); i++) {
+                JSONObject entry = array.optJSONObject(i);
+                if (entry == null) continue;
+                AeriumGuardProfile profile = parse(entry.toString());
+                if (profile != null) profiles.add(profile);
+            }
+        } catch (JSONException e) {
+            return profiles;
+        }
+        return profiles;
+    }
+
+    static void saveAll(List<AeriumGuardProfile> profiles) {
+        JSONArray array = new JSONArray();
+        for (AeriumGuardProfile profile : profiles) {
+            try {
+                array.put(profile.toJson());
+            } catch (JSONException e) {
+            }
+        }
+        SharedPreferences.Editor editor = ContextUtils.getAppSharedPreferences().edit();
+        editor.putString(PROFILES_KEY, array.toString());
+        editor.apply();
+    }
+
+    static void addOrReplace(AeriumGuardProfile profile) {
+        List<AeriumGuardProfile> profiles = loadAll();
+        for (int i = 0; i < profiles.size(); i++) {
+            if (profiles.get(i).getName().equals(profile.getName())) {
+                profiles.set(i, profile);
+                saveAll(profiles);
+                return;
+            }
+        }
+        profiles.add(profile);
+        saveAll(profiles);
+    }
+
+    static void remove(String name) {
+        List<AeriumGuardProfile> profiles = loadAll();
+        List<AeriumGuardProfile> kept = new ArrayList<>();
+        for (AeriumGuardProfile profile : profiles) {
+            if (!profile.getName().equals(name)) kept.add(profile);
+        }
+        saveAll(kept);
+        if (name.equals(ContextUtils.getAppSharedPreferences().getString(ACTIVE_PROFILE_KEY, null))) {
+            ContextUtils.getAppSharedPreferences().edit().remove(ACTIVE_PROFILE_KEY).apply();
+        }
+    }
+
+    static @Nullable AeriumGuardProfile find(@Nullable String name) {
+        if (name == null) return null;
+        for (AeriumGuardProfile profile : loadAll()) {
+            if (profile.getName().equals(name)) return profile;
+        }
+        return null;
+    }
+}
+AERIUM_GUARD_PROFILE_JAVA
+
+sed_i 's|^  "java/src/org/chromium/chrome/browser/browsing_data/BrowsingDataCounterBridge.java",$|  "java/src/org/chromium/chrome/browser/settings/AeriumGuardFragment.java",\n  "java/src/org/chromium/chrome/browser/settings/AeriumGuardProfile.java",\n&|' \
     chrome/android/chrome_java_sources.gni
 
 sed_i 's|^        android:title="@string/appearance_settings" />$|&\n    <Preference\n        android:fragment="org.chromium.chrome.browser.settings.AeriumGuardFragment"\n        android:key="aerium_guard"\n        android:order="21"\n        android:title="@string/aerium_guard_title"\n        android:summary="@string/aerium_guard_summary" />|' \
@@ -8339,6 +9116,9 @@ sed_i 's|^                    AboutChromeSettings.SEARCH_INDEX_DATA_PROVIDER,$|&
     $SIPR
 
 sed_i 's|      <message name="IDS_AERIUM_MEDIA_TITLE" desc=|      <message name="IDS_AERIUM_GUARD_TITLE" desc="Title of the Aerium Guard settings screen and its row in the main Settings list.">\n        Aerium Guard\n      </message>\n      <message name="IDS_AERIUM_GUARD_SUMMARY" desc="Summary under that row.">\n        Set your privacy, security and speed options together\n      </message>\n      <message name="IDS_AERIUM_GUARD_STATUS_TITLE" desc="Title of the non-tappable row at the top of the screen that names the mode currently in effect.">\n        Current mode\n      </message>\n      <message name="IDS_AERIUM_GUARD_ACTIVE_RECOMMENDED" desc="Summary of the status row when the live settings match the Recommended mode.">\n        Recommended\n      </message>\n      <message name="IDS_AERIUM_GUARD_ACTIVE_PRIVACY" desc="Summary of the status row when the live settings match the Privacy mode.">\n        Privacy\n      </message>\n      <message name="IDS_AERIUM_GUARD_ACTIVE_PERFORMANCE" desc="Summary of the status row when the live settings match the Performance mode.">\n        Performance\n      </message>\n      <message name="IDS_AERIUM_GUARD_ACTIVE_SECURITY" desc="Summary of the status row when the live settings match the Security mode.">\n        Security\n      </message>\n      <message name="IDS_AERIUM_GUARD_ACTIVE_CUSTOM" desc="Summary of the status row when the live settings match none of the three modes, because they were changed by hand.">\n        Custom\n      </message>\n      <message name="IDS_AERIUM_GUARD_RECOMMENDED_TITLE" desc="Title of the row that applies the Recommended mode.">\n        Recommended\n      </message>\n      <message name="IDS_AERIUM_GUARD_RECOMMENDED_SUMMARY" desc="Summary under the Recommended row, in plain language.">\n        A safe, balanced default: blocks cross-site tracking, keeps pages from loading before you click them, and leaves search suggestions on.\n      </message>\n      <message name="IDS_AERIUM_GUARD_PRIVACY_TITLE" desc="Title of the row that applies the Privacy mode.">\n        Privacy\n      </message>\n      <message name="IDS_AERIUM_GUARD_PRIVACY_SUMMARY" desc="Summary under the Privacy row. Names the tradeoffs rather than hiding them.">\n        Everything in Recommended, plus browsing data cleared when you close Aerium, search suggestions off so nothing you type leaves the browser, HTTPS-First in strict mode, and no non-proxied UDP for video calls. Expect more warnings on sites with self-signed certificates.\n      </message>\n      <message name="IDS_AERIUM_GUARD_PERFORMANCE_TITLE" desc="Title of the row that applies the Performance mode.">\n        Performance\n      </message>\n      <message name="IDS_AERIUM_GUARD_PERFORMANCE_SUMMARY" desc="Summary under the Performance row.">\n        The same privacy protections as Recommended, tuned for speed: pages preload before you click them.\n      </message>\n      <message name="IDS_AERIUM_GUARD_SECURITY_TITLE" desc="Title of the row that applies the Security mode.">\n        Security\n      </message>\n      <message name="IDS_AERIUM_GUARD_SECURITY_SUMMARY" desc="Summary under the Security row. Names the tradeoffs rather than hiding them.">\n        Everything in Recommended, plus fewer ways in for an attacking site: the JavaScript JIT compiler is turned off, only HTTPS connections are allowed, video calls cannot reach your network outside the proxy, and look-alike web addresses are shown in their real form. Some heavy web apps run slower. To allow the JIT for a site you trust, add it in Site settings.\n      </message>\n&|' \
+    chrome/browser/ui/android/strings/android_chrome_strings.grd
+
+sed_i 's|      <message name="IDS_AERIUM_MEDIA_TITLE" desc=|      <message name="IDS_AERIUM_GUARD_ACTIVE_PROFILE" desc="Summary of the status row when the live settings match one of the saved Aerium Guard profiles of the user.">\n        Custom: <ph name="NAME">%1$s<ex>Travel</ex></ph>\n      </message>\n      <message name="IDS_AERIUM_GUARD_PROFILES_TITLE" desc="Header of the list of saved Aerium Guard profiles.">\n        Your profiles\n      </message>\n      <message name="IDS_AERIUM_GUARD_PROFILES_EMPTY" desc="Shown in the profile list when no profile has been saved or imported.">\n        No saved profiles yet\n      </message>\n      <message name="IDS_AERIUM_GUARD_PROFILE_ROW_SUMMARY" desc="Summary under each saved profile in the list.">\n        Tap to apply, share, export or delete\n      </message>\n      <message name="IDS_AERIUM_GUARD_PROFILE_SAVE_TITLE" desc="Row that saves the current settings as a new named profile.">\n        Save current settings as a profile\n      </message>\n      <message name="IDS_AERIUM_GUARD_PROFILE_SAVE_SUMMARY" desc="Summary under that row.">\n        Keep this combination under a name, to switch back to it later or share it\n      </message>\n      <message name="IDS_AERIUM_GUARD_PROFILE_IMPORT_TITLE" desc="Row that adds a profile from a JSON file.">\n        Import profile from a file\n      </message>\n      <message name="IDS_AERIUM_GUARD_PROFILE_IMPORT_SUMMARY" desc="Summary under that row.">\n        Add a profile someone shared with you as a .json file\n      </message>\n      <message name="IDS_AERIUM_GUARD_PROFILE_PASTE_TITLE" desc="Row that adds a profile from text on the clipboard.">\n        Import profile from the clipboard\n      </message>\n      <message name="IDS_AERIUM_GUARD_PROFILE_PASTE_SUMMARY" desc="Summary under that row.">\n        Add a profile someone shared with you as text\n      </message>\n      <message name="IDS_AERIUM_GUARD_PROFILE_NAME_TITLE" desc="Hint in the text box where a profile is named.">\n        Profile name\n      </message>\n      <message name="IDS_AERIUM_GUARD_PROFILE_NAME_INVALID" desc="Error shown when the profile name is empty.">\n        Enter a name\n      </message>\n      <message name="IDS_AERIUM_GUARD_PROFILE_SAVE" desc="Button that saves a profile.">\n        Save\n      </message>\n      <message name="IDS_AERIUM_GUARD_PROFILE_APPLY" desc="Action and button that apply a saved profile.">\n        Apply\n      </message>\n      <message name="IDS_AERIUM_GUARD_PROFILE_SHARE" desc="Action that sends a profile to another app as text.">\n        Share\n      </message>\n      <message name="IDS_AERIUM_GUARD_PROFILE_EXPORT" desc="Action that saves a profile as a .json file.">\n        Export to a file\n      </message>\n      <message name="IDS_AERIUM_GUARD_PROFILE_DELETE" desc="Action and button that delete a saved profile.">\n        Delete\n      </message>\n      <message name="IDS_AERIUM_GUARD_PROFILE_APPLY_MESSAGE" desc="Confirmation before applying a profile that turns on no chrome://flags.">\n        Apply <ph name="NAME">%1$s<ex>Travel</ex></ph>? Only the settings this profile names are changed. Everything else stays as it is.\n      </message>\n      <message name="IDS_AERIUM_GUARD_PROFILE_APPLY_MESSAGE_FLAGS" desc="Confirmation before applying a profile that also turns on chrome://flags, listing them so a shared profile cannot enable flags unseen.">\n        Apply <ph name="NAME">%1$s<ex>Travel</ex></ph>? Only the settings this profile names are changed. It also turns on these chrome://flags: <ph name="FLAGS">%2$s<ex>force-punycode-hostnames, remove-client-hints@1</ex></ph>\n      </message>\n      <message name="IDS_AERIUM_GUARD_PROFILE_DELETE_MESSAGE" desc="Confirmation before deleting a saved profile.">\n        Delete <ph name="NAME">%1$s<ex>Travel</ex></ph>?\n      </message>\n      <message name="IDS_AERIUM_GUARD_PROFILE_SAVED" desc="Toast after a profile is saved.">\n        Profile saved\n      </message>\n      <message name="IDS_AERIUM_GUARD_PROFILE_ADDED" desc="Toast after a profile is imported.">\n        Profile added\n      </message>\n      <message name="IDS_AERIUM_GUARD_PROFILE_INVALID" desc="Toast when the file or clipboard text is not a valid profile.">\n        That is not a valid Aerium Guard profile\n      </message>\n      <message name="IDS_AERIUM_GUARD_PROFILE_EXPORTED" desc="Toast after a profile is saved to a file.">\n        Profile exported\n      </message>\n      <message name="IDS_AERIUM_GUARD_PROFILE_EXPORT_FAILED" desc="Toast when saving a profile to a file failed.">\n        Could not export the profile\n      </message>\n      <message name="IDS_AERIUM_GUARD_PROFILE_DEFAULT_NAME" desc="Name given to an imported profile that has none.">\n        Shared profile\n      </message>\n&|' \
     chrome/browser/ui/android/strings/android_chrome_strings.grd
 
 echo "[aerium] aerium guard applied"
