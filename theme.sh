@@ -450,14 +450,15 @@ inline void AeriumFirstRunDataSource::StartDataRequest(
     <h2>Make it yours</h2>
     <ul>
       <li><strong>Aerium Guard</strong> in Settings switches privacy, speed or security with one tap.</li>
-      <li><strong>Passwords</strong> are filled by your Android autofill app, like <a href="https://bitwarden.com" rel="noreferrer">Bitwarden</a> or <a href="https://proton.me/pass" rel="noreferrer">Proton Pass</a>.</li>
+      <li><strong>Passwords</strong> are filled by your Android autofill app, like <a href="https://bitwarden.com" rel="noreferrer">Bitwarden</a>, <a href="https://proton.me/pass" rel="noreferrer">Proton Pass</a>, <a href="https://www.keepassdx.com" rel="noreferrer">KeePassDX</a> or <a href="https://github.com/PhilippC/keepass2android" rel="noreferrer">Keepass2Android</a>.</li>
       <li><strong>Backup and restore</strong> saves your tabs and settings to one file.</li>
     </ul>
   </section>
 
   <section>
     <h2>Updates</h2>
-    <p>Aerium doesn't update itself. New versions are on <a href="https://github.com/aerium-browser/aerium-browser-android/releases">GitHub</a> and <a href="https://aerium-browser.github.io/">our website</a>.</p>
+    <p>Aerium checks for a new version once a day and tells you with a notification. Allow notifications for Aerium in your phone's settings so you don't miss it.</p>
+    <p>Updates don't install on their own. Get them from <a href="https://github.com/aerium-browser/aerium-browser-android/releases">GitHub</a> or <a href="https://aerium-browser.github.io/">our website</a>.</p>
   </section>
 
   <section>
