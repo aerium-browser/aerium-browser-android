@@ -334,79 +334,57 @@ inline void AeriumFirstRunDataSource::StartDataRequest(
 <title>Welcome to Aerium</title>
 <style>
   :root {
-    --bg: #f6f8fc; --card: #ffffff; --ink: #14203f; --muted: #4a5878;
-    --line: #dde4f0; --accent: #2c6bae; --chip: #eaf1fa;
+    color-scheme: light dark;
+    --bg: #f8fafd; --surface: #ffffff; --text: #1f1f1f; --secondary: #474747;
+    --divider: #e3e3e3; --primary: #0b57d0; --on-primary: #ffffff;
+    --tonal: #d3e3fd; --on-tonal: #041e49;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #0d1428; --card: #141d38; --ink: #e9f1fb; --muted: #9fb0d0;
-      --line: #24304f; --accent: #7fc4e4; --chip: #1b2747;
+      --bg: #1f1f1f; --surface: #292a2d; --text: #e3e3e3; --secondary: #c4c7c5;
+      --divider: #3c4043; --primary: #a8c7fa; --on-primary: #062e6f;
+      --tonal: #004a77; --on-tonal: #c2e7ff;
     }
   }
   * { box-sizing: border-box; }
   body {
-    margin: 0; background: var(--bg); color: var(--ink);
-    font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/20px Roboto, system-ui, sans-serif;
     -webkit-text-size-adjust: 100%;
   }
-  main { max-width: 44rem; margin: 0 auto; padding: 1.5rem 1.1rem 3rem; }
-  header { text-align: center; padding: 1rem 0 0.5rem; }
-  .mark { width: 84px; height: 84px; }
-  h1 { font-size: 1.6rem; line-height: 1.25; margin: 0.75rem 0 0.35rem; }
-  .lede { color: var(--muted); margin: 0 0 1.5rem; }
-  section {
-    background: var(--card); border: 1px solid var(--line);
-    border-radius: 14px; padding: 1rem 1.1rem; margin: 0 0 0.9rem;
+  main { max-width: 680px; margin: 0 auto; padding: 24px 16px 32px; }
+  header { display: flex; align-items: center; gap: 16px; margin: 8px 4px 24px; }
+  .logo { width: 48px; height: 48px; flex: none; }
+  h1 { font-size: 22px; line-height: 28px; font-weight: 400; margin: 0; }
+  .subtitle { color: var(--secondary); margin: 2px 0 0; }
+  h2 {
+    font-size: 14px; font-weight: 500; color: var(--secondary);
+    margin: 24px 4px 8px;
   }
-  h2 { font-size: 1.05rem; margin: 0 0 0.5rem; }
-  p { margin: 0 0 0.6rem; }
-  p:last-child, ul:last-child { margin-bottom: 0; }
-  ul { margin: 0 0 0.6rem; padding-left: 1.15rem; }
-  li { margin: 0.25rem 0; }
-  a { color: var(--accent); }
-  .chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.15rem 0 0; padding: 0; list-style: none; }
-  .chips li {
-    background: var(--chip); border-radius: 999px;
-    font-size: 0.85rem; margin: 0;
+  .card { background: var(--surface); border-radius: 12px; overflow: hidden; }
+  .row {
+    display: flex; align-items: center; gap: 16px;
+    padding: 12px 16px; min-height: 64px;
   }
-  .chips a {
-    display: block; padding: 0.45rem 0.9rem; border-radius: inherit;
-    color: var(--accent); text-decoration: none;
+  .row + .row { border-top: 1px solid var(--divider); }
+  .row-text { flex: 1; min-width: 0; }
+  .label { font-size: 16px; line-height: 24px; }
+  .sub { color: var(--secondary); }
+  .sub a, p a { color: var(--primary); text-decoration: none; }
+  .button {
+    flex: none; display: inline-block; text-decoration: none;
+    font-weight: 500; line-height: 20px; padding: 8px 16px;
+    border-radius: 20px; background: var(--tonal); color: var(--on-tonal);
   }
-  .chips a:hover, .chips a:focus-visible {
-    background: var(--accent); color: var(--card);
-  }
-  .note { color: var(--muted); font-size: 0.9rem; margin-top: 0.8rem; }
-  .cards { display: grid; gap: 0.7rem; margin: 0.8rem 0 0; }
-  @media (min-width: 34rem) { .cards { grid-template-columns: 1fr 1fr; } }
-  .card {
-    border: 1px solid var(--line); border-radius: 12px;
-    padding: 0.9rem 1rem; display: flex; flex-direction: column; gap: 0.35rem;
-  }
-  .card-featured { border-color: var(--accent); background: var(--chip); }
-  .card h3 { font-size: 1rem; margin: 0; }
-  .card p { margin: 0; color: var(--muted); font-size: 0.93rem; }
-  .card a { margin-top: auto; font-weight: 600; }
-  .card-badge {
-    align-self: flex-start; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em;
-    text-transform: uppercase; color: var(--accent);
-  }
-  .card-cta {
-    display: block; text-align: center; text-decoration: none;
-    background: var(--accent); color: var(--card); border-radius: 999px;
-    padding: 0.6rem 1rem; margin-top: 0.4rem;
-  }
-  .buttons { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.8rem 0 0; }
-  .buttons a {
-    flex: 1 1 9rem; text-align: center; text-decoration: none; font-weight: 600;
-    border: 1px solid var(--accent); border-radius: 999px; padding: 0.55rem 1rem;
-  }
-  .buttons a.primary { background: var(--accent); color: var(--card); }
-  footer { text-align: center; color: var(--muted); font-size: 0.85rem; margin-top: 1.5rem; }
+  .button.action { background: var(--primary); color: var(--on-primary); }
+  .card p { margin: 0; padding: 16px; color: var(--secondary); }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 16px 16px; }
+  footer { color: var(--secondary); font-size: 12px; margin: 24px 4px 0; }
+  footer a { color: var(--primary); text-decoration: none; }
 </style>
 <main>
   <header>
-    <svg class="mark" viewBox="0 0 512 512" aria-hidden="true">
+    <svg class="logo" viewBox="0 0 512 512" aria-hidden="true">
       <path d="M 330 384.17 L 149.1 488.61 A 256 256 0 0 1 108 47.12 L 108 256 A 148 148 0 0 0 330 384.17 Z" fill="#1B2C5E"/>
       <path d="M 108 256 L 108 47.12 A 256 256 0 0 1 510.9 232.27 L 330 127.83 A 148 148 0 0 0 108 256 Z" fill="#2A4485"/>
       <path d="M 330 127.83 L 510.9 232.27 A 256 256 0 0 1 149.1 488.61 L 330 384.17 A 148 148 0 0 0 330 127.83 Z" fill="#111C42"/>
@@ -415,62 +393,101 @@ inline void AeriumFirstRunDataSource::StartDataRequest(
       <circle cx="238" cy="236" r="82" fill="#4C97CF"/>
       <circle cx="222" cy="218" r="46" fill="#7FC4E4"/>
     </svg>
-    <h1>Welcome to Aerium</h1>
-    <p class="lede">Chromium without Google, with extensions. Glad you're here.</p>
+    <div>
+      <h1>Welcome to Aerium</h1>
+      <p class="subtitle">Chromium without Google, with extensions</p>
+    </div>
   </header>
 
-  <section>
-    <h2>First, get an ad blocker</h2>
-    <div class="cards">
-      <div class="card card-featured">
-        <span class="card-badge">Recommended</span>
-        <h3>uBlock Origin</h3>
-        <p>Blocks ads and trackers. It's no longer on the Chrome Web Store, so grab it from GitHub.</p>
-        <a class="card-cta" href="https://github.com/gorhill/uBlock/releases/latest">Get it on GitHub</a>
+  <h2>Block ads</h2>
+  <div class="card">
+    <div class="row">
+      <div class="row-text">
+        <div class="label">uBlock Origin</div>
+        <div class="sub">No longer on the Chrome Web Store</div>
       </div>
-      <div class="card">
-        <h3>uBlock Origin Lite</h3>
-        <p>A lighter version, easier on older phones.</p>
-        <a href="https://chromewebstore.google.com/detail/ublock-origin-lite/ddkjiahejlhfcafbddmgiahcphecmpfh">Get it from the Chrome Web Store</a>
+      <a class="button action" href="https://github.com/gorhill/uBlock/releases/latest">GitHub</a>
+    </div>
+    <div class="row">
+      <div class="row-text">
+        <div class="label">uBlock Origin Lite</div>
+        <div class="sub">Lighter, good for older phones</div>
+      </div>
+      <a class="button" href="https://chromewebstore.google.com/detail/ublock-origin-lite/ddkjiahejlhfcafbddmgiahcphecmpfh">Web Store</a>
+    </div>
+  </div>
+
+  <h2>Already set up</h2>
+  <div class="card">
+    <div class="row">
+      <div class="row-text">
+        <div class="label">No Safe Browsing or Translate</div>
+        <div class="sub">Your pages aren't sent to Google</div>
       </div>
     </div>
-  </section>
-
-  <section>
-    <h2>Already set up</h2>
-    <ul>
-      <li>No Safe Browsing or Translate sending your pages to Google.</li>
-      <li>Pages only load when you open them.</li>
-      <li>Secure connections wherever a site allows it.</li>
-      <li>DuckDuckGo without AI as your search engine.</li>
-    </ul>
-  </section>
-
-  <section>
-    <h2>Make it yours</h2>
-    <ul>
-      <li><strong>Aerium Guard</strong> in Settings switches privacy, speed or security with one tap.</li>
-      <li><strong>Passwords</strong> are filled by your Android autofill app, like <a href="https://bitwarden.com" rel="noreferrer">Bitwarden</a>, <a href="https://proton.me/pass" rel="noreferrer">Proton Pass</a>, <a href="https://www.keepassdx.com" rel="noreferrer">KeePassDX</a> or <a href="https://github.com/PhilippC/keepass2android" rel="noreferrer">Keepass2Android</a>.</li>
-      <li><strong>Backup and restore</strong> saves your tabs and settings to one file.</li>
-    </ul>
-  </section>
-
-  <section>
-    <h2>Updates</h2>
-    <p>Aerium checks for a new version once a day and tells you with a notification. Allow notifications for Aerium in your phone's settings so you don't miss it.</p>
-    <p>Updates don't install on their own. Get them from <a href="https://github.com/aerium-browser/aerium-browser-android/releases">GitHub</a> or <a href="https://aerium-browser.github.io/">our website</a>.</p>
-  </section>
-
-  <section>
-    <h2>Support Aerium</h2>
-    <p>No ads, no tracking, no company behind it. If you like it, a small donation keeps it going. Thank you!</p>
-    <div class="buttons">
-      <a class="primary" href="https://aerium-browser.github.io/donate/xmr/">Donate with Monero</a>
-      <a href="https://aerium-browser.github.io/donate/ltc/">Donate with Litecoin</a>
+    <div class="row">
+      <div class="row-text">
+        <div class="label">DuckDuckGo without AI</div>
+        <div class="sub">Default search engine</div>
+      </div>
     </div>
-  </section>
+    <div class="row">
+      <div class="row-text">
+        <div class="label">HTTPS-First</div>
+        <div class="sub">Secure connections wherever a site allows it</div>
+      </div>
+    </div>
+  </div>
 
-  <footer>Built on <a href="https://github.com/GrapheneOS/Vanadium">Vanadium</a>. See this page again at chrome://aerium-first-run</footer>
+  <h2>Make it yours</h2>
+  <div class="card">
+    <div class="row">
+      <div class="row-text">
+        <div class="label">Aerium Guard</div>
+        <div class="sub">Privacy, performance or security in one tap, in Settings</div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="row-text">
+        <div class="label">Passwords</div>
+        <div class="sub">Filled by your Android autofill app, like <a href="https://bitwarden.com" rel="noreferrer">Bitwarden</a>, <a href="https://proton.me/pass" rel="noreferrer">Proton Pass</a>, <a href="https://www.keepassdx.com" rel="noreferrer">KeePassDX</a> or <a href="https://github.com/PhilippC/keepass2android" rel="noreferrer">Keepass2Android</a></div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="row-text">
+        <div class="label">Backup and restore</div>
+        <div class="sub">Tabs, settings and flags in one file</div>
+      </div>
+    </div>
+  </div>
+
+  <h2>Updates</h2>
+  <div class="card">
+    <div class="row">
+      <div class="row-text">
+        <div class="label">Daily update check</div>
+        <div class="sub">Allow notifications for Aerium so you don't miss a new version</div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="row-text">
+        <div class="label">Latest release</div>
+        <div class="sub">Updates don't install on their own</div>
+      </div>
+      <a class="button" href="https://github.com/aerium-browser/aerium-browser-android/releases">GitHub</a>
+    </div>
+  </div>
+
+  <h2>Support Aerium</h2>
+  <div class="card">
+    <p>No ads, no tracking, no company behind it. If you like Aerium, a small donation keeps it going. Thank you.</p>
+    <div class="actions">
+      <a class="button action" href="https://aerium-browser.github.io/donate/xmr/">Donate with Monero</a>
+      <a class="button" href="https://aerium-browser.github.io/donate/ltc/">Donate with Litecoin</a>
+    </div>
+  </div>
+
+  <footer><a href="https://aerium-browser.github.io/">aerium-browser.github.io</a> &middot; Built on <a href="https://github.com/GrapheneOS/Vanadium">Vanadium</a> &middot; chrome://aerium-first-run</footer>
 </main>
 )AERIUMHTML")));
 }
