@@ -6676,6 +6676,14 @@ sed_i 's|        setBackgroundColor(ChromeSemanticColorUtils.getHomeSurfaceBackg
 
 echo "[aerium] new tab page left to extensions"
 
+perl -0777 -pi -e '
+    my $n = s{--add-shortcut-background-color:\s*var\(\s*--color-new-tab-page-add-shortcut-background\s*\);}
+             {--add-shortcut-background-color: transparent;}s;
+    die "[aerium] FATAL: the cr-most-visited add-shortcut background in app.css no longer has the shape this expects - re-read it before changing it\n" unless $n == 1;
+' chrome/browser/resources/new_tab_page/app.css
+
+echo "[aerium] new tab page shortcut tiles made transparent"
+
 # --- Desktop flags, ported to Android: batch one.
 #
 # The desktop repositories are ungoogled-chromium and inherit its flag entries;
