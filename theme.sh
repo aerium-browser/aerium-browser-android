@@ -276,16 +276,7 @@ sed_i 's|^    ChromeAutofillClient::CreateForWebContents(web_contents);$|&\n#if 
 # a DefaultWebUIConfig plus an inline URLDataSource needs no BUILD.gn entry, no
 # .cc and no TypeScript, which keeps a page of static text out of the resource
 # pipeline entirely.
-#
-# What is deliberately NOT carried over is the desktop page's preset chooser.
-# On desktop it exists because the browser ships with Chromium's defaults and
-# the page is what changes them. On Android the same decisions are compiled in
-# by this script - Safe Browsing, network prediction, HTTPS-First, the search
-# engine list - so a preset button would mostly re-apply settings the build
-# already made. Several of the prefs it writes (background mode, the memory
-# and battery saver tiers, Aerium's own clear-on-exit pref) do not exist on
-# Android at all. So the page explains what was decided instead of offering to
-# decide it again.
+
 cat > chrome/browser/ui/webui/aerium_first_run.h <<'AERIUM_FIRST_RUN_H'
 #ifndef CHROME_BROWSER_UI_WEBUI_AERIUM_FIRST_RUN_H_
 #define CHROME_BROWSER_UI_WEBUI_AERIUM_FIRST_RUN_H_
@@ -378,8 +369,6 @@ inline void AeriumFirstRunDataSource::StartDataRequest(
     background: var(--chip); border-radius: 999px;
     font-size: 0.85rem; margin: 0;
   }
-  /* The padding lives on the anchor, not the li, so the whole pill is the
-     tap target rather than just the width of the words. */
   .chips a {
     display: block; padding: 0.45rem 0.9rem; border-radius: inherit;
     color: var(--accent); text-decoration: none;
@@ -387,7 +376,27 @@ inline void AeriumFirstRunDataSource::StartDataRequest(
   .chips a:hover, .chips a:focus-visible {
     background: var(--accent); color: var(--card);
   }
-  .note { color: var(--muted); font-size: 0.9rem; }
+  .note { color: var(--muted); font-size: 0.9rem; margin-top: 0.8rem; }
+  .cards { display: grid; gap: 0.7rem; margin: 0.8rem 0 0; }
+  @media (min-width: 34rem) { .cards { grid-template-columns: 1fr 1fr; } }
+  .card {
+    border: 1px solid var(--line); border-radius: 12px;
+    padding: 0.9rem 1rem; display: flex; flex-direction: column; gap: 0.35rem;
+  }
+  .card-featured { border-color: var(--accent); background: var(--chip); }
+  .card h3 { font-size: 1rem; margin: 0; }
+  .card p { margin: 0; color: var(--muted); font-size: 0.93rem; }
+  .card a { margin-top: auto; font-weight: 600; }
+  .card-badge {
+    align-self: flex-start; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em;
+    text-transform: uppercase; color: var(--accent);
+  }
+  .card-cta {
+    display: block; text-align: center; text-decoration: none;
+    background: var(--accent); color: var(--card); border-radius: 999px;
+    padding: 0.6rem 1rem; margin-top: 0.4rem;
+  }
+  .card-alt { font-weight: 400; font-size: 0.85rem; text-align: center; margin-top: 0.1rem; }
   footer { text-align: center; color: var(--muted); font-size: 0.85rem; margin-top: 1.5rem; }
 </style>
 <main>
@@ -402,57 +411,87 @@ inline void AeriumFirstRunDataSource::StartDataRequest(
       <circle cx="222" cy="218" r="46" fill="#7FC4E4"/>
     </svg>
     <h1>Welcome to Aerium</h1>
-    <p class="lede">A Chromium build with the Google plumbing taken out. Here is what it already did for you, and the two things worth setting up yourself.</p>
+    <p class="lede">Thanks for giving it a try. Aerium is Chromium with the Google parts taken out, and it works with extensions. Here's what's already set up, and the few things worth doing in your first five minutes.</p>
   </header>
 
   <section>
-    <h2>Already decided for you</h2>
-    <p>These are compiled into the build, not toggles someone hoped you would find:</p>
+    <h2>Start with a content blocker</h2>
+    <p>This is the single best thing you can add. Aerium runs real Chrome extensions, which Chrome itself doesn't do on Android. The Web Store opens in its desktop layout on its own, so installing works just like on a computer.</p>
+    <div class="cards">
+      <div class="card card-featured">
+        <span class="card-badge">Recommended</span>
+        <h3>uBlock Origin</h3>
+        <p>Blocks ads, trackers and malware sites without slowing pages down. Free, open source, and it asks nothing of you after you install it.</p>
+        <a class="card-cta" href="https://chromewebstore.google.com/detail/ublock-origin/cjpalhdlnbpafiamejdnhcphjbkeiagm">Install uBlock Origin</a>
+        <a class="card-alt" href="https://github.com/gorhill/uBlock/releases/latest">or get the latest release from GitHub</a>
+      </div>
+      <div class="card">
+        <h3>uBlock Origin Lite</h3>
+        <p>Same author, same filter lists, but lighter. It doesn't keep a process running in the background, which makes it a good pick for older phones.</p>
+        <a href="https://chromewebstore.google.com/detail/ublock-origin-lite/ddkjiahejlhfcafbddmgiahcphecmpfh">Install uBlock Origin Lite</a>
+      </div>
+    </div>
+    <p class="note">Pick one, not both. To use it in Incognito too, open Manage extensions, tap Details, and turn on Allow in Incognito.</p>
+  </section>
+
+  <section>
+    <h2>Already done for you</h2>
+    <p>These are built in, so you don't have to hunt for them:</p>
     <ul>
-      <li><strong>Safe Browsing is off.</strong> It was the main recurring call home &mdash; every URL you visit, checked against Google.</li>
-      <li><strong>Nothing is preloaded or predicted.</strong> Pages, DNS and links are fetched when you ask for them, which is also easier on the battery.</li>
-      <li><strong>HTTPS-First is on</strong> in its balanced mode, so plain HTTP is upgraded where a site supports it.</li>
-      <li><strong>Global Privacy Control is sent</strong> on every request &mdash; a legally recognised opt-out under CCPA.</li>
-      <li><strong>The search engine list is privacy-first</strong>, with Startpage as the default and DuckDuckGo, Brave Search, Mojeek, Qwant, Ecosia and degoog alongside it.</li>
-      <li><strong>Translate is gone</strong>, along with the settings entry and its search index.</li>
+      <li><strong>Safe Browsing is off.</strong> It checks the pages you visit with Google, and it was the biggest regular call home.</li>
+      <li><strong>Pages load when you ask for them.</strong> Nothing is fetched ahead of time, which also helps your battery.</li>
+      <li><strong>HTTPS-First is on,</strong> so sites that support a secure connection get one.</li>
+      <li><strong>Global Privacy Control is sent</strong> with every request. In some places, like California, sites have to respect it as an opt-out.</li>
+      <li><strong>Search starts private.</strong> DuckDuckGo without AI answers is the default. Startpage, Brave Search, Mojeek, Qwant, Ecosia and degoog are one tap away in Settings.</li>
+      <li><strong>Translate is gone,</strong> so no page text gets sent off to be translated.</li>
     </ul>
   </section>
 
   <section>
+    <h2>Pick your balance with Aerium Guard</h2>
+    <p>Find it in Settings. One tap switches a whole group of privacy and speed options at once:</p>
+    <ul>
+      <li><strong>Recommended</strong> is a sensible middle ground, and a good place to start.</li>
+      <li><strong>Privacy</strong> clears your data when you close Aerium and keeps what you type in the address bar to yourself.</li>
+      <li><strong>Performance</strong> loads pages a little before you tap them.</li>
+      <li><strong>Security</strong> turns off the JavaScript JIT compiler, which is where most browser attacks aim. Some heavy web apps get slower.</li>
+    </ul>
+    <p>You can also save your own setup as a profile and share it with friends as a small file.</p>
+  </section>
+
+  <section>
     <h2>Passwords and autofill</h2>
-    <p>Aerium ships no password manager, no saved payment methods and no stored addresses, and the settings and menu entries for them are removed rather than merely hidden.</p>
-    <p>Instead, web forms are filled by <strong>whichever autofill service you have chosen in Android</strong>. Set one in <em>Settings &rsaquo; Passwords &amp; accounts &rsaquo; Autofill service</em>. Any of these work well:</p>
+    <p>Aerium doesn't keep your passwords, cards or addresses. Forms are filled by the autofill service you choose in Android, under <em>Settings &rsaquo; Passwords &amp; accounts &rsaquo; Autofill service</em>. Any of these work well:</p>
     <ul class="chips">
       <li><a href="https://bitwarden.com" rel="noreferrer">Bitwarden</a></li>
       <li><a href="https://proton.me/pass" rel="noreferrer">Proton Pass</a></li>
       <li><a href="https://www.keepassdx.com" rel="noreferrer">KeePassDX</a></li>
     </ul>
-    <p class="note" style="margin-top:0.7rem">A dedicated manager also fills apps, not just this browser, and your vault outlives any one browser.</p>
+    <p class="note" style="margin-top:0.7rem">A password manager fills your apps as well, and your vault stays with you if you ever switch browsers.</p>
   </section>
 
   <section>
-    <h2>Extensions</h2>
-    <p>This build supports extensions, which stock Chrome on Android does not. A content blocker such as uBlock Origin is the single most useful thing to add.</p>
-    <p>An extension can also own the New Tab page, which is how you change what it looks like &mdash; Aerium has no built-in setting for a custom background because <a href="https://chromewebstore.google.com/detail/tablissng/dlaogejjiafeobgofajdlkkhjlignalk">TablissNG</a> already does it better than a setting would, with your own images or a fresh photo each time.</p>
+    <h2>A few more worth a look</h2>
+    <ul>
+      <li><strong>Secure DNS.</strong> Turn it on in <a href="chrome://settings/privacy">Privacy and security</a> so your network and carrier can't see which sites you look up.</li>
+      <li><strong>Site rules.</strong> Keep the sites you trust, and let everything else forget you when you close its tabs.</li>
+      <li><strong>Backup and restore.</strong> Save your tabs, site permissions, settings and flags to one file. It's handy before switching phones.</li>
+      <li><strong>A nicer new tab.</strong> Add a new tab extension like <a href="https://chromewebstore.google.com/detail/tablissng/dlaogejjiafeobgofajdlkkhjlignalk">TablissNG</a> to set your own background.</li>
+    </ul>
   </section>
 
   <section>
-    <h2>Secure DNS</h2>
-    <p>Turn it on in <a href="chrome://settings/privacy">Privacy and security</a> and pick a resolver you trust. It keeps the names of the sites you visit away from your network and your carrier.</p>
+    <h2>Staying up to date</h2>
+    <p>Aerium isn't on the Play Store, so updates don't install on their own. New builds come out on GitHub. Check now and then, or watch the repository to hear about them.</p>
+    <p><a href="https://github.com/aerium-browser/aerium-browser-android/releases">See the latest releases</a></p>
   </section>
 
   <section>
-    <h2>Updates</h2>
-    <p>There is no auto-updater and no Play Store listing, so security updates are not automatic. New builds are published on GitHub &mdash; check occasionally, or subscribe to releases to be told.</p>
-    <p><a href="https://github.com/aerium-browser/aerium-browser-android/releases">github.com/aerium-browser/aerium-browser-android/releases</a></p>
+    <h2>Where Aerium comes from</h2>
+    <p>Aerium is built on <a href="https://github.com/GrapheneOS/Vanadium">Vanadium</a>, the hardened Chromium from GrapheneOS, with our own changes on top. All of it is public: the patches, the scripts that apply them, and the build that made the app you just installed.</p>
   </section>
 
-  <section>
-    <h2>Where this build comes from</h2>
-    <p>Aerium for Android is built on <a href="https://github.com/GrapheneOS/Vanadium">Vanadium</a>, the hardened Chromium from GrapheneOS, with Aerium's own changes on top. Everything is public: the patches, the scripts that apply them, and the CI that produced the file you installed.</p>
-  </section>
-
-  <footer>You can reach this page again at any time from chrome://aerium-first-run</footer>
+  <footer>Want to see this again? It's always at chrome://aerium-first-run</footer>
 </main>
 )AERIUMHTML")));
 }
