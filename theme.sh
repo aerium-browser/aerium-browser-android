@@ -416,97 +416,60 @@ inline void AeriumFirstRunDataSource::StartDataRequest(
       <circle cx="222" cy="218" r="46" fill="#7FC4E4"/>
     </svg>
     <h1>Welcome to Aerium</h1>
-    <p class="lede">Thanks for giving it a try. Aerium is Chromium with the Google parts taken out, and it works with extensions. Here's what's already set up, and the few things worth doing in your first five minutes.</p>
+    <p class="lede">Chromium without Google, with extensions. Glad you're here.</p>
   </header>
 
   <section>
-    <h2>Start with a content blocker</h2>
-    <p>This is the single best thing you can add. Aerium runs real Chrome extensions, which Chrome itself doesn't do on Android.</p>
+    <h2>First, get an ad blocker</h2>
     <div class="cards">
       <div class="card card-featured">
         <span class="card-badge">Recommended</span>
         <h3>uBlock Origin</h3>
-        <p>Blocks ads, trackers and malware sites without slowing pages down. Free, open source, and it asks nothing of you after you install it. Google took it off the Chrome Web Store, so it now comes straight from its developer on GitHub.</p>
-        <a class="card-cta" href="https://github.com/gorhill/uBlock/releases/latest">Get uBlock Origin on GitHub</a>
+        <p>Blocks ads and trackers. It's no longer on the Chrome Web Store, so grab it from GitHub.</p>
+        <a class="card-cta" href="https://github.com/gorhill/uBlock/releases/latest">Get it on GitHub</a>
       </div>
       <div class="card">
         <h3>uBlock Origin Lite</h3>
-        <p>Same author, same filter lists, but lighter. It doesn't keep a process running in the background, which makes it a good pick for older phones.</p>
-        <a href="https://chromewebstore.google.com/detail/ublock-origin-lite/ddkjiahejlhfcafbddmgiahcphecmpfh">Install from the Chrome Web Store</a>
+        <p>A lighter version, easier on older phones.</p>
+        <a href="https://chromewebstore.google.com/detail/ublock-origin-lite/ddkjiahejlhfcafbddmgiahcphecmpfh">Get it from the Chrome Web Store</a>
       </div>
     </div>
-    <p class="note">Pick one, not both. To use it in Incognito too, open Manage extensions, tap Details, and turn on Allow in Incognito.</p>
   </section>
 
   <section>
-    <h2>Already done for you</h2>
-    <p>These are built in, so you don't have to hunt for them:</p>
+    <h2>Already set up</h2>
     <ul>
-      <li><strong>Safe Browsing is off.</strong> It checks the pages you visit with Google, and it was the biggest regular call home.</li>
-      <li><strong>Pages load when you ask for them.</strong> Nothing is fetched ahead of time, which also helps your battery.</li>
-      <li><strong>HTTPS-First is on,</strong> so sites that support a secure connection get one.</li>
-      <li><strong>Global Privacy Control is sent</strong> with every request. In some places, like California, sites have to respect it as an opt-out.</li>
-      <li><strong>Search starts private.</strong> DuckDuckGo without AI answers is the default. Startpage, Brave Search, Mojeek, Qwant, Ecosia and degoog are one tap away in Settings.</li>
-      <li><strong>Translate is gone,</strong> so no page text gets sent off to be translated.</li>
+      <li>No Safe Browsing or Translate sending your pages to Google.</li>
+      <li>Pages only load when you open them.</li>
+      <li>Secure connections wherever a site allows it.</li>
+      <li>DuckDuckGo without AI as your search engine.</li>
     </ul>
   </section>
 
   <section>
-    <h2>Pick your balance with Aerium Guard</h2>
-    <p>Find it in Settings. One tap switches a whole group of privacy and speed options at once:</p>
+    <h2>Make it yours</h2>
     <ul>
-      <li><strong>Recommended</strong> is a sensible middle ground, and a good place to start.</li>
-      <li><strong>Privacy</strong> clears your data when you close Aerium and keeps what you type in the address bar to yourself.</li>
-      <li><strong>Performance</strong> loads pages a little before you tap them.</li>
-      <li><strong>Security</strong> turns off the JavaScript JIT compiler, which is where most browser attacks aim. Some heavy web apps get slower.</li>
-    </ul>
-    <p>You can also save your own setup as a profile and share it with friends as a small file.</p>
-  </section>
-
-  <section>
-    <h2>Passwords and autofill</h2>
-    <p>Aerium doesn't keep your passwords, cards or addresses. Forms are filled by the autofill service you choose in Android, under <em>Settings &rsaquo; Passwords &amp; accounts &rsaquo; Autofill service</em>. Any of these work well:</p>
-    <ul class="chips">
-      <li><a href="https://bitwarden.com" rel="noreferrer">Bitwarden</a></li>
-      <li><a href="https://proton.me/pass" rel="noreferrer">Proton Pass</a></li>
-      <li><a href="https://www.keepassdx.com" rel="noreferrer">KeePassDX</a></li>
-    </ul>
-    <p class="note" style="margin-top:0.7rem">A password manager fills your apps as well, and your vault stays with you if you ever switch browsers.</p>
-  </section>
-
-  <section>
-    <h2>A few more worth a look</h2>
-    <ul>
-      <li><strong>Secure DNS.</strong> Turn it on in <a href="chrome://settings/privacy">Privacy and security</a> so your network and carrier can't see which sites you look up.</li>
-      <li><strong>Site rules.</strong> Keep the sites you trust, and let everything else forget you when you close its tabs.</li>
-      <li><strong>Backup and restore.</strong> Save your tabs, site permissions, settings and flags to one file. It's handy before switching phones.</li>
-      <li><strong>A nicer new tab.</strong> Add a new tab extension like <a href="https://chromewebstore.google.com/detail/tablissng/dlaogejjiafeobgofajdlkkhjlignalk">TablissNG</a> to set your own background.</li>
+      <li><strong>Aerium Guard</strong> in Settings switches privacy, speed or security with one tap.</li>
+      <li><strong>Passwords</strong> are filled by your Android autofill app, like <a href="https://bitwarden.com" rel="noreferrer">Bitwarden</a> or <a href="https://proton.me/pass" rel="noreferrer">Proton Pass</a>.</li>
+      <li><strong>Backup and restore</strong> saves your tabs and settings to one file.</li>
     </ul>
   </section>
 
   <section>
-    <h2>Staying up to date</h2>
-    <p>Aerium isn't on the Play Store, so updates don't install on their own. New builds come out on GitHub. Check now and then, or watch the repository to hear about them.</p>
-    <p><a href="https://github.com/aerium-browser/aerium-browser-android/releases">See the latest releases</a></p>
+    <h2>Updates</h2>
+    <p>Aerium doesn't update itself. New versions are on <a href="https://github.com/aerium-browser/aerium-browser-android/releases">GitHub</a> and <a href="https://aerium-browser.github.io/">our website</a>.</p>
   </section>
 
   <section>
-    <h2>Where Aerium comes from</h2>
-    <p>Aerium is built on <a href="https://github.com/GrapheneOS/Vanadium">Vanadium</a>, the hardened Chromium from GrapheneOS, with our own changes on top. All of it is public: the patches, the scripts that apply them, and the build that made the app you just installed.</p>
-    <p>News, downloads and everything else live on <a href="https://aerium-browser.github.io/">our website</a>.</p>
-  </section>
-
-  <section>
-    <h2>Help keep Aerium going</h2>
-    <p>Aerium is an independent project. There are no ads, no tracking and no company behind it, and it will stay that way. Keeping up with every Chromium release, fixing bugs and answering your reports takes a lot of time.</p>
-    <p>If Aerium is useful to you, a small donation helps a lot and keeps the updates coming. Thank you, it truly means a lot.</p>
+    <h2>Support Aerium</h2>
+    <p>No ads, no tracking, no company behind it. If you like it, a small donation keeps it going. Thank you!</p>
     <div class="buttons">
       <a class="primary" href="https://aerium-browser.github.io/donate/xmr/">Donate with Monero</a>
       <a href="https://aerium-browser.github.io/donate/ltc/">Donate with Litecoin</a>
     </div>
   </section>
 
-  <footer>Want to see this again? It's always at chrome://aerium-first-run</footer>
+  <footer>Built on <a href="https://github.com/GrapheneOS/Vanadium">Vanadium</a>. See this page again at chrome://aerium-first-run</footer>
 </main>
 )AERIUMHTML")));
 }
