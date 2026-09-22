@@ -8322,11 +8322,14 @@ public class AeriumGuardFragment extends ChromeBaseSettingsFragment {
         if (pref == null) return;
         pref.setOnPreferenceClickListener(
                 preference -> {
-                    if (SECURITY.equals(preset)) {
+                    if (!WebsitePreferenceBridge.isContentSettingManaged(
+                            getProfile(), ContentSettingsType.JAVASCRIPT_JIT)) {
                         WebsitePreferenceBridge.setDefaultContentSetting(
                                 getProfile(),
                                 ContentSettingsType.JAVASCRIPT_JIT,
-                                ContentSetting.BLOCK);
+                                SECURITY.equals(preset)
+                                        ? ContentSetting.BLOCK
+                                        : ContentSetting.ALLOW);
                     }
                     ContextUtils.getAppSharedPreferences()
                             .edit()
@@ -8672,13 +8675,14 @@ public class AeriumGuardFragment extends ChromeBaseSettingsFragment {
         if (status == null) return;
         String active = prefs().getString(ACTIVE_PRESET);
         String summary;
-        if (RECOMMENDED.equals(active)) {
+        boolean jitBlocked = isJitBlocked();
+        if (RECOMMENDED.equals(active) && !jitBlocked) {
             summary = getString(R.string.aerium_guard_active_recommended);
-        } else if (PRIVACY.equals(active)) {
+        } else if (PRIVACY.equals(active) && !jitBlocked) {
             summary = getString(R.string.aerium_guard_active_privacy);
-        } else if (PERFORMANCE.equals(active)) {
+        } else if (PERFORMANCE.equals(active) && !jitBlocked) {
             summary = getString(R.string.aerium_guard_active_performance);
-        } else if (SECURITY.equals(active) && isJitBlocked()) {
+        } else if (SECURITY.equals(active) && jitBlocked) {
             summary = getString(R.string.aerium_guard_active_security);
         } else {
             AeriumGuardProfile profile =
