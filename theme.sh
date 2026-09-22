@@ -5541,7 +5541,7 @@ sed_i 's|^                AERIUM_EXTERNAL_DOWNLOAD_MANAGER,$|                AER
 
 # Distinct local names: the blacken-dark-sites block below already declares
 # commandLine, existing and merged in this same scope.
-sed_i 's%        FontPreloader.getInstance().load(getApplication());%&\n\n        // Aerium: features are fixed when the process starts, so the bottom\n        // bar goes on the command line here rather than being flipped live.\n        //\n        // Ours goes FIRST in the merged value, ahead of anything already\n        // there. FeatureList::RegisterOverride() uses try_emplace, and says\n        // so in as many words - "only the first override for a given\n        // feature name takes effect" - so with this appended last, an\n        // AndroidBottomBar entry set from chrome://flags won and the params\n        // below were silently dropped. Everyone told to enable that flag by\n        // hand before this shipped is in exactly that position.\n        if (ChromeSharedPreferences.getInstance()\n                .readBoolean(ChromePreferenceKeys.AERIUM_BOTTOM_BAR, true)) {\n            CommandLine bottomBarLine = CommandLine.getInstance();\n            String bottomBarExisting = bottomBarLine.getSwitchValue("enable-features");\n            String bottomBarFeature =\n                    "AndroidBottomBar:show_bottom_bar_on_gts/true/disable_on_ntp/false";\n            String bottomBarMerged =\n                    (bottomBarExisting == null || bottomBarExisting.isEmpty())\n                            ? bottomBarFeature\n                            : bottomBarFeature + "," + bottomBarExisting;\n            bottomBarLine.appendSwitchWithValue("enable-features", bottomBarMerged);\n        }%' \
+sed_i 's%        FontPreloader.getInstance().load(getApplication());%&\n\n        // Aerium: features are fixed when the process starts, so the bottom\n        // bar goes on the command line here rather than being flipped live.\n        //\n        // Ours goes FIRST in the merged value, ahead of anything already\n        // there. FeatureList::RegisterOverride() uses try_emplace, and says\n        // so in as many words - "only the first override for a given\n        // feature name takes effect" - so with this appended last, an\n        // AndroidBottomBar entry set from chrome://flags won and the params\n        // below were silently dropped. Everyone told to enable that flag by\n        // hand before this shipped is in exactly that position.\n        if (!ChromeSharedPreferences.getInstance()\n                .readBoolean(ChromePreferenceKeys.TOOLBAR_TOP_ANCHORED, true)) {\n            CommandLine bottomBarLine = CommandLine.getInstance();\n            String bottomBarExisting = bottomBarLine.getSwitchValue("enable-features");\n            String bottomBarFeature =\n                    "AndroidBottomBar:show_bottom_bar_on_gts/true/disable_on_ntp/false";\n            String bottomBarMerged =\n                    (bottomBarExisting == null || bottomBarExisting.isEmpty())\n                            ? bottomBarFeature\n                            : bottomBarFeature + "," + bottomBarExisting;\n            bottomBarLine.appendSwitchWithValue("enable-features", bottomBarMerged);\n        }%' \
     $CAI
 
 
@@ -8296,11 +8296,6 @@ cat > chrome/android/java/res/xml/aerium_layout_preferences.xml <<'AERIUM_LAYOUT
      found in the LICENSE file. -->
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
     <org.chromium.components.browser_ui.settings.ChromeSwitchPreference
-        android:key="aerium_bottom_bar"
-        android:persistent="false"
-        android:title="@string/aerium_bottom_bar_title"
-        android:summary="@string/aerium_bottom_bar_summary" />
-    <org.chromium.components.browser_ui.settings.ChromeSwitchPreference
         android:key="aerium_classic_tab_switcher"
         android:persistent="false"
         android:title="@string/aerium_classic_tab_switcher_title"
@@ -8345,7 +8340,6 @@ import org.chromium.components.browser_ui.settings.SettingsUtils;
 
 @NullMarked
 public class AeriumLayoutFragment extends ChromeBaseSettingsFragment {
-    private static final String PREF_BOTTOM_BAR = "aerium_bottom_bar";
     private static final String PREF_CLASSIC_TAB_SWITCHER = "aerium_classic_tab_switcher";
     private static final String PREF_SEAMLESS_INCOGNITO = "aerium_seamless_incognito";
 
@@ -8359,7 +8353,6 @@ public class AeriumLayoutFragment extends ChromeBaseSettingsFragment {
         SettingsUtils.addPreferencesFromResource(this, R.xml.aerium_layout_preferences);
         mPageTitle.set(getString(R.string.aerium_layout_title));
 
-        bind(PREF_BOTTOM_BAR, ChromePreferenceKeys.AERIUM_BOTTOM_BAR, true);
         bind(PREF_CLASSIC_TAB_SWITCHER, ChromePreferenceKeys.AERIUM_CLASSIC_TAB_SWITCHER, false);
         bind(PREF_SEAMLESS_INCOGNITO, ChromePreferenceKeys.AERIUM_SEAMLESS_INCOGNITO, false);
     }
