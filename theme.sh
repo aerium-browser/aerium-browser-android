@@ -396,7 +396,12 @@ inline void AeriumFirstRunDataSource::StartDataRequest(
     background: var(--accent); color: var(--card); border-radius: 999px;
     padding: 0.6rem 1rem; margin-top: 0.4rem;
   }
-  .card-alt { font-weight: 400; font-size: 0.85rem; text-align: center; margin-top: 0.1rem; }
+  .buttons { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.8rem 0 0; }
+  .buttons a {
+    flex: 1 1 9rem; text-align: center; text-decoration: none; font-weight: 600;
+    border: 1px solid var(--accent); border-radius: 999px; padding: 0.55rem 1rem;
+  }
+  .buttons a.primary { background: var(--accent); color: var(--card); }
   footer { text-align: center; color: var(--muted); font-size: 0.85rem; margin-top: 1.5rem; }
 </style>
 <main>
@@ -416,19 +421,18 @@ inline void AeriumFirstRunDataSource::StartDataRequest(
 
   <section>
     <h2>Start with a content blocker</h2>
-    <p>This is the single best thing you can add. Aerium runs real Chrome extensions, which Chrome itself doesn't do on Android. The Web Store opens in its desktop layout on its own, so installing works just like on a computer.</p>
+    <p>This is the single best thing you can add. Aerium runs real Chrome extensions, which Chrome itself doesn't do on Android.</p>
     <div class="cards">
       <div class="card card-featured">
         <span class="card-badge">Recommended</span>
         <h3>uBlock Origin</h3>
-        <p>Blocks ads, trackers and malware sites without slowing pages down. Free, open source, and it asks nothing of you after you install it.</p>
-        <a class="card-cta" href="https://chromewebstore.google.com/detail/ublock-origin/cjpalhdlnbpafiamejdnhcphjbkeiagm">Install uBlock Origin</a>
-        <a class="card-alt" href="https://github.com/gorhill/uBlock/releases/latest">or get the latest release from GitHub</a>
+        <p>Blocks ads, trackers and malware sites without slowing pages down. Free, open source, and it asks nothing of you after you install it. Google took it off the Chrome Web Store, so it now comes straight from its developer on GitHub.</p>
+        <a class="card-cta" href="https://github.com/gorhill/uBlock/releases/latest">Get uBlock Origin on GitHub</a>
       </div>
       <div class="card">
         <h3>uBlock Origin Lite</h3>
         <p>Same author, same filter lists, but lighter. It doesn't keep a process running in the background, which makes it a good pick for older phones.</p>
-        <a href="https://chromewebstore.google.com/detail/ublock-origin-lite/ddkjiahejlhfcafbddmgiahcphecmpfh">Install uBlock Origin Lite</a>
+        <a href="https://chromewebstore.google.com/detail/ublock-origin-lite/ddkjiahejlhfcafbddmgiahcphecmpfh">Install from the Chrome Web Store</a>
       </div>
     </div>
     <p class="note">Pick one, not both. To use it in Incognito too, open Manage extensions, tap Details, and turn on Allow in Incognito.</p>
@@ -489,6 +493,17 @@ inline void AeriumFirstRunDataSource::StartDataRequest(
   <section>
     <h2>Where Aerium comes from</h2>
     <p>Aerium is built on <a href="https://github.com/GrapheneOS/Vanadium">Vanadium</a>, the hardened Chromium from GrapheneOS, with our own changes on top. All of it is public: the patches, the scripts that apply them, and the build that made the app you just installed.</p>
+    <p>News, downloads and everything else live on <a href="https://aerium-browser.github.io/">our website</a>.</p>
+  </section>
+
+  <section>
+    <h2>Help keep Aerium going</h2>
+    <p>Aerium is an independent project. There are no ads, no tracking and no company behind it, and it will stay that way. Keeping up with every Chromium release, fixing bugs and answering your reports takes a lot of time.</p>
+    <p>If Aerium is useful to you, a small donation helps a lot and keeps the updates coming. Thank you, it truly means a lot.</p>
+    <div class="buttons">
+      <a class="primary" href="https://aerium-browser.github.io/donate/xmr/">Donate with Monero</a>
+      <a href="https://aerium-browser.github.io/donate/ltc/">Donate with Litecoin</a>
+    </div>
   </section>
 
   <footer>Want to see this again? It's always at chrome://aerium-first-run</footer>
