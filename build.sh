@@ -553,6 +553,12 @@ if [ $MODE_CI = 1 ]; then
     { set +e
       echo "=== [$(date -u '+%H:%M:%SZ')] PRE-BUILD incremental state ==="
       ls -la out/Default/.siso_fs_state out/Default/.siso_fs_state.journal 2>&1
+      if [ -f out/Default/.aerium_low_disk ]; then
+          echo "=== LOW DISK REPORT CARRIED OVER FROM THE PREVIOUS STAGE ==="
+          cat out/Default/.aerium_low_disk
+          echo "=== end carried-over report ==="
+          rm -f out/Default/.aerium_low_disk
+      fi
     } 2>&1 | tee -a "$STAGE_DIAG" || true
 
     # If the log is not creatable, send it to /dev/null rather than leaving
@@ -560,17 +566,60 @@ if [ $MODE_CI = 1 ]; then
     # stdout pipe, so a dead tee means SIGPIPE straight into the compiler.
     : > "$BUILD_LOG" 2>/dev/null || BUILD_LOG=/dev/null
 
+    AERIUM_BUILD_SHELL_PID=$$
+
+    aerium_root_avail_mb() {
+        _v=$(df -BM --output=avail / 2>/dev/null | tail -1 | tr -d ' ')
+        _v=${_v%M}
+        case "$_v" in
+            ''|*[!0-9]*) echo -1 ;;
+            *) echo "$_v" ;;
+        esac
+    }
+
+    aerium_reclaim_root() {
+        sudo apt-get clean >/dev/null 2>&1 || true
+        sudo rm -rf /var/cache/apt/archives/*.deb >/dev/null 2>&1 || true
+        sudo journalctl --vacuum-size=10M >/dev/null 2>&1 || true
+        sudo rm -rf /opt/hostedtoolcache >/dev/null 2>&1 || true
+    }
+
     aerium_sample_resources() {
+        _reclaimed=0
+        _stopped=0
         while :; do
-            _root_avail=$(df -BM --output=avail / 2>/dev/null | tail -1 | tr -d ' ')
-            case "${_root_avail%M}" in
-                ''|*[!0-9]*) : ;;
-                *) if [ "${_root_avail%M}" -lt 3072 ]; then
-                       printf '[aerium] WARNING root filesystem down to %s - the runner agent is killed when this reaches zero, and the stage dies with no uploaded log\n' \
-                           "$_root_avail"
-                       du -xhd1 / 2>/dev/null | sort -rh | head -12
-                   fi ;;
-            esac
+            _root_m=$(aerium_root_avail_mb)
+            _root_avail="${_root_m}M"
+
+            if [ "$_root_m" -ge 0 ] && [ "$_root_m" -lt 4096 ] \
+               && [ "$_reclaimed" = 0 ]; then
+                _reclaimed=1
+                printf '[aerium] root down to %s - reclaiming\n' "$_root_avail" || true
+                aerium_reclaim_root
+                _root_m=$(aerium_root_avail_mb)
+                _root_avail="${_root_m}M"
+                printf '[aerium] root after reclaim: %s\n' "$_root_avail" || true
+            fi
+
+            if [ "$_root_m" -ge 0 ] && [ "$_root_m" -lt 2048 ] \
+               && [ "$_stopped" = 0 ]; then
+                _stopped=1
+                mkdir -p out/Default >/dev/null 2>&1 || true
+                {
+                    printf 'The previous stage stopped itself early.\n'
+                    printf 'Root filesystem was down to %s at %s.\n' \
+                        "$_root_avail" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+                    printf 'The runner agent is killed when root reaches zero, and\n'
+                    printf 'a killed runner uploads no log, so the build was\n'
+                    printf 'interrupted to force a checkpoint while that was still\n'
+                    printf 'possible. Largest consumers of / at that moment:\n'
+                    du -xhd1 / 2>/dev/null | sort -rh | head -12
+                } > out/Default/.aerium_low_disk 2>/dev/null || true
+                printf '[aerium] WARNING root at %s - interrupting the build so this stage checkpoints instead of being killed\n' \
+                    "$_root_avail" || true
+                pkill -INT -P "$AERIUM_BUILD_SHELL_PID" -x timeout >/dev/null 2>&1 || true
+            fi
+
             printf '[aerium] res %s root_avail=%s build_avail=%s mem_avail=%s swap_free=%s\n' \
                 "$(date -u +%H:%M:%S)" \
                 "$_root_avail" \
