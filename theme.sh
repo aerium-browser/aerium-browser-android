@@ -5534,10 +5534,6 @@ echo "[aerium] external download manager applied"
 # all and hands the feature back to chrome://flags entirely. Note the first restart after toggling may not pick the params
 # up: Chromium caches field-trial params in shared preferences and reads them
 # at the following start, so a second restart settles it.
-sed_i 's|    public static final String AERIUM_BLACKEN_DARK_SITES = "Chrome.Aerium.BlackenDarkSites";|&\n\n    /** Whether Aerium shows the bottom bar, which also moves the tab switcher new-tab button. */\n    public static final String AERIUM_BOTTOM_BAR = "Chrome.Aerium.BottomBar";|' \
-    $CPK
-sed_i 's|^                AERIUM_EXTERNAL_DOWNLOAD_MANAGER,$|                AERIUM_BOTTOM_BAR,\n&|' \
-    $CPK
 
 # Distinct local names: the blacken-dark-sites block below already declares
 # commandLine, existing and merged in this same scope.
@@ -5546,8 +5542,6 @@ sed_i 's%        FontPreloader.getInstance().load(getApplication());%&\n\n      
 
 
 
-sed_i 's|      <message name="IDS_AERIUM_EXTERNAL_DOWNLOAD_MANAGER_TITLE" desc=|      <message name="IDS_AERIUM_BOTTOM_BAR_TITLE" desc="Title of the switch that moves the main browser controls to a bar along the bottom of the screen.">\n        Bottom bar\n      </message>\n      <message name="IDS_AERIUM_BOTTOM_BAR_SUMMARY" desc="Summary under the Bottom bar switch. Mentions the new tab button moving and that a restart is needed.">\n        Put the browser controls along the bottom of the screen, within reach of your thumb. The new tab button in the tab switcher moves down with them. Restart Aerium to apply.\n      </message>\n&|' \
-    chrome/browser/ui/android/strings/android_chrome_strings.grd
 
 echo "[aerium] bottom bar applied"
 
@@ -5581,7 +5575,7 @@ echo "[aerium] bottom bar applied"
 # - hence the restart snackbar the other Appearance switches already use.
 sed_i 's|    /\*\* Whether Aerium shows the bottom bar, which also moves the tab switcher new-tab button. \*/|    /** Whether Aerium uses the classic one-column tab switcher instead of the grid. */\n    public static final String AERIUM_CLASSIC_TAB_SWITCHER = "Chrome.Aerium.ClassicTabSwitcher";\n\n&|' \
     $CPK
-sed_i 's|^                AERIUM_BOTTOM_BAR,$|                AERIUM_CLASSIC_TAB_SWITCHER,\n&|' $CPK
+sed_i 's|^                AERIUM_EXTERNAL_DOWNLOAD_MANAGER,$|                AERIUM_CLASSIC_TAB_SWITCHER,\n&|' $CPK
 
 # The span count. getSpanCount() is the single place the grid width is decided -
 # the constructor asks it once and the orientation listener asks it again on
@@ -5637,7 +5631,7 @@ sed_i 's%^                                        PERCENTAGE_AREA_OVERLAP_MERGE_
 
 
 
-sed_i 's|      <message name="IDS_AERIUM_BOTTOM_BAR_TITLE" desc=|      <message name="IDS_AERIUM_CLASSIC_TAB_SWITCHER_TITLE" desc="Title of the switch that shows open tabs as one column of large overlapping cards instead of a grid.">\n        Classic tab switcher\n      </message>\n      <message name="IDS_AERIUM_CLASSIC_TAB_SWITCHER_SUMMARY" desc="Summary under the Classic tab switcher switch. Says what it looks like and that a restart is needed.">\n        Show open tabs as a single column of large, overlapping cards, the way Chrome used to. Turn this off for the two-column grid. Restart Aerium to apply.\n      </message>\n&|' \
+sed_i 's|      <message name="IDS_AERIUM_EXTERNAL_DOWNLOAD_MANAGER_TITLE" desc=|      <message name="IDS_AERIUM_CLASSIC_TAB_SWITCHER_TITLE" desc="Title of the switch that shows open tabs as one column of large overlapping cards instead of a grid.">\n        Classic tab switcher\n      </message>\n      <message name="IDS_AERIUM_CLASSIC_TAB_SWITCHER_SUMMARY" desc="Summary under the Classic tab switcher switch. Says what it looks like and that a restart is needed.">\n        Show open tabs as a single column of large, overlapping cards, the way Chrome used to. Turn this off for the two-column grid. Restart Aerium to apply.\n      </message>\n&|' \
     chrome/browser/ui/android/strings/android_chrome_strings.grd
 
 echo "[aerium] classic tab switcher applied"
@@ -5672,9 +5666,9 @@ sed_i 's|^import org.chromium.url.GURL;$|import org.chromium.components.browser_
 sed_i 's%            recordFirstAppLaunchTimestampIfNeeded();%&\n\n            // Aerium: give the Chrome Web Store its desktop layout - see theme.sh.\n            if (!ChromeSharedPreferences.getInstance()\n                    .readBoolean(ChromePreferenceKeys.AERIUM_WEBSTORE_DESKTOP_SEEDED, false)) {\n                Profile aeriumProfile = getProfileProviderSupplier().get().getOriginalProfile();\n                for (String aeriumHost :\n                        new String[] {\n                            "https://chrome.google.com", "https://chromewebstore.google.com"\n                        }) {\n                    GURL aeriumWebstore = new GURL(aeriumHost);\n                    WebsitePreferenceBridge.setContentSettingDefaultScope(\n                            aeriumProfile,\n                            ContentSettingsType.REQUEST_DESKTOP_SITE,\n                            aeriumWebstore,\n                            aeriumWebstore,\n                            ContentSetting.ALLOW);\n                }\n                ChromeSharedPreferences.getInstance()\n                        .writeBoolean(\n                                ChromePreferenceKeys.AERIUM_WEBSTORE_DESKTOP_SEEDED, true);\n            }%' \
     $CTA
 
-sed_i 's|    public static final String AERIUM_BOTTOM_BAR = "Chrome.Aerium.BottomBar";|&\n\n    /** Whether the one-time Chrome Web Store desktop-site exception has been written. */\n    public static final String AERIUM_WEBSTORE_DESKTOP_SEEDED = "Chrome.Aerium.WebstoreDesktopSeeded";|' \
+sed_i 's|    public static final String AERIUM_BLACKEN_DARK_SITES = "Chrome.Aerium.BlackenDarkSites";|&\n\n    /** Whether the one-time Chrome Web Store desktop-site exception has been written. */\n    public static final String AERIUM_WEBSTORE_DESKTOP_SEEDED = "Chrome.Aerium.WebstoreDesktopSeeded";|' \
     $CPK
-sed_i 's|^                AERIUM_BOTTOM_BAR,$|                AERIUM_WEBSTORE_DESKTOP_SEEDED,\n&|' \
+sed_i 's|^                AERIUM_EXTERNAL_DOWNLOAD_MANAGER,$|                AERIUM_WEBSTORE_DESKTOP_SEEDED,\n&|' \
     $CPK
 
 echo "[aerium] chrome web store desktop site applied"
@@ -5850,7 +5844,7 @@ sed_i 's|^import org.chromium.chrome.browser.browsing_data.ClearBrowsingDataFrag
 sed_i 's|^                    AboutChromeSettings.SEARCH_INDEX_DATA_PROVIDER,$|&\n                    AeriumMediaFragment.SEARCH_INDEX_DATA_PROVIDER,|' \
     $SIPR
 
-sed_i 's|      <message name="IDS_AERIUM_BOTTOM_BAR_TITLE" desc=|      <message name="IDS_AERIUM_MEDIA_TITLE" desc="Title of the Media settings screen, which holds the DRM and background playback switches.">\n        Media\n      </message>\n      <message name="IDS_AERIUM_BACKGROUND_PLAYBACK_TITLE" desc="Title of the switch that keeps audio and video playing when the browser is not in front.">\n        Background playback\n      </message>\n      <message name="IDS_AERIUM_BACKGROUND_PLAYBACK_SUMMARY" desc="Summary under the background playback switch. Mentions that a restart is needed.">\n        Keep audio and video playing when you switch away from Aerium or turn the screen off. Restart Aerium to apply.\n      </message>\n      <message name="IDS_AERIUM_DRM_TITLE" desc="Title of the switch that turns on playback of DRM-protected video.">\n        Play DRM-protected content\n      </message>\n      <message name="IDS_AERIUM_DRM_SUMMARY" desc="Summary under the DRM switch. Explains that it is off by default and that the CDM is Google proprietary software.">\n        Register the Widevine CDM so sites like Netflix can play protected video. Off by default: the CDM is proprietary Google software that Aerium does not ship, and a browser without one should not tell sites it has one. Restart Aerium to apply.\n      </message>\n&|' \
+sed_i 's|      <message name="IDS_AERIUM_EXTERNAL_DOWNLOAD_MANAGER_TITLE" desc=|      <message name="IDS_AERIUM_MEDIA_TITLE" desc="Title of the Media settings screen, which holds the DRM and background playback switches.">\n        Media\n      </message>\n      <message name="IDS_AERIUM_BACKGROUND_PLAYBACK_TITLE" desc="Title of the switch that keeps audio and video playing when the browser is not in front.">\n        Background playback\n      </message>\n      <message name="IDS_AERIUM_BACKGROUND_PLAYBACK_SUMMARY" desc="Summary under the background playback switch. Mentions that a restart is needed.">\n        Keep audio and video playing when you switch away from Aerium or turn the screen off. Restart Aerium to apply.\n      </message>\n      <message name="IDS_AERIUM_DRM_TITLE" desc="Title of the switch that turns on playback of DRM-protected video.">\n        Play DRM-protected content\n      </message>\n      <message name="IDS_AERIUM_DRM_SUMMARY" desc="Summary under the DRM switch. Explains that it is off by default and that the CDM is Google proprietary software.">\n        Register the Widevine CDM so sites like Netflix can play protected video. Off by default: the CDM is proprietary Google software that Aerium does not ship, and a browser without one should not tell sites it has one. Restart Aerium to apply.\n      </message>\n&|' \
     chrome/browser/ui/android/strings/android_chrome_strings.grd
 
 echo "[aerium] media settings applied"
