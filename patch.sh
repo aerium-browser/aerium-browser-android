@@ -221,19 +221,9 @@ sed_i 's/is_android_mobile = is_android_any \&\& !is_android_desktop;/is_android
 
 # --- Extensions in incognito, and incognito as its own window - unless
 # Settings > Seamless Incognito (theme.sh) says otherwise.
-#
-# process_manager.cc is untouched by that switch on purpose. Spanning
-# extensions share one background page, made by the original profile's
-# ProcessManager; the off-the-record one normally has none of its own and
-# borrows it. That borrowing needs the two profiles reachable from the same
-# place, which a standalone Incognito window's ProfileProvider never gave it -
-# so this makes the off-the-record context set up its own independently,
-# regardless of window model. In a merged window the original profile IS
-# reachable and stock sharing would work, so this becomes an unnecessary
-# second background page rather than a missing one: safe to leave as-is
-# either way, and there is no evidence yet that undoing it is required.
-sed_i 's|if (!context->IsOffTheRecord()) {|if (true) {|' extensions/browser/process_manager.cc
-sed_i 's|public static boolean shouldOpenIncognitoAsWindow() {|public static boolean shouldOpenIncognitoAsWindow() { if (org.chromium.chrome.browser.preferences.ChromeSharedPreferences.getInstance().readBoolean(org.chromium.chrome.browser.preferences.ChromePreferenceKeys.AERIUM_SEAMLESS_INCOGNITO, true)) { return false; } if (true) return true;|' chrome/browser/incognito/android/java/src/org/chromium/chrome/browser/incognito/IncognitoUtils.java
+
+sed_i 's|if (!context->IsOffTheRecord()) {|if (!context->IsOffTheRecord() \|\| (base::FeatureList::GetInstance() \&\& base::FeatureList::GetInstance()->IsFeatureOverriddenFromCommandLine("AndroidOpenIncognitoAsWindow"))) {|' extensions/browser/process_manager.cc
+sed_i 's|public static boolean shouldOpenIncognitoAsWindow() {|public static boolean shouldOpenIncognitoAsWindow() { if (org.chromium.chrome.browser.preferences.ChromeSharedPreferences.getInstance().readBoolean(org.chromium.chrome.browser.preferences.ChromePreferenceKeys.AERIUM_SEAMLESS_INCOGNITO, false)) { return false; } if (true) return true;|' chrome/browser/incognito/android/java/src/org/chromium/chrome/browser/incognito/IncognitoUtils.java
 
 # --- Keep extension hosts at a process importance Android will not evict.
 sed_i 's|host_contents_->SetColorProviderSource(NoOpColorProviderSource::Get());|&\nhost_contents_->SetPrimaryPageImportance(content::ChildProcessImportance::IMPORTANT, content::ChildProcessImportance::NORMAL);|' extensions/browser/extension_host.cc

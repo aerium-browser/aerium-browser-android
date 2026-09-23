@@ -6697,6 +6697,8 @@ echo "[aerium] local font access disabled"
 
 sed_i 's|        mvTilesContainerLayout.setVisibility(View.VISIBLE);|        mvTilesContainerLayout.setVisibility(View.GONE);|' \
     chrome/android/java/src/org/chromium/chrome/browser/ntp/NewTabPageLayout.java
+sed_i '/^    android:background="@drawable\/home_surface_ui_background"$/d' \
+    chrome/android/java/res/layout/mv_tiles_layout.xml
 
 perl -0777 -pi -e '
     s{^        if \(ntpShowing\n                \|\| tabSwitcherShowing$}
@@ -7188,7 +7190,7 @@ sed_i 's|^                AERIUM_CLASSIC_TAB_SWITCHER,$|&\n                AERIU
 sed_i 's|      <message name="IDS_AERIUM_CLASSIC_TAB_SWITCHER_TITLE" desc=|      <message name="IDS_AERIUM_SEAMLESS_INCOGNITO_TITLE" desc="Title of the switch that keeps Private tabs in the same window as Normal ones.">\n        Seamless Incognito\n      </message>\n      <message name="IDS_AERIUM_SEAMLESS_INCOGNITO_SUMMARY" desc="Summary under the Seamless Incognito switch. Says what it does and that a restart is needed.">\n        Keep Private tabs in this window, with a switch at the top of the tab switcher, instead of opening a separate window for them. Restart Aerium to apply.\n      </message>\n&|' \
     chrome/browser/ui/android/strings/android_chrome_strings.grd
 
-sed_i 's%        FontPreloader.getInstance().load(getApplication());%&\n\n        if (!ChromeSharedPreferences.getInstance()\n                .readBoolean(ChromePreferenceKeys.AERIUM_SEAMLESS_INCOGNITO, true)) {\n            CommandLine incognitoWindowLine = CommandLine.getInstance();\n            String incognitoWindowExisting =\n                    incognitoWindowLine.getSwitchValue("enable-features");\n            String incognitoWindowMerged =\n                    (incognitoWindowExisting == null || incognitoWindowExisting.isEmpty())\n                            ? "AndroidOpenIncognitoAsWindow"\n                            : "AndroidOpenIncognitoAsWindow," + incognitoWindowExisting;\n            incognitoWindowLine.appendSwitchWithValue(\n                    "enable-features", incognitoWindowMerged);\n        }%' \
+sed_i 's%        FontPreloader.getInstance().load(getApplication());%&\n\n        if (!ChromeSharedPreferences.getInstance()\n                .readBoolean(ChromePreferenceKeys.AERIUM_SEAMLESS_INCOGNITO, false)) {\n            CommandLine incognitoWindowLine = CommandLine.getInstance();\n            String incognitoWindowExisting =\n                    incognitoWindowLine.getSwitchValue("enable-features");\n            String incognitoWindowMerged =\n                    (incognitoWindowExisting == null || incognitoWindowExisting.isEmpty())\n                            ? "AndroidOpenIncognitoAsWindow"\n                            : "AndroidOpenIncognitoAsWindow," + incognitoWindowExisting;\n            incognitoWindowLine.appendSwitchWithValue(\n                    "enable-features", incognitoWindowMerged);\n        }%' \
     chrome/android/java/src/org/chromium/chrome/browser/ChromeApplicationImpl.java
 
 echo "[aerium] seamless incognito switch applied"
@@ -9230,7 +9232,7 @@ public class AeriumLayoutFragment extends ChromeBaseSettingsFragment {
         mPageTitle.set(getString(R.string.aerium_layout_title));
 
         bind(PREF_CLASSIC_TAB_SWITCHER, ChromePreferenceKeys.AERIUM_CLASSIC_TAB_SWITCHER, false);
-        bind(PREF_SEAMLESS_INCOGNITO, ChromePreferenceKeys.AERIUM_SEAMLESS_INCOGNITO, true);
+        bind(PREF_SEAMLESS_INCOGNITO, ChromePreferenceKeys.AERIUM_SEAMLESS_INCOGNITO, false);
     }
 
     private void bind(String prefKey, String sharedPrefKey, boolean defaultValue) {
