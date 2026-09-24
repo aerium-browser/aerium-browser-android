@@ -5267,7 +5267,7 @@ sed_i 's|^                AI_ASSISTANT_ANALYZE_ATTACHMENT_AVAILABILITY,$|       
 CTA=chrome/android/java/src/org/chromium/chrome/browser/ChromeTabbedActivity.java
 sed_i 's|^import org.chromium.chrome.browser.app.ChromeActivity;$|import org.chromium.chrome.browser.aerium.AeriumUpdateNotifier;\n&|' \
     $CTA
-sed_i 's|^        LauncherShortcutActivity.updateIncognitoShortcut(profile);$|&\n\n        // Aerium: see theme.sh. Tells the user about a newer release, if the\n        // daily check has found one and they have not been told yet.\n        AeriumUpdateNotifier.initialize(\n                getProfileProviderSupplier().get().getOriginalProfile());|' \
+sed_i 's|^        LauncherShortcutActivity.update[A-Za-z]*Shortcuts\?(profile);$|&\n\n        AeriumUpdateNotifier.initialize(\n                getProfileProviderSupplier().get().getOriginalProfile());|' \
     $CTA
 
 sed_i 's|^      <message name="IDS_AERIUM_UPDATE_AVAILABLE_TITLE" desc=|      <message name="IDS_AERIUM_UPDATE_NOTIFICATION_TITLE" desc="Title of the notification shown when a newer Aerium has been released.">\n        Update available\n      </message>\n      <message name="IDS_AERIUM_UPDATE_NOTIFICATION_TEXT" desc="Body of that notification. The placeholder is the release tag, and tapping the notification opens that release on GitHub.">\n        Aerium <ph name="VERSION">%1$s<ex>v152.0.7977.64</ex></ph> has been released. Tap to open the release on GitHub.\n      </message>\n&|' \
@@ -6794,7 +6794,7 @@ sed_i 's%^  host16.insert(host16.end(), host.begin(), host.end());$%&\n\n  // Ae
 # size. Off by default: the whole point of the incognito algorithm is to keep a
 # throwaway profile from filling memory, and this gives that up.
 QF=storage/browser/quota/quota_features.cc
-sed_i 's%^BASE_FEATURE(kIncognitoStaticStorageQuota, base::FEATURE_DISABLED_BY_DEFAULT);$%&\n\n// Aerium: see theme.sh. Two-argument BASE_FEATURE to match the file; the name\n// string is derived from the variable.\nBASE_FEATURE(kIncreaseIncognitoStorageQuota, base::FEATURE_DISABLED_BY_DEFAULT);%' $QF
+sed_i 's%^BASE_FEATURE(kIncognitoStaticStorageQuota, base::FEATURE_[A-Z]*_BY_DEFAULT);$%&\n\n// Aerium: see theme.sh. Two-argument BASE_FEATURE to match the file; the name\n// string is derived from the variable.\nBASE_FEATURE(kIncreaseIncognitoStorageQuota, base::FEATURE_DISABLED_BY_DEFAULT);%' $QF
 sed_i 's%^BASE_DECLARE_FEATURE(kIncognitoStaticStorageQuota);$%&\n\n// Aerium: see theme.sh.\nCOMPONENT_EXPORT(STORAGE_BROWSER)\nBASE_DECLARE_FEATURE(kIncreaseIncognitoStorageQuota);%' \
     storage/browser/quota/quota_features.h
 QS=storage/browser/quota/quota_settings.cc
@@ -6880,7 +6880,7 @@ sed_i 's%^    <item type="id" name="view_source" />$%&\n    <!-- Aerium: see the
     chrome/android/java/res/values/ids.xml
 
 TAMPD=chrome/android/java/src/org/chromium/chrome/browser/tabbed_mode/TabbedAppMenuPropertiesDelegate.java
-sed_i 's%^    private boolean shouldShowExtensionsItem() {$%    // Aerium: see theme.sh. Opens chrome://aerium-extensions, the picker for a\n    // .crx that is already on this device.\n    private ListItem buildAeriumInstallExtensionItem(boolean showIcon) {\n        return AppMenuItemUtils.createStandardListItem(\n                AppMenuItemUtils.buildModelForStandardMenuItem(\n                        mContext,\n                        getAppMenuItemTheme(),\n                        R.id.aerium_install_extension,\n                        R.string.aerium_menu_install_extension,\n                        showIcon ? R.drawable.ic_extension_24dp : Resources.ID_NULL,\n                        isMenuIconAtStart()),\n                showIcon);\n    }\n\n&%' \
+sed_i 's%^    private boolean isIncognitoShowing() {$%    private ListItem buildAeriumInstallExtensionItem(boolean showIcon) {\n        return AppMenuItemUtils.createStandardListItem(\n                AppMenuItemUtils.buildModelForStandardMenuItem(\n                        mContext,\n                        getAppMenuItemTheme(),\n                        R.id.aerium_install_extension,\n                        R.string.aerium_menu_install_extension,\n                        showIcon ? R.drawable.ic_extension_24dp : Resources.ID_NULL,\n                        isMenuIconAtStart()),\n                showIcon);\n    }\n\n&%' \
     $TAMPD
 
 sed_i '/^            modelList.add(buildExtensionsMenuItem(shouldShowIconBeforeItem));$/{N;s%            modelList.add(buildExtensionsMenuItem(shouldShowIconBeforeItem));\n        }%            modelList.add(buildExtensionsMenuItem(shouldShowIconBeforeItem));\n        }\n\n        // Aerium: see theme.sh. Install from a file, under Extensions.\n        if (shouldShowExtensionsItem()) {\n            modelList.add(buildAeriumInstallExtensionItem(shouldShowIconBeforeItem));\n        }\n\n        // Aerium: see theme.sh. View page source is built into the More tools\n        // submenu, and submenus are off by default, so without this it is in a\n        // menu nobody has. Only when there are no submenus - with them on it\n        // stays where the desktop keeps it rather than appearing twice.\n        if (!isSubmenusEnabled(mContext)\n                \&\& mMoreToolsItemBuilder.shouldShowViewSourceItem(currentTab)) {\n            modelList.add(mMoreToolsItemBuilder.buildViewSourceItem());\n        }%}' \
@@ -9280,7 +9280,7 @@ sed_i 's|^        googleServicePreference.setViewId(R.id.account_management_goog
     $AERIUM_MS
 
 perl -0777 -pi -e '
-    s{    <Preference\n        android:fragment="org\.chromium\.chrome\.browser\.glic\.GlicSettings"\n        android:key="glic"\n        android:order="25"\n        android:title="\@string/glic_setting_label"/>\n}{}
+    s{    <(?:org\.chromium\.components\.browser_ui\.settings\.ChromeBase)?Preference\n        android:fragment="org\.chromium\.chrome\.browser\.glic\.GlicSettings"\n        android:key="glic"\n        android:order="25"\n        android:title="\@string/glic_setting_label"/>\n}{}
         or die "[aerium] FATAL: the glic row in main_preferences.xml is not the "
              . "five-line Preference this expects - re-read it before removing it\n";
 ' chrome/android/java/res/xml/main_preferences.xml

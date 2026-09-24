@@ -233,10 +233,6 @@ sed_i 's|public static boolean shouldOpenIncognitoAsWindow() {|public static boo
 # --- Keep extension hosts at a process importance Android will not evict.
 sed_i 's|host_contents_->SetColorProviderSource(NoOpColorProviderSource::Get());|&\nhost_contents_->SetPrimaryPageImportance(content::ChildProcessImportance::IMPORTANT, content::ChildProcessImportance::NORMAL);|' extensions/browser/extension_host.cc
 
-# --- The extension permissions prompt without a parent WebContents.
-sed_i '/content::WebContents\* web_contents = show_params->GetParentWebContents();/,/DCHECK(view_android);/{/GetParentWebContents/!d}' chrome/browser/ui/android/extensions/extension_install_dialog_view_android.cc
-sed_i 's|view_android->GetWindowAndroid();|show_params->GetParentWindow();|' chrome/browser/ui/android/extensions/extension_install_dialog_view_android.cc
-
 # --- Touch filtering on the extension install dialog.
 sed_i 's|.with(ModalDialogProperties.FILTER_TOUCH_FOR_SECURITY, true)|.with(ModalDialogProperties.FILTER_TOUCH_FOR_SECURITY, false)|' chrome/browser/ui/android/extensions/java/src/org/chromium/chrome/browser/ui/extensions/ExtensionInstallDialogBridge.java
 
@@ -284,7 +280,7 @@ sed_i 's/|| mSupportedProfileType == SupportedProfileType.OFF_THE_RECORD) {/|| m
 
 DEEPSCANDIR=components/enterprise/connectors/core/cloud_content_scanning
 for f in cloud_binary_upload_service_base.cc resumable_uploader_base.cc \
-         multipart_uploader_base.cc files_request_handler_base.cc; do
+         multipart_uploader.cc files_request_handler_base.cc; do
     perl -0777 -pi -e '
         my $n = 0;
         s{(\#if !BUILDFLAG\(IS_IOS\)\n)(.*?)(^\#endif)}{
