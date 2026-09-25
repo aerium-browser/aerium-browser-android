@@ -51,6 +51,56 @@ edit('chrome/browser/ui/page_info/chrome_page_info_delegate.cc',
      '''void ChromePageInfoDelegate::OnSuspiciousSiteMarkAsSafe() {
 #if BUILDFLAG(IS_ANDROID) && BUILDFLAG(SAFE_BROWSING_AVAILABLE)''')
 
+edit('chrome/browser/ui/page_info/chrome_page_info_delegate.cc',
+     '''#else
+  if (auto* ssc =
+          safe_browsing::SuspiciousSiteControllerDesktop::FromWebContents(
+              web_contents_)) {
+    ssc->OnBackToSafetyClicked();''',
+     '''#elif !BUILDFLAG(IS_ANDROID)
+  if (auto* ssc =
+          safe_browsing::SuspiciousSiteControllerDesktop::FromWebContents(
+              web_contents_)) {
+    ssc->OnBackToSafetyClicked();''')
+
+edit('chrome/browser/ui/page_info/chrome_page_info_delegate.cc',
+     '''#else
+  if (auto* ssc =
+          safe_browsing::SuspiciousSiteControllerDesktop::FromWebContents(
+              web_contents_)) {
+    ssc->OnMarkAsSafeClicked();''',
+     '''#elif !BUILDFLAG(IS_ANDROID)
+  if (auto* ssc =
+          safe_browsing::SuspiciousSiteControllerDesktop::FromWebContents(
+              web_contents_)) {
+    ssc->OnMarkAsSafeClicked();''')
+
+edit('chrome/browser/chrome_content_browser_client.cc',
+     '''#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+void MaybeAddCondition(
+    std::unique_ptr<content::CommitDeferringCondition> maybe_condition,
+    std::vector<std::unique_ptr<content::CommitDeferringCondition>>*
+        conditions) {
+  if (maybe_condition) {
+    conditions->push_back(std::move(maybe_condition));
+  }
+}
+#endif
+
+#if BUILDFLAG(IS_CHROMEOS)
+void NotifyMultiCaptureStarted(''',
+     '''void MaybeAddCondition(
+    std::unique_ptr<content::CommitDeferringCondition> maybe_condition,
+    std::vector<std::unique_ptr<content::CommitDeferringCondition>>*
+        conditions) {
+  if (maybe_condition) {
+    conditions->push_back(std::move(maybe_condition));
+  }
+}
+
+#if BUILDFLAG(IS_CHROMEOS)
+void NotifyMultiCaptureStarted(''')
+
 edit('chrome/browser/component_updater/registration.cc',
      '''#if BUILDFLAG(IS_ANDROID)
   RegisterRealTimeUrlChecksAllowlistComponent(cus);

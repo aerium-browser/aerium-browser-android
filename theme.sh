@@ -6766,7 +6766,7 @@ echo "[aerium] new tab page left to extensions"
 # initialiser list with it.
 TUS=components/search_engines/template_url_service.cc
 sed_i 's%^#include "base/check_is_test.h"$%#include "base/command_line.h"\n&%' $TUS
-sed_i 's%^}  // namespace$%// Aerium: see theme.sh.\nbool AeriumShouldAutocollect() {\n  return !base::CommandLine::ForCurrentProcess()->HasSwitch(\n      "disable-search-engine-collection");\n}\n\n&%' $TUS
+sed_i '0,/^}  \/\/ namespace$/s%^}  // namespace$%bool AeriumShouldAutocollect() {\n  return !base::CommandLine::ForCurrentProcess()->HasSwitch(\n      "disable-search-engine-collection");\n}\n\n&%' $TUS
 sed_i 's%^  return !url.is_valid() || url.GetHost().empty() ||$%  // Aerium: see theme.sh.\n  if (!AeriumShouldAutocollect()) {\n    return false;\n  }\n\n&%' $TUS
 sed_i 's%^  const TemplateURLSet\* urls = provider_map_->GetURLsForHost(host);$%  // Aerium: see theme.sh.\n  if (!AeriumShouldAutocollect()) {\n    return false;\n  }\n\n&%' $TUS
 
