@@ -6612,6 +6612,10 @@ sed_i 's|        mvTilesContainerLayout.setVisibility(View.VISIBLE);|        mvT
     chrome/android/java/src/org/chromium/chrome/browser/ntp/NewTabPageLayout.java
 sed_i '/^    android:background="@drawable\/home_surface_ui_background"$/d' \
     chrome/android/java/res/layout/mv_tiles_layout.xml
+sed_i 's|^        mIncognitoNtpBackgroundColor = host.getContext().getColor(R.color.ntp_bg_incognito);$|        mIncognitoNtpBackgroundColor =\n                org.chromium.components.browser_ui.styles.ChromeColors.getPrimaryBackgroundColor(\n                        host.getContext(), true);|' \
+    chrome/android/java/src/org/chromium/chrome/browser/ntp/IncognitoNewTabPage.java
+sed_i 's|^        @ColorInt int bgColor = getContext().getColor(R.color.ntp_bg_incognito);$|        @ColorInt int bgColor =\n                org.chromium.components.browser_ui.styles.ChromeColors.getPrimaryBackgroundColor(\n                        getContext(), true);|' \
+    chrome/android/java/src/org/chromium/chrome/browser/ntp/IncognitoNewTabPageView.java
 sed_i 's|^        mSearchBoxView = view;$|&\n        if (view != null) view.setVisibility(View.GONE);|' \
     chrome/android/java/src/org/chromium/chrome/browser/ntp/NewTabPageLayout.java
 sed_i 's|^    float getToolbarTransitionPercentage() {$|&\n        if (true) return 1f;|' \
