@@ -6701,6 +6701,8 @@ sed_i 's|        mvTilesContainerLayout.setVisibility(View.VISIBLE);|        mvT
     chrome/android/java/src/org/chromium/chrome/browser/ntp/NewTabPageLayout.java
 sed_i '/^    android:background="@drawable\/home_surface_ui_background"$/d' \
     chrome/android/java/res/layout/mv_tiles_layout.xml
+sed_i 's|^            return mCachedBackgroundImageInfo.getMatrix(currentOrientation);$|            Matrix cachedMatrix = new Matrix(mCachedBackgroundImageInfo.getMatrix(currentOrientation));\n            CropImageUtils.validateMatrix(\n                    cachedMatrix, currentWindowSize.x, currentWindowSize.y, mOriginalBitmap);\n            return cachedMatrix;|' \
+    chrome/browser/ntp_customization/java/src/org/chromium/chrome/browser/ntp_customization/theme/NtpBackgroundImageCoordinator.java
 
 perl -0777 -pi -e '
     s{^        if \(ntpShowing\n                \|\| tabSwitcherShowing$}
