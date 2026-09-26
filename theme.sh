@@ -6612,6 +6612,12 @@ sed_i 's|        mvTilesContainerLayout.setVisibility(View.VISIBLE);|        mvT
     chrome/android/java/src/org/chromium/chrome/browser/ntp/NewTabPageLayout.java
 sed_i '/^    android:background="@drawable\/home_surface_ui_background"$/d' \
     chrome/android/java/res/layout/mv_tiles_layout.xml
+sed_i 's|^        mSearchBoxView = view;$|&\n        if (view != null) view.setVisibility(View.GONE);|' \
+    chrome/android/java/src/org/chromium/chrome/browser/ntp/NewTabPageLayout.java
+sed_i 's|^    float getToolbarTransitionPercentage() {$|&\n        if (true) return 1f;|' \
+    chrome/android/java/src/org/chromium/chrome/browser/ntp/NewTabPageCoordinator.java
+sed_i 's|^                int alpha = mInLayoutTransition ? 255 : Math.round(mUrlExpansionFraction \* 255);$|                int alpha = mInLayoutTransition ? 255 : 0;|' \
+    chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/top/ToolbarPhone.java
 sed_i 's|^            return mCachedBackgroundImageInfo.getMatrix(currentOrientation);$|            Matrix cachedMatrix = new Matrix(mCachedBackgroundImageInfo.getMatrix(currentOrientation));\n            CropImageUtils.validateMatrix(\n                    cachedMatrix, currentWindowSize.x, currentWindowSize.y, mOriginalBitmap);\n            return cachedMatrix;|' \
     chrome/browser/ntp_customization/java/src/org/chromium/chrome/browser/ntp_customization/theme/NtpBackgroundImageCoordinator.java
 
