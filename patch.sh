@@ -222,13 +222,12 @@ sed_i 's/is_android_mobile = is_android_any \&\& !is_android_desktop;/is_android
 
 # --- Hide the extensions menu button while it is unpinned.
 
-# --- Extensions in incognito, and incognito as its own window - unless
-# Settings > Seamless Incognito (theme.sh) says otherwise.
+# --- Extensions in incognito, and incognito as its own window.
 
 sed_i 's|if (!context->IsOffTheRecord()) {|if (!context->IsOffTheRecord() \|\| !base::FeatureList::IsEnabled(extensions_features::kAeriumIncognitoWindowSharedExtensions)) {|' extensions/browser/process_manager.cc
 sed_i 's|^BASE_DECLARE_FEATURE(kForceWebRequestProxyForTest);$|&\nBASE_DECLARE_FEATURE(kAeriumIncognitoWindowSharedExtensions);|' extensions/common/extension_features.h
 sed_i 's|^BASE_FEATURE(kForceWebRequestProxyForTest, base::FEATURE_DISABLED_BY_DEFAULT);$|&\nBASE_FEATURE(kAeriumIncognitoWindowSharedExtensions, base::FEATURE_DISABLED_BY_DEFAULT);|' extensions/common/extension_features.cc
-sed_i 's|public static boolean shouldOpenIncognitoAsWindow() {|public static boolean shouldOpenIncognitoAsWindow() { if (org.chromium.chrome.browser.preferences.ChromeSharedPreferences.getInstance().readBoolean(org.chromium.chrome.browser.preferences.ChromePreferenceKeys.AERIUM_SEAMLESS_INCOGNITO, false)) { return false; } if (true) return true;|' chrome/browser/incognito/android/java/src/org/chromium/chrome/browser/incognito/IncognitoUtils.java
+sed_i 's|public static boolean shouldOpenIncognitoAsWindow() {|public static boolean shouldOpenIncognitoAsWindow() { if (true) return true;|' chrome/browser/incognito/android/java/src/org/chromium/chrome/browser/incognito/IncognitoUtils.java
 
 # --- Keep extension hosts at a process importance Android will not evict.
 sed_i 's|host_contents_->SetColorProviderSource(NoOpColorProviderSource::Get());|&\nhost_contents_->SetPrimaryPageImportance(content::ChildProcessImportance::IMPORTANT, content::ChildProcessImportance::NORMAL);|' extensions/browser/extension_host.cc
