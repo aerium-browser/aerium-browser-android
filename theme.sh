@@ -6635,6 +6635,10 @@ sed_i 's|^    float getToolbarTransitionPercentage() {$|&\n        if (true) ret
     chrome/android/java/src/org/chromium/chrome/browser/ntp/NewTabPageCoordinator.java
 sed_i 's|^                int alpha = mInLayoutTransition ? 255 : Math.round(mUrlExpansionFraction \* 255);$|                int alpha = mInLayoutTransition ? 255 : 0;|' \
     chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/top/ToolbarPhone.java
+sed_i 's|^                \&\& mNtpSearchBoxScrollFraction < 1.f;$|;|' \
+    chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/top/ToolbarPhone.java
+sed_i 's|^                \&\& getVisibility() == View.VISIBLE;$|                \&\& !hideHairlineForRegularNtpTextureCapture()\n&|' \
+    chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/top/ToolbarPhone.java
 sed_i 's|^            return mCachedBackgroundImageInfo.getMatrix(currentOrientation);$|            Matrix cachedMatrix = new Matrix(mCachedBackgroundImageInfo.getMatrix(currentOrientation));\n            CropImageUtils.validateMatrix(\n                    cachedMatrix, currentWindowSize.x, currentWindowSize.y, mOriginalBitmap);\n            return cachedMatrix;|' \
     chrome/browser/ntp_customization/java/src/org/chromium/chrome/browser/ntp_customization/theme/NtpBackgroundImageCoordinator.java
 
