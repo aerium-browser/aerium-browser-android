@@ -394,6 +394,12 @@ if [ -f "$CDMDELEGATE" ] \
     echo "[aerium] resume hotfix: IsForceSaveToCloud guarded in $CDMDELEGATE"
 fi
 
+BROWSERGN=chrome/browser/BUILD.gn
+if [ -f "$BROWSERGN" ] && ! grep -q '^    "//chrome/browser/security_events",$' "$BROWSERGN"; then
+    sed -i 's|^    "//chrome/browser/account_settings",$|&\n    "//chrome/browser/security_events",|' "$BROWSERGN"
+    echo "[aerium] resume hotfix: security_events linked in $BROWSERGN"
+fi
+
 python3 "$SCRIPT_DIR/sb-link-guards.py"
 
 # --- Resume sync for the first-run page: theme.sh only runs during source

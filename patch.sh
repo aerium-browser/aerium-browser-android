@@ -296,6 +296,8 @@ for f in cloud_binary_upload_service_base.cc resumable_uploader_base.cc \
 done
 echo "[aerium] deep scan debug reporting guarded on SAFE_BROWSING_DOWNLOAD_PROTECTION"
 
+sed_i 's|^    "//chrome/browser/account_settings",$|&\n    "//chrome/browser/security_events",|' chrome/browser/BUILD.gn
+
 SBBRIDGE=chrome/browser/safe_browsing/android/safe_browsing_bridge.cc
 perl -0777 -pi -e '
     my $n = s{(  reinterpret_cast<SafeBrowsingServiceInterface\*>\(\n      g_browser_process->safe_browsing_service\(\)\n?\)?\n?      ->[^;]+;\n)}
