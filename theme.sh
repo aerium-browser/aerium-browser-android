@@ -6642,6 +6642,8 @@ echo "[aerium] local font access disabled"
 
 sed_i 's|        mvTilesContainerLayout.setVisibility(View.VISIBLE);|        mvTilesContainerLayout.setVisibility(View.GONE);|' \
     chrome/android/java/src/org/chromium/chrome/browser/ntp/NewTabPageLayout.java
+sed_i 's|^        mvTilesContainerLayout.setVisibility(View.GONE);$|&\n        android.graphics.drawable.GradientDrawable tilesCard =\n                new android.graphics.drawable.GradientDrawable();\n        tilesCard.setCornerRadius(\n                getResources().getDimension(R.dimen.home_surface_ui_background_radius));\n        tilesCard.setColor(\n                org.chromium.ui.util.ColorUtils.inNightMode(getContext())\n                        ? 0x1FFFFFFF\n                        : 0x14000000);\n        mvTilesContainerLayout.setBackground(tilesCard);|' \
+    chrome/android/java/src/org/chromium/chrome/browser/ntp/NewTabPageLayout.java
 sed_i '/^    android:background="@drawable\/home_surface_ui_background"$/d' \
     chrome/android/java/res/layout/mv_tiles_layout.xml
 HUBDIR=chrome/browser/hub/internal/android
@@ -6668,6 +6670,12 @@ sed_i 's|^            return isInSingleUrlBarMode() \&\& !mNewTabPageCoordinator
 sed_i 's|^        return isLocationBarShownInNtp() ? getBackgroundColor() : defaultColor;$|        return getBackgroundColor();|' \
     chrome/android/java/src/org/chromium/chrome/browser/ntp/NewTabPage.java
 sed_i '/^            case VisualState.NEW_TAB_SEARCH_ENGINE_NO_LOGO:$/{n;s|^                return mToolbarBackgroundColorForNtp;$|                return ColorUtils.setAlphaComponent(mToolbarBackgroundColorForNtp, 0);|}' \
+    chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/top/ToolbarPhone.java
+sed_i 's|^                !mIsHomeButtonEnabled$|&\n                        \|\| isNtpVisualState(mVisualState)|' \
+    chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/top/ToolbarPhone.java
+sed_i 's|^            return !(isNtp \&\& isSignInLevelUp);$|            return !isNtp;|' \
+    chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/top/ToolbarPhone.java
+sed_i 's|^        mVisualState = newVisualState;$|&\n        if (visualStateChanged) {\n            updateButtonVisibility();\n            if (mButtonData != null) updateOptionalButton(mButtonData);\n        }|' \
     chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/top/ToolbarPhone.java
 sed_i 's|^                \&\& mNtpSearchBoxScrollFraction < 1.f;$|;|' \
     chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/top/ToolbarPhone.java
