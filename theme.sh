@@ -6677,13 +6677,13 @@ sed_i 's|^            return isInSingleUrlBarMode() \&\& !mNewTabPageCoordinator
     chrome/android/java/src/org/chromium/chrome/browser/ntp/NewTabPage.java
 sed_i 's|^        return isLocationBarShownInNtp() ? getBackgroundColor() : defaultColor;$|        return getBackgroundColor();|' \
     chrome/android/java/src/org/chromium/chrome/browser/ntp/NewTabPage.java
-sed_i '/^            case VisualState.NEW_TAB_SEARCH_ENGINE_NO_LOGO:$/{n;s|^                return mToolbarBackgroundColorForNtp;$|                return ColorUtils.setAlphaComponent(mToolbarBackgroundColorForNtp, 0);|}' \
+sed_i '/^            case VisualState.NEW_TAB_SEARCH_ENGINE_NO_LOGO:$/{n;s|^                return mToolbarBackgroundColorForNtp;$|                return urlHasFocus()\n                        ? mToolbarBackgroundColorForNtp\n                        : ColorUtils.setAlphaComponent(mToolbarBackgroundColorForNtp, 0);|}' \
     chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/top/ToolbarPhone.java
 sed_i 's|^                !mIsHomeButtonEnabled$|&\n                        \|\| isNtpVisualState(mVisualState)|' \
     chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/top/ToolbarPhone.java
 sed_i 's|^            return !(isNtp \&\& isSignInLevelUp);$|            return !isNtp;|' \
     chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/top/ToolbarPhone.java
-sed_i 's|^        mVisualState = newVisualState;$|&\n        if (visualStateChanged) {\n            updateButtonVisibility();\n            if (mButtonData != null) updateOptionalButton(mButtonData);\n        }|' \
+sed_i 's|^        mVisualState = newVisualState;$|        boolean ntpVisualStateChanged =\n                isNtpVisualState(mVisualState) != isNtpVisualState(newVisualState);\n&\n        if (ntpVisualStateChanged) {\n            updateButtonVisibility();\n            if (mButtonData != null) updateOptionalButton(mButtonData);\n        }|' \
     chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/top/ToolbarPhone.java
 sed_i 's|^                \&\& mNtpSearchBoxScrollFraction < 1.f;$|;|' \
     chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/top/ToolbarPhone.java
