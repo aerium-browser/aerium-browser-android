@@ -6663,9 +6663,11 @@ sed_i 's|^        @ColorInt int bgColor = getContext().getColor(R.color.ntp_bg_i
     chrome/android/java/src/org/chromium/chrome/browser/ntp/IncognitoNewTabPageView.java
 sed_i 's|^        mSearchBoxView = view;$|&\n        if (view != null) view.setVisibility(View.GONE);|' \
     chrome/android/java/src/org/chromium/chrome/browser/ntp/NewTabPageLayout.java
-sed_i 's|^    float getToolbarTransitionPercentage() {$|&\n        if (true) return 1f;|' \
-    chrome/android/java/src/org/chromium/chrome/browser/ntp/NewTabPageCoordinator.java
-sed_i 's|^                int alpha = mInLayoutTransition ? 255 : Math.round(mUrlExpansionFraction \* 255);$|                int alpha = mInLayoutTransition ? 255 : 0;|' \
+sed_i 's|^            return isInSingleUrlBarMode() \&\& !mNewTabPageCoordinator.urlFocusAnimationsDisabled();$|            return false;|' \
+    chrome/android/java/src/org/chromium/chrome/browser/ntp/NewTabPage.java
+sed_i 's|^        return isLocationBarShownInNtp() ? getBackgroundColor() : defaultColor;$|        return getBackgroundColor();|' \
+    chrome/android/java/src/org/chromium/chrome/browser/ntp/NewTabPage.java
+sed_i '/^            case VisualState.NEW_TAB_SEARCH_ENGINE_NO_LOGO:$/{n;s|^                return mToolbarBackgroundColorForNtp;$|                return ColorUtils.setAlphaComponent(mToolbarBackgroundColorForNtp, 0);|}' \
     chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/top/ToolbarPhone.java
 sed_i 's|^                \&\& mNtpSearchBoxScrollFraction < 1.f;$|;|' \
     chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/top/ToolbarPhone.java
