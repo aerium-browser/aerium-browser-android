@@ -98,19 +98,14 @@ sed_i 's|static Intent maybeModifyCustomTabIntents(Context context, Intent inten
 # fails to compile with "cannot find symbol: method isEligible()".
 sed_i 's|private static void init(Context ctx, SpecType specType) {|private static boolean isEligible() { return false; }\n\n    private static void init(Context ctx, SpecType specType) { if (!isEligible()) { return; }|' aerium/android_config/parser/java/src/app/aerium/config/AeriumConfParser.java
 sed_i 's|if (!_omit_dex) {|if (_is_base_module \&\& !_omit_dex) {|' build/config/android/rules.gni
-# Translate is left removed. Aerium used to undo two of Vanadium's removals
-# here - one sed dropped its safelyRemovePreference() call so the translate
-# preference came back, another dropped its removeEntryForKey() so the
-# settings-search index kept pointing at it. Both are gone, so vanadium
-# patches 0145 (remove translate offer preference) and 0262/0263 (reflect
-# removed settings in search) now apply as written: no preference, and
-# nothing in settings search that leads to one.
-#
-# The rest of the feature was already off and stays off - 0082 stops
-# translations being offered, 0097 keeps the Translate toolbar button off, and
-# ungoogled's own work on the translate backend never applied here in the
-# first place. Removing the two seds is what makes it complete rather than
-# merely defaulted off.
+sed_i 's|^      translate::prefs::kOfferTranslateEnabled, false,$|      translate::prefs::kOfferTranslateEnabled, true,|' \
+    chrome/browser/ui/browser_ui_prefs.cc
+sed_i '/^        updateRemoveUnneededButtons();$/d' \
+    chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/adaptive/settings/RadioButtonGroupAdaptiveToolbarPreference.java
+sed_i '/^        SettingsExtUtils.safelyRemovePreference(prefFragment, \(LanguageSettings\.\(TRANSLATE_SWITCH_KEY\|TRANSLATION_ADVANCED_SECTION\|TARGET_LANGUAGE_KEY\|ALWAYS_LANGUAGES_KEY\|NEVER_LANGUAGES_KEY\)\|"translation_settings_section"\));$/d' \
+    aerium/chromium_src/chrome/browser/language/android/java/src/org/chromium/chrome/browser/language/settings/LanguageSettingsExt.java
+sed_i '/^            indexData.removeEntryForKey(fragmentName, "translate_switch");$/d' \
+    aerium/chromium_src/chrome/android/java/src/org/chromium/chrome/browser/settings/search/SearchIndexProviderHooks.java
 
 # --- Drop Vanadium's GPU feature overrides and leave Chromium's defaults.
 sed_i '/feature_overrides.EnableFeature(::features::kSkipVulkanBlocklist);/d' chrome/browser/chrome_browser_field_trials.cc
