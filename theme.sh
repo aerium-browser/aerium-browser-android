@@ -1885,6 +1885,12 @@ SE_DATA_VERSION=
 # updating them. That makes the range something upstream can walk into but we
 # cannot walk away from, so it is checked rather than computed.
 AERIUM_FIRST_ENGINE_ID=117
+sed_i 's|^    &bookmarks, &history, &tabs, &gemini, &page, &ai_mode,$|    \&bookmarks, \&history, \&tabs, \&page, \&ai_mode,|' \
+    components/search_engines/template_url_starter_pack_data.cc
+sed_i 's|^const int kCurrentDataVersion = 13;$|const int kCurrentDataVersion = 13 + 1;|' \
+    components/search_engines/template_url_starter_pack_data.cc
+sed_i 's|^const StarterPackEngine gemini = {$|[[maybe_unused]] &|' \
+    components/search_engines/template_url_starter_pack_data.cc
 AERIUM_MAX_ENGINE_ID=120
 # All of this is guarded on the file existing rather than failing outright
 # when it is absent, because devutils/verify-seds.sh sources this over an
