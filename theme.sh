@@ -9202,3 +9202,30 @@ sed_i 's|      <message name="IDS_AERIUM_BACKUP_TITLE" desc=|      <message name
     chrome/browser/ui/android/strings/android_chrome_strings.grd
 
 echo "[aerium] settings regrouped"
+
+PSE=aerium/chromium_src/chrome/android/java/src/org/chromium/chrome/browser/privacy/settings/PrivacySettingsExt.java
+
+sed_i 's|    public static final String AERIUM_BACKGROUND_PLAYBACK = "Chrome.Aerium.BackgroundPlayback";|&\n\n    /** Whether links that an installed app can handle may open in that app. */\n    public static final String AERIUM_OPEN_APP_LINKS = "Chrome.Aerium.OpenAppLinks";|' \
+    $CPK
+sed_i 's|^                AERIUM_DRM,$|&\n                AERIUM_OPEN_APP_LINKS,|' \
+    $CPK
+
+sed_i 's|^        if (params.isIncognito() && !isExternalProtocol) {$|        if ((params.isIncognito()\n                        \|\| !ContextUtils.getAppSharedPreferences()\n                                .getBoolean("Chrome.Aerium.OpenAppLinks", true))\n                \&\& !isExternalProtocol) {|' \
+    components/external_intents/android/java/src/org/chromium/components/external_intents/ExternalNavigationHandler.java
+
+perl -0777 -pi -e '
+    s{(\n([ \t]*)<org\.chromium\.components\.browser_ui\.settings\.ChromeSwitchPreference\b[^<>]*?android:key="open_links_in_incognito"[^<>]*?/>)}{$1\n$2<org.chromium.components.browser_ui.settings.ChromeSwitchPreference\n$2    android:key="aerium_open_app_links"\n$2    android:title="\@string/aerium_open_app_links_title"\n$2    android:summary="\@string/aerium_open_app_links_summary"\n$2    android:persistent="false"/>}s
+        or die "[aerium] FATAL: no open_links_in_incognito switch in privacy_preferences_ext.xml\n";
+' aerium/chromium_src/chrome/android/java/res/xml/privacy_preferences_ext.xml
+
+sed_i 's|^            SharedPrefsExt.OPEN_LINKS_IN_INCOGNITO.getKey();$|&\n    private static final String PREF_OPEN_APP_LINKS = "aerium_open_app_links";|' \
+    $PSE
+sed_i '/^            openLinksInIncognitoPref.setOnPreferenceChangeListener(getListener(profile));$/{n;s|^        }$|&\n\n        ChromeSwitchPreference openAppLinksPref =\n                (ChromeSwitchPreference) prefFragment.findPreference(PREF_OPEN_APP_LINKS);\n        if (openAppLinksPref != null) {\n            openAppLinksPref.setOrder(PRIVACY_PREFERENCES_ORDER);\n            openAppLinksPref.setOnPreferenceChangeListener(\n                    (pref, val) -> {\n                        org.chromium.chrome.browser.preferences.ChromeSharedPreferences.getInstance()\n                                .writeBoolean(\n                                        org.chromium.chrome.browser.preferences.ChromePreferenceKeys\n                                                .AERIUM_OPEN_APP_LINKS,\n                                        (boolean) val);\n                        return true;\n                    });\n        }|}' \
+    $PSE
+sed_i 's|^                /\* newCheckedValue\*/ SharedPrefsExt.OPEN_LINKS_IN_INCOGNITO.get());$|&\n\n        ChromeSwitchPreference openAppLinksPref =\n                (ChromeSwitchPreference) prefFragment.findPreference(PREF_OPEN_APP_LINKS);\n        SettingsExtUtils.safelyUpdateSwitchPreference(\n                openAppLinksPref,\n                null,\n                org.chromium.chrome.browser.preferences.ChromeSharedPreferences\n                        .getInstance()\n                        .readBoolean(\n                                org.chromium.chrome.browser.preferences.ChromePreferenceKeys\n                                        .AERIUM_OPEN_APP_LINKS,\n                                true));|' \
+    $PSE
+
+sed_i 's|      <message name="IDS_AERIUM_BACKUP_TITLE" desc=|      <message name="IDS_AERIUM_OPEN_APP_LINKS_TITLE" desc="Title of the switch that lets installed apps open links they support instead of the browser.">\n        Allow links to open in apps\n      </message>\n      <message name="IDS_AERIUM_OPEN_APP_LINKS_SUMMARY" desc="Summary under the switch that lets installed apps open links they support.">\n        Let installed apps open links they support. When off, links stay in Aerium.\n      </message>\n&|' \
+    chrome/browser/ui/android/strings/android_chrome_strings.grd
+
+echo "[aerium] app links switch applied"
