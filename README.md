@@ -34,11 +34,11 @@
 
 uBlock Origin, floccus and other open-source extensions. Manifest V2 included.
 
-Open the [extension store](https://chromewebstore.google.com/), turn on **Desktop site** from the <kbd>⋮</kbd> menu, and install as usual. The Opera and Edge add-on stores work too, and so does a `.crx` from a release page. You still get the permissions prompt before anything installs.
+Open the [extension store](https://chromewebstore.google.com/) and install as usual. The Opera and Edge add-on stores work too, and so does a `.crx` from a release page. You still get the permissions prompt before anything installs.
 
 Worth installing, all free and open source:
 
-- **[uBlock Origin](https://chromewebstore.google.com/detail/ublock-origin/cjpalhdlnbpafiamejdnhcphjbkeiagm)**, or [straight from its releases](https://github.com/gorhill/uBlock/releases/latest). Install this one first.
+- **[uBlock Origin](https://github.com/gorhill/uBlock/releases/latest)**, only available from its releases page. Install this one first.
 - **[uBlock Origin Lite](https://chromewebstore.google.com/detail/ublock-origin-lite/ddkjiahejlhfcafbddmgiahcphecmpfh)**, same author and filter lists, lighter footprint.
 - **[floccus](https://chromewebstore.google.com/detail/floccus-bookmarks-sync/fnaicdffflnofjppbagibeoednhnbjhg)**, bookmark sync on storage you control.
 - **[TablissNG](https://chromewebstore.google.com/detail/tablissng/dlaogejjiafeobgofajdlkkhjlignalk)**, a new tab page that takes over the default one.
