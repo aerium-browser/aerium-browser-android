@@ -282,17 +282,21 @@ cat > chrome/browser/ui/webui/aerium_first_run.h <<'AERIUM_FIRST_RUN_H'
 #define CHROME_BROWSER_UI_WEBUI_AERIUM_FIRST_RUN_H_
 
 #include <string>
+#include <utility>
 
+#include "base/i18n/rtl.h"
 #include "base/memory/ref_counted_memory.h"
+#include "base/strings/escape.h"
+#include "base/strings/string_util.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/grit/generated_resources.h"
 #include "content/public/browser/url_data_source.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_controller.h"
 #include "content/public/browser/webui_config.h"
+#include "ui/base/l10n/l10n_util.h"
 
-// chrome://aerium-first-run - shown once, on the first launch after install.
-// ChromeTabbedActivity::createInitialTab opens this instead of the New Tab
-// Page when the AERIUM_FIRST_RUN_PAGE_SHOWN preference is still unset.
 class AeriumFirstRunDataSource : public content::URLDataSource {
  public:
   AeriumFirstRunDataSource() = default;
@@ -300,12 +304,6 @@ class AeriumFirstRunDataSource : public content::URLDataSource {
   AeriumFirstRunDataSource& operator=(const AeriumFirstRunDataSource&) = delete;
   ~AeriumFirstRunDataSource() override = default;
 
-  // Defined below the class rather than here. The chromium-style clang
-  // plugin rejects a virtual method whose non-empty body is written inside
-  // the class declaration - it forces every translation unit that includes
-  // the header to carry the code. Writing the definitions out-of-line keeps
-  // the page header-only, which is the whole point of this file, and is what
-  // the plugin actually asks for.
   std::string GetSource() override;
   std::string GetMimeType(const GURL& url) override;
 
@@ -326,170 +324,218 @@ inline void AeriumFirstRunDataSource::StartDataRequest(
     const GURL& url,
     const content::WebContents::Getter& wc_getter,
     content::URLDataSource::GotDataCallback callback) {
-  std::move(callback).Run(
-      base::MakeRefCounted<base::RefCountedString>(std::string(
-          R"AERIUMHTML(<!doctype html>
+  std::string html = R"AERIUMHTML(<!doctype html>
+<html lang="{{LANG}}" dir="{{DIR}}">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Welcome to Aerium</title>
+<title>{{TITLE}}</title>
 <style>
   :root {
     color-scheme: light dark;
-    --bg: #f8fafd; --surface: #ffffff; --text: #1f1f1f; --secondary: #474747;
-    --divider: #e3e3e3; --primary: #0b57d0; --on-primary: #ffffff;
-    --tonal: #d3e3fd; --on-tonal: #041e49;
+    --bg: #ffffff; --surface: #f1f2f4; --text: #111827; --secondary: #5b6474;
+    --divider: #d5d9e0; --navy: #1b2c5e; --on-navy: #ffffff; --on-navy-dim: #c9d3e8;
+    --tonal: #e8eef7; --on-tonal: #1b2c5e;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #1f1f1f; --surface: #292a2d; --text: #e3e3e3; --secondary: #c4c7c5;
-      --divider: #3c4043; --primary: #a8c7fa; --on-primary: #062e6f;
-      --tonal: #004a77; --on-tonal: #c2e7ff;
+      --bg: #0e1116; --surface: #171a20; --text: #eef1f6; --secondary: #a3abba;
+      --divider: #2a303b; --navy: #22386f; --tonal: #16202f; --on-tonal: #c9d3e8;
     }
   }
   * { box-sizing: border-box; }
   body {
     margin: 0; background: var(--bg); color: var(--text);
-    font: 14px/20px Roboto, system-ui, sans-serif;
-    -webkit-text-size-adjust: 100%;
+    font: 15px/1.5 system-ui, sans-serif; -webkit-text-size-adjust: 100%;
   }
-  main { max-width: 680px; margin: 0 auto; padding: 24px 16px 32px; }
-  header { display: flex; align-items: center; gap: 16px; margin: 8px 4px 24px; }
-  .logo { width: 48px; height: 48px; flex: none; }
-  h1 { font-size: 22px; line-height: 28px; font-weight: 400; margin: 0; }
-  .subtitle { color: var(--secondary); margin: 2px 0 0; }
+  main { max-width: 640px; margin: 0 auto; padding: 16px 16px 40px; }
+  .hero {
+    background: var(--navy); color: var(--on-navy); border-radius: 28px;
+    padding: 32px 24px; margin-bottom: 8px;
+  }
+  .logo { width: 56px; height: 56px; display: block; margin-bottom: 20px; }
+  h1 { font-size: 32px; line-height: 1.1; font-weight: 700; letter-spacing: -.03em; margin: 0; }
+  .tagline { color: var(--on-navy-dim); font-size: 17px; margin: 10px 0 0; }
   h2 {
-    font-size: 14px; font-weight: 500; color: var(--secondary);
-    margin: 24px 4px 8px;
+    font-size: 22px; line-height: 1.2; font-weight: 700; letter-spacing: -.02em;
+    margin: 32px 4px 12px;
   }
-  .card { background: var(--surface); border-radius: 12px; overflow: hidden; }
-  .row {
-    display: flex; align-items: center; gap: 16px;
-    padding: 12px 16px; min-height: 64px;
-  }
+  .card { background: var(--surface); border-radius: 20px; overflow: hidden; }
+  .row { display: flex; align-items: center; gap: 16px; padding: 14px 18px; min-height: 64px; }
   .row + .row { border-top: 1px solid var(--divider); }
   .row-text { flex: 1; min-width: 0; }
-  .label { font-size: 16px; line-height: 24px; }
-  .sub { color: var(--secondary); }
-  .sub a, p a { color: var(--primary); text-decoration: none; }
+  .label { font-size: 16px; font-weight: 600; }
+  .sub { color: var(--secondary); font-size: 14px; }
   .button {
-    flex: none; display: inline-block; text-decoration: none;
-    font-weight: 500; line-height: 20px; padding: 8px 16px;
-    border-radius: 20px; background: var(--tonal); color: var(--on-tonal);
+    flex: none; display: inline-flex; align-items: center; justify-content: center;
+    min-height: 40px; padding: 0 18px; border-radius: 20px; text-decoration: none;
+    font-weight: 600; background: var(--tonal); color: var(--on-tonal);
   }
-  .button.action { background: var(--primary); color: var(--on-primary); }
-  .card p { margin: 0; padding: 16px; color: var(--secondary); }
-  .actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 16px 16px; }
-  footer { color: var(--secondary); font-size: 12px; margin: 24px 4px 0; }
-  footer a { color: var(--primary); text-decoration: none; }
+  .button.action { background: var(--navy); color: var(--on-navy); }
+  .card p { margin: 0; padding: 18px 18px 14px; color: var(--secondary); }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 18px 18px; }
+  footer { color: var(--secondary); font-size: 13px; margin: 32px 4px 0; }
+  footer a { color: inherit; }
 </style>
 <main>
-  <header>
-    <svg class="logo" viewBox="0 0 512 512" aria-hidden="true">
-      <path d="M 330 384.17 L 149.1 488.61 A 256 256 0 0 1 108 47.12 L 108 256 A 148 148 0 0 0 330 384.17 Z" fill="#1B2C5E"/>
-      <path d="M 108 256 L 108 47.12 A 256 256 0 0 1 510.9 232.27 L 330 127.83 A 148 148 0 0 0 108 256 Z" fill="#2A4485"/>
-      <path d="M 330 127.83 L 510.9 232.27 A 256 256 0 0 1 149.1 488.61 L 330 384.17 A 148 148 0 0 0 330 127.83 Z" fill="#111C42"/>
-      <circle cx="256" cy="256" r="134" fill="#E9F1FB"/>
-      <circle cx="256" cy="256" r="104" fill="#2C6BAE"/>
-      <circle cx="238" cy="236" r="82" fill="#4C97CF"/>
-      <circle cx="222" cy="218" r="46" fill="#7FC4E4"/>
-    </svg>
-    <div>
-      <h1>Welcome to Aerium</h1>
-      <p class="subtitle">Chromium without Google, with extensions</p>
-    </div>
-  </header>
+  <section class="hero">
+    <svg class="logo" viewBox="0 0 512 512" aria-hidden="true"><path d="M330 384.17 149.1 488.61A256 256 0 0 1 108 47.12L108 256A148 148 0 0 0 330 384.17Z" fill="#1B2C5E"/><path d="M108 256 108 47.12A256 256 0 0 1 510.9 232.27L330 127.83A148 148 0 0 0 108 256Z" fill="#2A4485"/><path d="M330 127.83 510.9 232.27A256 256 0 0 1 149.1 488.61L330 384.17A148 148 0 0 0 330 127.83Z" fill="#111C42"/><circle cx="256" cy="256" r="134" fill="#E9F1FB"/><circle cx="256" cy="256" r="104" fill="#2C6BAE"/><circle cx="238" cy="236" r="82" fill="#4C97CF"/><circle cx="222" cy="218" r="46" fill="#7FC4E4"/></svg>
+    <h1>{{TITLE}}</h1>
+    <p class="tagline">{{TAGLINE}}</p>
+  </section>
 
-  <h2>Block ads</h2>
+  <h2>{{EXTENSIONS}}</h2>
   <div class="card">
     <div class="row">
       <div class="row-text">
         <div class="label">uBlock Origin</div>
-        <div class="sub">No longer on the Chrome Web Store</div>
+        <div class="sub">{{UBLOCK}}</div>
       </div>
-      <a class="button action" href="https://github.com/gorhill/uBlock/releases/latest">GitHub</a>
     </div>
     <div class="row">
       <div class="row-text">
-        <div class="label">uBlock Origin Lite</div>
-        <div class="sub">Lighter, good for older phones</div>
+        <div class="label">{{MORE_EXTENSIONS}}</div>
+        <div class="sub">{{MORE_EXTENSIONS_SUB}}</div>
       </div>
-      <a class="button" href="https://chromewebstore.google.com/detail/ublock-origin-lite/ddkjiahejlhfcafbddmgiahcphecmpfh">Web Store</a>
+      <a class="button action" href="https://chromewebstore.google.com/">{{BROWSE}}</a>
+    </div>
+    <div class="row">
+      <div class="row-text">
+        <div class="label">{{FROM_FILE}}</div>
+        <div class="sub">{{FROM_FILE_SUB}}</div>
+      </div>
+      <a class="button" href="chrome://aerium-extensions/">{{OPEN}}</a>
     </div>
   </div>
 
-  <h2>Already set up</h2>
+  <h2>{{PRIVATE}}</h2>
   <div class="card">
     <div class="row">
       <div class="row-text">
-        <div class="label">No Safe Browsing or Translate</div>
-        <div class="sub">Your pages aren't sent to Google</div>
+        <div class="label">{{NO_TELEMETRY}}</div>
+        <div class="sub">{{NO_TELEMETRY_SUB}}</div>
       </div>
     </div>
-    <div class="row">
-      <div class="row-text">
-        <div class="label">DuckDuckGo without AI</div>
-        <div class="sub">Default search engine</div>
-      </div>
-    </div>
-    <div class="row">
-      <div class="row-text">
-        <div class="label">HTTPS-First</div>
-        <div class="sub">Secure connections wherever a site allows it</div>
-      </div>
-    </div>
-  </div>
-
-  <h2>Make it yours</h2>
-  <div class="card">
     <div class="row">
       <div class="row-text">
         <div class="label">Aerium Guard</div>
-        <div class="sub">Privacy, performance or security in one tap, in Settings</div>
+        <div class="sub">{{GUARD_SUB}}</div>
       </div>
     </div>
     <div class="row">
       <div class="row-text">
-        <div class="label">Passwords</div>
-        <div class="sub">Filled by your Android autofill app, like <a href="https://bitwarden.com" rel="noreferrer">Bitwarden</a>, <a href="https://proton.me/pass" rel="noreferrer">Proton Pass</a>, <a href="https://www.keepassdx.com" rel="noreferrer">KeePassDX</a> or <a href="https://github.com/PhilippC/keepass2android" rel="noreferrer">Keepass2Android</a></div>
-      </div>
-    </div>
-    <div class="row">
-      <div class="row-text">
-        <div class="label">Backup and restore</div>
-        <div class="sub">Tabs, settings and flags in one file</div>
+        <div class="label">{{APP_LINKS}}</div>
+        <div class="sub">{{APP_LINKS_SUB}}</div>
       </div>
     </div>
   </div>
 
-  <h2>Updates</h2>
+  <h2>{{EVERYDAY}}</h2>
   <div class="card">
     <div class="row">
       <div class="row-text">
-        <div class="label">Daily update check</div>
-        <div class="sub">Allow notifications for Aerium so you don't miss a new version</div>
+        <div class="label">{{DARK}}</div>
+        <div class="sub">{{DARK_SUB}}</div>
       </div>
     </div>
     <div class="row">
       <div class="row-text">
-        <div class="label">Latest release</div>
-        <div class="sub">Updates don't install on their own</div>
+        <div class="label">{{WEB_APPS}}</div>
+        <div class="sub">{{WEB_APPS_SUB}}</div>
       </div>
-      <a class="button" href="https://github.com/aerium-browser/aerium-browser-android/releases">GitHub</a>
+    </div>
+    <div class="row">
+      <div class="row-text">
+        <div class="label">{{PASSWORDS}}</div>
+        <div class="sub">{{PASSWORDS_SUB}}</div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="row-text">
+        <div class="label">{{BACKUP}}</div>
+        <div class="sub">{{BACKUP_SUB}}</div>
+      </div>
     </div>
   </div>
 
-  <h2>Support Aerium</h2>
+  <h2>{{UPDATES}}</h2>
   <div class="card">
-    <p>No ads, no tracking, no company behind it. If you like Aerium, a small donation keeps it going. Thank you.</p>
+    <div class="row">
+      <div class="row-text">
+        <div class="label">{{DAILY}}</div>
+        <div class="sub">{{DAILY_SUB}}</div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="row-text">
+        <div class="label">Obtainium</div>
+        <div class="sub">{{OBTAINIUM_SUB}}</div>
+      </div>
+      <a class="button" href="https://aerium-browser.github.io/obtainium/">{{ADD}}</a>
+    </div>
+  </div>
+
+  <h2>{{SUPPORT}}</h2>
+  <div class="card">
+    <p>{{SUPPORT_TEXT}}</p>
     <div class="actions">
-      <a class="button action" href="https://aerium-browser.github.io/donate/xmr/">Donate with Monero</a>
-      <a class="button" href="https://aerium-browser.github.io/donate/ltc/">Donate with Litecoin</a>
+      <a class="button action" href="https://aerium-browser.github.io/donate/xmr/">{{DONATE_XMR}}</a>
+      <a class="button" href="https://aerium-browser.github.io/donate/ltc/">{{DONATE_LTC}}</a>
     </div>
   </div>
 
-  <footer><a href="https://aerium-browser.github.io/">aerium-browser.github.io</a> &middot; Built on <a href="https://github.com/GrapheneOS/Vanadium">Vanadium</a> &middot; chrome://aerium-first-run</footer>
+  <footer>{{AEROGEL}} <a href="https://aerium-browser.github.io/">aerium-browser.github.io</a></footer>
 </main>
-)AERIUMHTML")));
+)AERIUMHTML";
+
+  const std::pair<const char*, int> kStrings[] = {
+      {"{{TITLE}}", IDS_AERIUM_FIRST_RUN_TITLE},
+      {"{{TAGLINE}}", IDS_AERIUM_FIRST_RUN_TAGLINE},
+      {"{{EXTENSIONS}}", IDS_AERIUM_FIRST_RUN_EXTENSIONS},
+      {"{{UBLOCK}}", IDS_AERIUM_FIRST_RUN_UBLOCK},
+      {"{{MORE_EXTENSIONS}}", IDS_AERIUM_FIRST_RUN_MORE_EXTENSIONS},
+      {"{{MORE_EXTENSIONS_SUB}}", IDS_AERIUM_FIRST_RUN_MORE_EXTENSIONS_SUB},
+      {"{{BROWSE}}", IDS_AERIUM_FIRST_RUN_BROWSE},
+      {"{{FROM_FILE}}", IDS_AERIUM_FIRST_RUN_FROM_FILE},
+      {"{{FROM_FILE_SUB}}", IDS_AERIUM_FIRST_RUN_FROM_FILE_SUB},
+      {"{{OPEN}}", IDS_AERIUM_FIRST_RUN_OPEN},
+      {"{{PRIVATE}}", IDS_AERIUM_FIRST_RUN_PRIVATE},
+      {"{{NO_TELEMETRY}}", IDS_AERIUM_FIRST_RUN_NO_TELEMETRY},
+      {"{{NO_TELEMETRY_SUB}}", IDS_AERIUM_FIRST_RUN_NO_TELEMETRY_SUB},
+      {"{{GUARD_SUB}}", IDS_AERIUM_FIRST_RUN_GUARD_SUB},
+      {"{{APP_LINKS}}", IDS_AERIUM_FIRST_RUN_APP_LINKS},
+      {"{{APP_LINKS_SUB}}", IDS_AERIUM_FIRST_RUN_APP_LINKS_SUB},
+      {"{{EVERYDAY}}", IDS_AERIUM_FIRST_RUN_EVERYDAY},
+      {"{{DARK}}", IDS_AERIUM_FIRST_RUN_DARK},
+      {"{{DARK_SUB}}", IDS_AERIUM_FIRST_RUN_DARK_SUB},
+      {"{{WEB_APPS}}", IDS_AERIUM_FIRST_RUN_WEB_APPS},
+      {"{{WEB_APPS_SUB}}", IDS_AERIUM_FIRST_RUN_WEB_APPS_SUB},
+      {"{{PASSWORDS}}", IDS_AERIUM_FIRST_RUN_PASSWORDS},
+      {"{{PASSWORDS_SUB}}", IDS_AERIUM_FIRST_RUN_PASSWORDS_SUB},
+      {"{{BACKUP}}", IDS_AERIUM_FIRST_RUN_BACKUP},
+      {"{{BACKUP_SUB}}", IDS_AERIUM_FIRST_RUN_BACKUP_SUB},
+      {"{{UPDATES}}", IDS_AERIUM_FIRST_RUN_UPDATES},
+      {"{{DAILY}}", IDS_AERIUM_FIRST_RUN_DAILY},
+      {"{{DAILY_SUB}}", IDS_AERIUM_FIRST_RUN_DAILY_SUB},
+      {"{{OBTAINIUM_SUB}}", IDS_AERIUM_FIRST_RUN_OBTAINIUM_SUB},
+      {"{{ADD}}", IDS_AERIUM_FIRST_RUN_ADD},
+      {"{{SUPPORT}}", IDS_AERIUM_FIRST_RUN_SUPPORT},
+      {"{{SUPPORT_TEXT}}", IDS_AERIUM_FIRST_RUN_SUPPORT_TEXT},
+      {"{{DONATE_XMR}}", IDS_AERIUM_FIRST_RUN_DONATE_XMR},
+      {"{{DONATE_LTC}}", IDS_AERIUM_FIRST_RUN_DONATE_LTC},
+      {"{{AEROGEL}}", IDS_AERIUM_FIRST_RUN_AEROGEL},
+  };
+  for (const auto& [token, id] : kStrings) {
+    base::ReplaceSubstringsAfterOffset(
+        &html, 0, token, base::EscapeForHTML(l10n_util::GetStringUTF8(id)));
+  }
+  base::ReplaceSubstringsAfterOffset(
+      &html, 0, "{{LANG}}",
+      base::EscapeForHTML(g_browser_process->GetApplicationLocale()));
+  base::ReplaceSubstringsAfterOffset(&html, 0, "{{DIR}}",
+                                     base::i18n::IsRTL() ? "rtl" : "ltr");
+
+  std::move(callback).Run(
+      base::MakeRefCounted<base::RefCountedString>(std::move(html)));
 }
 
 class AeriumFirstRun;
@@ -9368,3 +9414,118 @@ sed_i 's|^  extension_service_->Init();$|&\n\n  ready_.Post(FROM_HERE,\n        
     chrome/browser/extensions/chrome_extension_system.cc
 
 echo "[aerium] uBlock Origin $AERIUM_UBO_TAG bundled for first-run preinstall"
+
+AERIUM_FIRST_RUN_MESSAGES=$(cat <<'AERIUM_FIRST_RUN_GRD'
+      <message name="IDS_AERIUM_FIRST_RUN_TITLE" desc="Title of the first-run page and its heading.">
+        Welcome to Aerium
+      </message>
+      <message name="IDS_AERIUM_FIRST_RUN_TAGLINE" desc="Tagline under the first-run heading.">
+        The browser that stays out of the way.
+      </message>
+      <message name="IDS_AERIUM_FIRST_RUN_EXTENSIONS" desc="Heading of the extensions section on the first-run page.">
+        Extensions, finally.
+      </message>
+      <message name="IDS_AERIUM_FIRST_RUN_UBLOCK" desc="Line under the uBlock Origin row, which comes preinstalled.">
+        Already installed and blocking ads
+      </message>
+      <message name="IDS_AERIUM_FIRST_RUN_MORE_EXTENSIONS" desc="Row title for installing more extensions.">
+        More extensions
+      </message>
+      <message name="IDS_AERIUM_FIRST_RUN_MORE_EXTENSIONS_SUB" desc="Line under the row for installing more extensions.">
+        Install from the extension store as usual, Manifest V2 included
+      </message>
+      <message name="IDS_AERIUM_FIRST_RUN_BROWSE" desc="Button that opens the extension store.">
+        Browse
+      </message>
+      <message name="IDS_AERIUM_FIRST_RUN_FROM_FILE" desc="Row title for installing an extension from a file on the phone.">
+        Install from a file
+      </message>
+      <message name="IDS_AERIUM_FIRST_RUN_FROM_FILE_SUB" desc="Line under the install-from-file row.">
+        A .crx or .zip that is already on your phone
+      </message>
+      <message name="IDS_AERIUM_FIRST_RUN_OPEN" desc="Button that opens the install-from-file page.">
+        Open
+      </message>
+      <message name="IDS_AERIUM_FIRST_RUN_PRIVATE" desc="Heading of the privacy section on the first-run page.">
+        Private by default.
+      </message>
+      <message name="IDS_AERIUM_FIRST_RUN_NO_TELEMETRY" desc="Row title saying the browser sends no telemetry.">
+        Nothing phones home
+      </message>
+      <message name="IDS_AERIUM_FIRST_RUN_NO_TELEMETRY_SUB" desc="Line under the no-telemetry row.">
+        No telemetry and no big tech services
+      </message>
+      <message name="IDS_AERIUM_FIRST_RUN_GUARD_SUB" desc="Line under the Aerium Guard row.">
+        Privacy, security and speed options in one place, in Settings
+      </message>
+      <message name="IDS_AERIUM_FIRST_RUN_APP_LINKS" desc="Row title for the setting that decides whether links open in installed apps.">
+        Links on your terms
+      </message>
+      <message name="IDS_AERIUM_FIRST_RUN_APP_LINKS_SUB" desc="Line under the app links row, naming where the setting is.">
+        Choose whether links open in installed apps, in Settings › Privacy and security
+      </message>
+      <message name="IDS_AERIUM_FIRST_RUN_EVERYDAY" desc="Heading of the everyday features section on the first-run page.">
+        Made for every day.
+      </message>
+      <message name="IDS_AERIUM_FIRST_RUN_DARK" desc="Row title for the true black dark mode.">
+        True black dark mode
+      </message>
+      <message name="IDS_AERIUM_FIRST_RUN_DARK_SUB" desc="Line under the dark mode row, naming where the setting is.">
+        Settings › Appearance › Theme
+      </message>
+      <message name="IDS_AERIUM_FIRST_RUN_WEB_APPS" desc="Row title for installing websites as apps.">
+        Web apps
+      </message>
+      <message name="IDS_AERIUM_FIRST_RUN_WEB_APPS_SUB" desc="Line under the web apps row.">
+        Install a site from the menu and it opens like an app
+      </message>
+      <message name="IDS_AERIUM_FIRST_RUN_PASSWORDS" desc="Row title for passwords.">
+        Passwords
+      </message>
+      <message name="IDS_AERIUM_FIRST_RUN_PASSWORDS_SUB" desc="Line under the passwords row.">
+        Filled by your Android autofill app
+      </message>
+      <message name="IDS_AERIUM_FIRST_RUN_BACKUP" desc="Row title for backup and restore.">
+        Backup and restore
+      </message>
+      <message name="IDS_AERIUM_FIRST_RUN_BACKUP_SUB" desc="Line under the backup and restore row.">
+        Tabs, site permissions, settings and flags in one file
+      </message>
+      <message name="IDS_AERIUM_FIRST_RUN_UPDATES" desc="Heading of the updates section on the first-run page.">
+        Updates
+      </message>
+      <message name="IDS_AERIUM_FIRST_RUN_DAILY" desc="Row title for the daily update check.">
+        Daily update check
+      </message>
+      <message name="IDS_AERIUM_FIRST_RUN_DAILY_SUB" desc="Line under the daily update check row.">
+        Allow notifications so you don't miss a new version
+      </message>
+      <message name="IDS_AERIUM_FIRST_RUN_OBTAINIUM_SUB" desc="Line under the Obtainium row. Obtainium is an app that installs updates from release pages.">
+        Or let Obtainium install every update for you
+      </message>
+      <message name="IDS_AERIUM_FIRST_RUN_ADD" desc="Button that adds Aerium to Obtainium.">
+        Add
+      </message>
+      <message name="IDS_AERIUM_FIRST_RUN_SUPPORT" desc="Heading of the donation section on the first-run page.">
+        Support Aerium
+      </message>
+      <message name="IDS_AERIUM_FIRST_RUN_SUPPORT_TEXT" desc="Text asking for a donation.">
+        No ads and no tracking. If you like Aerium, a small donation keeps it going. Thank you.
+      </message>
+      <message name="IDS_AERIUM_FIRST_RUN_DONATE_XMR" desc="Button to donate with the Monero cryptocurrency.">
+        Donate with Monero
+      </message>
+      <message name="IDS_AERIUM_FIRST_RUN_DONATE_LTC" desc="Button to donate with the Litecoin cryptocurrency.">
+        Donate with Litecoin
+      </message>
+      <message name="IDS_AERIUM_FIRST_RUN_AEROGEL" desc="Footer line explaining where the name Aerium comes from.">
+        Named after aerogel, the lightest solid there is.
+      </message>
+AERIUM_FIRST_RUN_GRD
+)
+AERIUM_FIRST_RUN_MESSAGES="$AERIUM_FIRST_RUN_MESSAGES" perl -0777 -pi -e '
+    s{(\n    <messages fallback_to_english="true">\n)}{$1$ENV{AERIUM_FIRST_RUN_MESSAGES}\n}s
+        or die "[aerium] FATAL: no <messages> opening in generated_resources.grd\n";
+' chrome/app/generated_resources.grd
+
+echo "[aerium] first-run page strings added"

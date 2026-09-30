@@ -432,7 +432,10 @@ if [ -f "$AFR" ]; then
         rm -f "$AFR_FRESH"
         exit 1
     fi
-    if cmp -s "$AFR_FRESH" "$AFR"; then
+    if grep -q 'IDS_AERIUM_FIRST_RUN_TITLE' "$AFR_FRESH" \
+       && ! grep -q 'IDS_AERIUM_FIRST_RUN_TITLE' chrome/app/generated_resources.grd; then
+        echo "[aerium] first-run page left as is: this tree predates its translatable strings"
+    elif cmp -s "$AFR_FRESH" "$AFR"; then
         echo "[aerium] first-run page in the tree already matches theme.sh"
     else
         cp "$AFR_FRESH" "$AFR"
