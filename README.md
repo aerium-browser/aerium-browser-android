@@ -4,186 +4,166 @@
 
 <h1 align="center">Aerium</h1>
 
-<p align="center"><i>by Dioide</i></p>
-
-[![release](https://img.shields.io/github/v/release/aerium-browser/aerium-browser-android)](https://github.com/aerium-browser/aerium-browser-android/releases/latest)
-[![released](https://img.shields.io/github/release-date/aerium-browser/aerium-browser-android?label=released)](https://github.com/aerium-browser/aerium-browser-android/releases/latest)
-[![downloads](https://img.shields.io/github/downloads/aerium-browser/aerium-browser-android/total?label=downloads)](https://github.com/aerium-browser/aerium-browser-android/releases)
-[![license](https://img.shields.io/badge/License-GPLv2-blue.svg)](LICENSE)
-[![Donate XMR](https://img.shields.io/badge/XMR-Donate-FF6600?logo=monero&logoColor=white)](https://aerium-browser.github.io/donate/xmr)
-[![Donate LTC](https://img.shields.io/badge/LTC-Donate-345D9D?logo=litecoin&logoColor=white)](https://aerium-browser.github.io/donate/ltc)
-
-### Support Aerium
-
-Aerium runs on donations and spare time: no ads, no data sales. Scan or copy an address to help keep it going.
-
 <p align="center">
-<a href="https://aerium-browser.github.io/donate/xmr">
-<img src="donate/xmr-qr.png" width="120" height="120" alt="Monero donation QR code">
-<br><b>Monero (XMR)</b>
-</a>
-<br><a href="https://aerium-browser.github.io/donate/xmr"><code>49TPHGjCk52cr6f8LWwDrwAvCWmXWfVPy5DUt7KTEnLBfsm6xa9bUgaAVV5xYU6LH5WcoRNYZZSBuAjHFuVHFUDpRm6tKFA</code></a>
+  <b>The browser that stays out of the way.</b><br>
+  Desktop extensions on Android. No big tech inside.
 </p>
 
 <p align="center">
-<a href="https://aerium-browser.github.io/donate/ltc">
-<img src="donate/ltc-qr.png" width="120" height="120" alt="Litecoin donation QR code">
-<br><b>Litecoin (LTC)</b>
-</a>
-<br><a href="https://aerium-browser.github.io/donate/ltc"><code>ltc1q8cpevsanzlmuc0ja8d0eltj72qk55nu7dty59v</code></a>
+  <a href="https://github.com/aerium-browser/aerium-browser-android/releases/latest"><b>Download for Android</b></a>
+  &nbsp;·&nbsp;
+  <a href="https://aerium-browser.github.io">Website</a>
+  &nbsp;·&nbsp;
+  <a href="CHANGELOG.md">Changelog</a>
 </p>
 
-Aerium is a Chromium browser for Android that leaves you alone. Nothing phones home. There is no ad platform wired into the settings page.
+<p align="center">
+  <a href="https://github.com/aerium-browser/aerium-browser-android/releases/latest"><img src="https://img.shields.io/github/v/release/aerium-browser/aerium-browser-android?color=1b2c5e&label=release" alt="Latest release"></a>
+  <a href="https://github.com/aerium-browser/aerium-browser-android/releases"><img src="https://img.shields.io/github/downloads/aerium-browser/aerium-browser-android/total?color=1b2c5e&label=downloads" alt="Downloads"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--2.0-1b2c5e" alt="License GPL-2.0"></a>
+</p>
 
-Extensions install from the Chrome Web Store, Manifest V2 included. Hardly any Android browser can do that. Kiwi Browser could, until it stopped getting updates in January 2026. Aerium picks that up again, on a Chromium base GrapheneOS has already hardened.
+<p align="center">
+  <img src="https://aerium-browser.github.io/shots/new-tab.webp" width="200" alt="Aerium new tab page in true black">
+  <img src="https://aerium-browser.github.io/shots/extensions.webp" width="200" alt="Aerium extensions menu with uBlock Origin and floccus">
+  <img src="https://aerium-browser.github.io/shots/settings-guard.webp" width="200" alt="Aerium settings with Aerium Guard">
+  <img src="https://aerium-browser.github.io/shots/settings-backup.webp" width="200" alt="Aerium settings with backup and restore">
+</p>
 
-[**Download for Android**](https://github.com/aerium-browser/aerium-browser-android/releases/latest)
+## Extensions, finally.
 
-## Installing and staying updated
+uBlock Origin, floccus and other open-source extensions. Manifest V2 included.
 
-That link gives you an arm64 APK. It is the right one for almost any phone or tablet from the last several years. Other ways to get it and keep it current:
+Open the [extension store](https://chromewebstore.google.com/), turn on **Desktop site** from the <kbd>⋮</kbd> menu, and install as usual. The Opera and Edge add-on stores work too, and so does a `.crx` from a release page. You still get the permissions prompt before anything installs.
 
-- **[Obtainium](https://github.com/ImranR98/Obtainium)**. Add this repository (`aerium-browser/aerium-browser-android`) as an app source. Obtainium then watches for releases and offers you the update, so you never have to check GitHub. You sideload Obtainium itself, from F-Droid or its own releases page, which suits a de-googled phone better than an app store does.
-- **x86_64**, for emulators, x86 tablets and Chromebooks running Android apps. This one is deliberately kept off the main release feed, so the in-app updater never hands an arm64 phone an APK it cannot install. Look on the [releases page](https://github.com/aerium-browser/aerium-browser-android/releases) for a tag with `-x64-` in it. These are built on request rather than every version, so open an issue if the newest is too old.
-- Aerium checks for a new release once a day by itself and tells you when there is one. You open **Settings** to start the update. Nothing else is needed.
+Worth installing, all free and open source:
 
-## What you get
+- **[uBlock Origin](https://chromewebstore.google.com/detail/ublock-origin/cjpalhdlnbpafiamejdnhcphjbkeiagm)**, or [straight from its releases](https://github.com/gorhill/uBlock/releases/latest). Install this one first.
+- **[uBlock Origin Lite](https://chromewebstore.google.com/detail/ublock-origin-lite/ddkjiahejlhfcafbddmgiahcphecmpfh)**, same author and filter lists, lighter footprint.
+- **[floccus](https://chromewebstore.google.com/detail/floccus-bookmarks-sync/fnaicdffflnofjppbagibeoednhnbjhg)**, bookmark sync on storage you control.
+- **[TablissNG](https://chromewebstore.google.com/detail/tablissng/dlaogejjiafeobgofajdlkkhjlignalk)**, a new tab page that takes over the default one.
+- **[Cookie AutoDelete V3](https://chromewebstore.google.com/detail/cookie-autodelete-v3/jofioghmpdcgiiobkhmdojhjbjiejfbd)**, clears a site's cookies once its tabs close.
+- **[Decentraleyes](https://chromewebstore.google.com/detail/decentraleyes/ldpochfccmkkmhdbclfhpagapcfdljkj)**, serves common libraries locally instead of from a CDN.
 
-- **Extensions that actually work.** Manifest V2 and the Chrome Web Store, plus the Opera and Microsoft Edge add-on stores. You can also load a `.crx` from a GitHub release, which is usually where an extension lives if it is on no store at all. You still get the permissions prompt before anything installs.
-- **Your password manager, working properly.** Android's autofill framework is on by default. Bitwarden and the rest fill forms natively instead of falling back on flaky accessibility tricks.
-- **Search that works from the first keystroke.** DuckDuckGo is the default. Startpage, Brave Search, Mojeek, Qwant, Ecosia, degoog and the two DuckDuckGo no-JS variants are all there in Settings, and you can add your own.
-- **Its own look, and a true black dark mode.** Aerium ships a palette of its own rather than pulling colours off your wallpaper. Dark mode goes fully black if you want it, and on an OLED screen a black pixel is simply off and costs nothing. The browser and web pages have separate switches, under **Settings → Appearance → Theme**.
-- **Media that keeps playing.** Switch apps or turn the screen off and the audio carries on. Chromium suspends media in a hidden page on Android. Aerium does not. Some sites pause themselves the moment they are told they have gone to the background, YouTube among them, so a page making sound is allowed to go on believing it is still on screen. This only holds while sound is actually playing. A silent background tab still gets throttled and put to sleep exactly as before.
-- **Safe Browsing off by default.** It is the one Android feature that reports to Google on every page you open. Turn it back on in Settings if you want it.
-- **Lighter by default.** Background chatter is off out of the box: hint prefetching, the Discover feed's background refresh, domain reliability pings. The name comes from aerogel, the lightest solid there is.
-- **Per-site rules for when your data goes.** Under **Settings → Privacy and security → Site rules** you can keep a site, keep it only until you close Aerium, or clear it the moment its last tab closes. A switch inverts the whole thing: clear *every* site on tab close and treat your list as the exceptions, the way Cookie AutoDelete does it. Clearing waits a moment first, so a sign-in that redirects through a self-closing tab does not lose the cookie it was about to use.
-- **Downloads on your terms.** Hand a download off to ADM, 1DM or another manager instead of fetching it here, under **Settings → Downloads**. You can copy any finished download's source link from its ⋮ menu.
-- **HTTPS by default.** Balanced Mode upgrades navigations to HTTPS on its own, without the full-site warnings that make strict HTTPS-only so disruptive.
-- **Global Privacy Control sent by default.** The `Sec-GPC` opt-out signal and `navigator.globalPrivacyControl` go out on every page, with no toggle to find. CCPA recognises them. Stock Chromium still does not implement them.
-- **Canvas, text measurement and WebGL fingerprinting resistance on by default.** Canvas readbacks, `getClientRects()` and `measureText()` all get noise you will never notice. WebGL reports generic renderer and vendor strings rather than your actual GPU. Nothing to switch on.
-- **DRM off by default, your call either way.** Widevine is not registered until you turn it on in **Settings → Media**, and nothing is fetched from Google until you do.
+Pin an extension to the toolbar from its <kbd>⋮</kbd> menu in the extensions list. To allow one in Incognito, open **Manage extensions → Details → Allow in Incognito**.
 
-## Using extensions
+## Private by default.
 
-Open the [Chrome Web Store](https://chromewebstore.google.com/), turn on **Desktop site** from the <kbd>⋮</kbd> menu, and install as you normally would. A few worth knowing about, all free and open source:
+- **Nothing phones home.** No telemetry, no background chatter.
+- **Aerium Guard** sets privacy, security and speed options in one place.
+- **Safe Browsing and DRM stay off** until you turn them on.
+- **Global Privacy Control** is sent on every page.
+- **Fingerprinting resistance** for canvas, text measurement and WebGL, always on.
+- **HTTPS by default** through Balanced Mode, without full-page warnings.
+- **Site rules**: keep a site, keep it until you close Aerium, or clear it when its last tab closes.
 
-- **[uBlock Origin](https://chromewebstore.google.com/detail/ublock-origin/cjpalhdlnbpafiamejdnhcphjbkeiagm) (recommended)**, or its [latest release straight from GitHub](https://github.com/gorhill/uBlock/releases/latest) if you'd rather sideload it. Content blocking that doesn't get in your way. Install this one first.
-- [**uBlock Origin Lite**](https://chromewebstore.google.com/detail/ublock-origin-lite/ddkjiahejlhfcafbddmgiahcphecmpfh), from the same author with the same filter lists, a lighter footprint if that's what you'd rather trade for.
-- [**floccus**](https://chromewebstore.google.com/detail/floccus-bookmarks-sync/fnaicdffflnofjppbagibeoednhnbjhg), for bookmark sync across browsers using storage you control.
-- [**TablissNG**](https://chromewebstore.google.com/detail/tablissng/dlaogejjiafeobgofajdlkkhjlignalk), a new tab page worth looking at twice, actively maintained. Android ships no new tab page of its own: install one of these and Chromium's own `chrome_url_overrides.newtab` mechanism hands the page over to it, which upstream gates behind a flag that assumes extensions are desktop-only and this build turns on. With none installed, a new tab is the search box and nothing else, and the history-derived Most Visited tiles stay suppressed either way.
-- [**Cookie AutoDelete V3**](https://chromewebstore.google.com/detail/cookie-autodelete-v3/jofioghmpdcgiiobkhmdojhjbjiejfbd), which clears a site's cookies once you close its tabs, with a whitelist for the ones you want to keep.
-- [**Decentraleyes**](https://chromewebstore.google.com/detail/decentraleyes/ldpochfccmkkmhdbclfhpagapcfdljkj), which serves common libraries locally instead of fetching them from a CDN, cutting a quiet tracking channel most blockers miss.
+## Made for every day.
 
-Opera and Microsoft Edge add-on stores work too. To load an unpacked extension, open **Manage extensions** (`chrome://extensions`), enable **Developer mode**, and choose **Load unpacked**.
+- **True black dark mode.** On OLED, a black pixel is simply off.
+- **Media keeps playing** when you switch apps or turn the screen off.
+- **Password managers fill natively** through Android autofill.
+- **Take it with you.** Back up open tabs, site permissions, settings and flags, and restore them on any phone.
+- **Downloads on your terms.** Hand them off to your download manager.
+- **Your search engine.** A privacy-respecting default, more in Settings, or add your own.
 
-Pin an extension's icon to the toolbar from the <kbd>⋮</kbd> menu next to it in the extensions list to reach its popup directly. To allow one in Incognito, go to **Manage extensions → Details** and enable **Allow in Incognito**.
+## Named after aerogel.
+
+The lightest solid there is, up to 99% air. Aerium keeps only what matters.
+
+## Install and update
+
+- **[Download the arm64 APK](https://github.com/aerium-browser/aerium-browser-android/releases/latest)**. It fits almost any phone or tablet from the last several years.
+- **Updates**: Aerium checks once a day and tells you when a new version is ready. Or add this repository to **[Obtainium](https://github.com/ImranR98/Obtainium)** as an app source.
+- **x86_64**, for emulators, x86 tablets and Chromebooks: look for a `-x64-` tag on the [releases page](https://github.com/aerium-browser/aerium-browser-android/releases). Built on request, so open an issue if the newest is too old.
 
 ## Why the download is large
 
-The APK runs to about 300 MB, well above most browsers. There are two reasons for it, and neither is an accident.
+The APK is about 300 MB, for two reasons.
 
-**Extensions.** Running Chrome Web Store extensions on Android means building Chromium's *desktop* browser for Android instead of its phone build. That drags in the entire extension system and the desktop UI layer. The engine alone accounts for roughly 218 MB. Almost no other Android browser offers extensions at all, and this is the price of it.
+**Extensions.** Running desktop extensions means building the desktop browser for Android instead of the phone build, which brings in the whole extension system and desktop UI layer. The engine alone is roughly 218 MB.
 
-**The engine is not compressed inside the package.** Android can map an uncompressed library straight out of the APK. It starts faster that way, and your phone does not end up storing a second unpacked copy. Compressing it would roughly halve the download and cost you both of those. It also keeps the installed size close to the download size instead of nearly doubling it.
+**The engine is stored uncompressed.** Android maps it straight out of the APK, so it starts faster and your phone never keeps a second unpacked copy. The installed size stays close to the download size.
 
-What Aerium does strip out is anything it never touches, including about 20 MB of Android XR and ARCore libraries that Chromium packs in by default for features this build disables anyway.
+Anything the build never touches is stripped, including about 20 MB of XR and AR libraries.
 
-## Other things worth knowing
+<details>
+<summary><b>Privacy protections and flags</b></summary>
 
-- `chrome://chrome-urls` lists every internal page; `chrome://flags` has the full set of experiments.
-- WebRTC IP handling lives under **Settings → Privacy and security**. If a voice service misbehaves because your IP is shielded by default, switch it to **Default public interface only** or **Default**.
+<br>
 
-## Privacy protections and flags
+Always on, nothing to switch:
 
-Most of what other builds hide behind a flag is simply on here. There is no switch to hunt for because there is nothing to turn on:
-
-- **Canvas fingerprinting**: image-data readback and `measureText()` are both perturbed.
+- **Canvas fingerprinting**: image-data readback and `measureText()` are perturbed.
 - **`getClientRects()` / `getBoundingClientRect()`**: perturbed by a factor drawn once per document.
-- **WebGL renderer and vendor**: reported as generic strings rather than your real GPU.
-- **CPU core count**: reported as 2 whatever the real number is, with the User-Agent client hints reduced to match.
+- **WebGL renderer and vendor**: reported as generic strings.
+- **CPU core count**: reported as 2, with User-Agent client hints reduced to match.
 
-The flags Aerium adds, at `chrome://flags`:
+Aerium's own flags:
 
-- `chrome://flags/#aerium-audio-noise`: audio fingerprint deception, on by default. This is where you turn it off.
-- `chrome://flags/#aerium-time-zone`: tell sites a time zone other than the one your phone is set to. Off by default.
-- `chrome://flags/#aerium-local-font-access`: the Local Font Access API, which hands a site your installed font list. Off by default.
+- `chrome://flags/#aerium-audio-noise`: audio fingerprint deception, on by default.
+- `chrome://flags/#aerium-time-zone`: report a different time zone to sites. Off by default.
+- `chrome://flags/#aerium-local-font-access`: the Local Font Access API. Off by default.
 
-Ported from the desktop builds, same names, all off by default:
+Ported from the desktop builds, all off by default:
 
-- `chrome://flags/#disable-search-engine-collection`: stop Aerium adding a search engine for every site that offers one.
-- `chrome://flags/#force-punycode-hostnames`: show an internationalized domain as its punycode, so a lookalike name cannot pass for another site. Costs readability on every legitimate non-Latin domain.
-- `chrome://flags/#increase-incognito-storage-quota`: work out the incognito storage quota the way a normal profile does, which is one of the numbers a site reads to detect incognito.
-- `chrome://flags/#remove-client-hints`: stop sending client hints, and hand `navigator.userAgentData` nothing to report.
-- `chrome://flags/#disable-grease-tls`: stop sending GREASE, the deliberately unknown values Chromium puts in the TLS handshake.
-- `chrome://flags/#keep-old-history`: stop deleting history older than 90 days. There is no setting for that anywhere else.
-- `chrome://flags/#http-accept-header`: replace the `Accept` header sent with every navigation. Empty means the default.
-- `chrome://flags/#enforce-certificate-transparency`: already **on** here; this is how you turn it off if a certificate you trust has no SCTs.
-- `chrome://flags/#enable-low-end-device-mode`: treat this device as low-end whatever its memory, with smaller caches and fewer renderer processes.
-- `chrome://flags/#disable-beforeunload`: stop pages putting up a *Leave site?* dialog when you navigate away.
-- `chrome://flags/#set-ipv6-probe-false`: tell the resolver IPv6 is unreachable without probing for it, putting IPv4 first.
-- `chrome://flags/#max-connections-per-host`: raise the six simultaneous connections per host Chromium allows to fifteen, which is what Firefox uses.
+- `#disable-search-engine-collection`: stop adding a search engine for every site that offers one.
+- `#force-punycode-hostnames`: show internationalized domains as punycode.
+- `#increase-incognito-storage-quota`: hide one of the numbers sites read to detect incognito.
+- `#remove-client-hints`: stop sending client hints.
+- `#disable-grease-tls`: stop sending GREASE values in the TLS handshake.
+- `#keep-old-history`: keep history older than 90 days.
+- `#http-accept-header`: replace the `Accept` header sent with navigations.
+- `#enforce-certificate-transparency`: already **on**; turn it off here if needed.
+- `#enable-low-end-device-mode`: smaller caches and fewer renderer processes.
+- `#disable-beforeunload`: no more *Leave site?* dialogs.
+- `#set-ipv6-probe-false`: prefer IPv4 without probing IPv6.
+- `#max-connections-per-host`: raise simultaneous connections per host from six to fifteen.
 
-Some things the desktop builds put behind a flag are **settings** here, because Vanadium built them that way and a setting is the better surface:
+Settings rather than flags:
 
-- **Cross-origin referrers**, under Settings → Privacy and security. Default, *Reduce* (cross-origin referrers capped to the origin), or *Disable* (none at all). This is what the desktop `#remove-cross-origin-referrers` and `#minimal-referrers` flags do.
-- **JavaScript JIT**, a per-site setting with a page-info toggle, rather than the desktop `#disable-jit` flag's single global switch.
-- **Delete browsing data when you close Aerium**, under Settings → Privacy and security, with eight data types, in place of the desktop `#clear-data-on-exit` flag.
+- **Cross-origin referrers** under Settings → Privacy and security: Default, *Reduce* or *Disable*.
+- **JavaScript JIT** as a per-site setting with a page-info toggle.
+- **Delete browsing data when you close Aerium** under Settings → Privacy and security.
+- **WebRTC IP handling** under Settings → Privacy and security. If a voice service misbehaves, switch it to **Default public interface only** or **Default**.
 
-And one upstream Chromium flag worth knowing:
+Also useful: `chrome://flags/#enable-parallel-downloading` splits large downloads into simultaneous requests, and `chrome://chrome-urls` lists every internal page.
 
-- `chrome://flags/#enable-parallel-downloading`: split downloads into simultaneous requests for faster large files.
+</details>
 
-### The list this README used to carry
+## Support Aerium
 
-Earlier versions of this file listed a dozen flags under *More privacy flags to consider*. That list came straight from the desktop builds, and most of it was never true here. Those builds are based on ungoogled-chromium and inherit its flag entries. This one is based on GrapheneOS's Vanadium and inherits none of them. Search `chrome://flags` for those names and you find nothing, which is why `#enable-parallel-downloading` was the only one anyone could ever locate: it came from upstream Chromium, not from ungoogled.
+Aerium runs on donations and spare time. No ads, no data sales.
 
-What actually happened to each:
-
-| Old entry | On Android |
-| --- | --- |
-| `#enable-parallel-downloading` | Real. Upstream Chromium, still there. |
-| `#fingerprinting-canvas-image-data-noise` | No flag. Compiled in and always on. |
-| `#fingerprinting-canvas-measuretext-noise` | No flag. Compiled in and always on. |
-| `#fingerprinting-client-rects-noise` | No flag. Compiled in and always on. |
-| `#spoof-webgl-info` | No flag. Compiled in and always on. |
-| `#reduced-system-info` | No flag. Two of its three effects are compiled in: two CPU cores whatever the real count, and client hints reduced to match the reduced User-Agent. |
-| `#remove-client-hints` | **Ported.** Not the same as the line above: that derives the hints from the reduced User-Agent, this stops sending them. |
-| `#remove-tabsearch-button` | Desktop-only UI. Android has no tab strip. |
-| `#show-avatar-button` | Desktop-only UI. Android has no avatar button. |
-| `#disable-search-engine-collection` | **Ported.** |
-| `#force-punycode-hostnames` | **Ported.** |
-| `#increase-incognito-storage-quota` | **Ported.** |
-| `#popups-to-tabs` | Nothing to port. Chrome on Android has no popup windows; `window.open` with features already lands in a tab. |
-
-The four marked *ported* carry ungoogled-chromium's own flag names, and are off by default. The rest of ungoogled-chromium's flag set is either desktop-only UI or still to come; open an issue naming one if you want it next.
+<table align="center">
+  <tr>
+    <td align="center">
+      <a href="https://aerium-browser.github.io/donate/xmr/"><img src="donate/xmr-qr.png" width="140" height="140" alt="Monero donation QR code"></a><br>
+      <a href="https://aerium-browser.github.io/donate/xmr/"><b>Donate Monero</b></a>
+    </td>
+    <td align="center">
+      <a href="https://aerium-browser.github.io/donate/ltc/"><img src="donate/ltc-qr.png" width="140" height="140" alt="Litecoin donation QR code"></a><br>
+      <a href="https://aerium-browser.github.io/donate/ltc/"><b>Donate Litecoin</b></a>
+    </td>
+  </tr>
+</table>
 
 ## Building
 
-Every push to `main` kicks off a build on GitHub Actions. It is split across sequential jobs so a full compile fits inside the free tier's per-job time limit. Whatever finishes gets published as a release.
+Every push to `main` that changes the build starts one on GitHub Actions, split across sequential jobs so a full compile fits the free tier's time limit. Finished builds are published as releases.
 
-Want your own signed build?
-
-1. Fork this repository.
-2. Generate a signing keystore and add it as two base64-encoded repository secrets, `STORE_TEST_JKS` and `LOCAL_TEST_JKS` (see `common.sh` for the expected format).
-3. Run the `Build` workflow from the Actions tab.
-
-## Contributing
+For your own signed build: fork this repository, add a signing keystore as the base64-encoded secrets `STORE_TEST_JKS` and `LOCAL_TEST_JKS` (see `common.sh`), and run the `Build` workflow from the Actions tab.
 
 Issues and pull requests are welcome. [UPDATING.md](UPDATING.md) covers how the build keeps up with upstream releases.
 
 ## Credits
 
-Aerium is a thin layer over other people's work. Full attribution and licence terms live in [NOTICE](NOTICE).
+Aerium is a thin layer over other people's open-source work. Full attribution and licence terms are in [NOTICE](NOTICE).
 
-- **[Chromium](https://www.chromium.org/)** is the browser. Everything here is a modification of its source, under its **BSD-3-Clause** licence.
-- **[Vanadium](https://github.com/GrapheneOS/Vanadium)**, by GrapheneOS, is the hardened base. Its 312 patches go on before any of Aerium's own. They are **GPL-2.0-only**, and that is why Aerium is GPLv2. The licence was inherited, not picked.
-- **[ungoogled-chromium](https://github.com/ungoogled-software/ungoogled-chromium)** is where several of the `chrome://flags` entries get their names and their behaviour.
-- **[Cromite](https://github.com/uazo/cromite)**, by uazo, is where two DNS-over-HTTPS fixes come from: minimal DoH request headers, per RFC 8484, and building a DoH config when the system DNS configuration cannot be read. On Android, behind a VPN or Private DNS, that happens all the time.
+- **[Chromium](https://www.chromium.org/)** is the browser, under its **BSD-3-Clause** licence.
+- **[Vanadium](https://github.com/GrapheneOS/Vanadium)**, by GrapheneOS, is the hardened base. Its patches are **GPL-2.0-only**, which is why Aerium is GPLv2.
+- **[Titanium Browser](https://github.com/jqssun/android-titanium-browser)**, by jqssun, is where the idea of desktop extensions on a Vanadium base comes from, along with `patch.sh`, `common.sh` and `args.gn`.
+- **[ungoogled-chromium](https://github.com/ungoogled-software/ungoogled-chromium)** is where several flag names and behaviours come from.
+- **[Cromite](https://github.com/uazo/cromite)**, by uazo, contributed two DNS-over-HTTPS fixes.
 - **[Bromite](https://github.com/bromite/bromite)** wrote the canvas fingerprinting shuffler.
-- **[Titanium Browser](https://github.com/jqssun/android-titanium-browser)**, by jqssun, formerly Helium. Aerium's whole premise, a Vanadium base carrying desktop extensions on Android, is Titanium's. So are `patch.sh`, `common.sh` and `args.gn`, which began as its scripts and are still synced against it by hand. `theme.sh`, `build.sh`, the icons and the CI are Aerium's own.
 
-The Aerium name, logo and application id are not covered by the GPLv2 grant. See the trademarks section of [NOTICE](NOTICE). The code is yours to take. The identity is not. Fork it under your own name.
-
-## About
-
-Aerium is built on [GrapheneOS's Vanadium](https://github.com/GrapheneOS/Vanadium), starting from [Titanium Browser](https://github.com/jqssun/android-titanium-browser)'s scripts for putting desktop extensions on Android, with its own branding, defaults and privacy flags on top. Licensed under [GPLv2](LICENSE).
+The Aerium name, logo and application id are not covered by the GPLv2 grant; see the trademarks section of [NOTICE](NOTICE). The code is yours to take. The identity is not, so fork it under your own name.
