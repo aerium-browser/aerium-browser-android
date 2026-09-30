@@ -76,16 +76,6 @@ The lightest solid there is, up to 99% air. Aerium keeps only what matters.
 - **Updates**: Aerium checks once a day and tells you when a new version is ready. Or add this repository to **[Obtainium](https://github.com/ImranR98/Obtainium)** as an app source.
 - **x86_64**, for emulators, x86 tablets and Chromebooks: look for a `-x64-` tag on the [releases page](https://github.com/aerium-browser/aerium-browser-android/releases). Built on request, so open an issue if the newest is too old.
 
-## Why the download is large
-
-The APK is about 300 MB, for two reasons.
-
-**Extensions.** Running desktop extensions means building the desktop browser for Android instead of the phone build, which brings in the whole extension system and desktop UI layer. The engine alone is roughly 218 MB.
-
-**The engine is stored uncompressed.** Android maps it straight out of the APK, so it starts faster and your phone never keeps a second unpacked copy. The installed size stays close to the download size.
-
-Anything the build never touches is stripped, including about 20 MB of XR and AR libraries.
-
 <details>
 <summary><b>Privacy protections and flags</b></summary>
 
