@@ -106,8 +106,9 @@ def check_resources(java_classes):
     for s in sorted(used):
         if 'IDS_' + s.upper() not in declared:
             report('strings', 'MISSING-STRING', 'R.string.%s has no <message>' % s)
+    native = set(re.findall(r'(?<![="])\b(IDS_AERIUM_[A-Z0-9_]+)', BOTH))
     for d in sorted(declared):
-        if d[4:].lower() not in used:
+        if d[4:].lower() not in used and d not in native:
             report('strings', 'UNUSED-STRING', d)
 
     keys_declared = set(re.findall(r'\b(AERIUM_[A-Z0-9_]+)\s*=', BOTH))

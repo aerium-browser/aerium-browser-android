@@ -4,6 +4,6 @@ Extensions: uBlock Origin comes preinstalled, and floccus and other open-source 
 
 Private by default: no telemetry and no bundled big tech services. Aerium Guard sets privacy, security and speed options in one place. Safe Browsing and DRM stay off until you turn them on. Fingerprinting resistance for canvas, text measurement and WebGL, Global Privacy Control and HTTPS upgrades are on out of the box. Site rules let you keep a site, keep it until you close Aerium, or clear it when its last tab closes. You can also choose whether links open in installed apps.
 
-Made for every day: a true black dark mode for OLED screens, media that keeps playing in the background, password managers that fill natively through Android autofill, and backup and restore for your open tabs, site permissions and settings.
+Made for every day: install any site as a web app in its own window, with no Google server involved, and links to it from other apps open there. A true black dark mode for OLED screens, media that keeps playing in the background, password managers that fill natively through Android autofill, and backup and restore for your open tabs, site permissions and settings.
 
 Named after aerogel, the lightest solid there is. Free and open source, built in public, with security releases picked up within a day.

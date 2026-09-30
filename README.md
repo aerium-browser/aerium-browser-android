@@ -62,6 +62,7 @@ Pin an extension to the toolbar from its <kbd>⋮</kbd> menu in the extensions l
 - **True black dark mode.** On OLED, a black pixel is simply off.
 - **Media keeps playing** when you switch apps or turn the screen off.
 - **Password managers fill natively** through Android autofill.
+- **Web apps without Google.** Install any site from the menu and it opens in its own window. Links to it from other apps open there too, and **Settings → Web apps** manages them.
 - **Take it with you.** Back up open tabs, site permissions, settings and flags, and restore them on any phone.
 - **Downloads on your terms.** Hand them off to your download manager.
 - **Your search engine.** A privacy-respecting default, more in Settings, or add your own.

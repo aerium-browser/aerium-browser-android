@@ -9529,3 +9529,260 @@ AERIUM_FIRST_RUN_MESSAGES="$AERIUM_FIRST_RUN_MESSAGES" perl -0777 -pi -e '
 ' chrome/app/generated_resources.grd
 
 echo "[aerium] first-run page strings added"
+
+sed_i 's|^      WebappsClient::Get()->InstallWebApk(web_contents, params);$|      WebappsClient::Get()->InstallShortcut(web_contents, params);|' \
+    components/webapps/browser/android/add_to_homescreen_installer.cc
+
+sed_i 's|^  AddShortcutWithSkBitmap(info, webapp_id, icon_bitmap);$|  if (info.url.SchemeIsHTTPOrHTTPS()) {\n    webapps::ShortcutInfo app_info(info);\n    app_info.display = blink::mojom::DisplayMode::kStandalone;\n    app_info.scope = info.url.GetWithEmptyPath();\n    if (app_info.name.empty()) {\n      app_info.name = info.user_title;\n    }\n    if (app_info.short_name.empty()) {\n      app_info.short_name = info.user_title;\n    }\n    AddWebappWithSkBitmap(web_contents, app_info, webapp_id, icon_bitmap);\n    return;\n  }\n&|' \
+    chrome/browser/android/shortcut_helper.cc
+
+sed_i 's|^        return bestMatch;$|&\n    }\n\n    public List<WebappDataStorage> getAeriumInstalledWebapps() {\n        List<WebappDataStorage> webapps = new ArrayList<>();\n        for (WebappDataStorage storage : mStorages.values()) {\n            if (!storage.getId().startsWith(WebApkConstants.WEBAPK_ID_PREFIX)) {\n                webapps.add(storage);\n            }\n        }\n        return webapps;\n    }\n\n    public void removeAeriumWebapp(String id) {\n        WebappDataStorage storage = mStorages.remove(id);\n        if (storage == null) {\n            return;\n        }\n        storage.delete();\n        if (mStorages.isEmpty()) {\n            mPreferences.edit().clear().apply();\n        } else {\n            mPreferences.edit().putStringSet(KEY_WEBAPP_SET, mStorages.keySet()).apply();\n        }\n        notifyOriginsWithInstalledAppChanged();|' \
+    chrome/android/java/src/org/chromium/chrome/browser/webapps/WebappRegistry.java
+
+sed_i 's|^        maybePrefetchDnsInBackground();$|        if (org.chromium.chrome.browser.webapps.AeriumWebApps.maybeLaunchInstalledApp(\n                mActivity, mIntent)) {\n            return Action.FINISH_ACTIVITY;\n        }\n&|' \
+    chrome/android/java/src/org/chromium/chrome/browser/LaunchIntentDispatcher.java
+
+cat > chrome/android/java/src/org/chromium/chrome/browser/webapps/AeriumWebApps.java <<'AERIUM_WEBAPPS_JAVA'
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+package org.chromium.chrome.browser.webapps;
+
+import android.app.Activity;
+import android.content.Intent;
+
+import org.chromium.base.IntentUtils;
+import org.chromium.base.StrictModeContext;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
+import org.chromium.chrome.browser.IntentHandler;
+import org.chromium.chrome.browser.TabPreferencesUtils;
+import org.chromium.chrome.browser.browserservices.intents.WebappConstants;
+import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
+import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
+
+@NullMarked
+public final class AeriumWebApps {
+    private AeriumWebApps() {}
+
+    public static boolean maybeLaunchInstalledApp(Activity activity, Intent intent) {
+        if (!Intent.ACTION_VIEW.equals(intent.getAction())
+                || IntentHandler.wasIntentSenderChrome(intent)
+                || TabPreferencesUtils.shouldOpenLinksInIncognito()
+                || !ChromeSharedPreferences.getInstance()
+                        .readBoolean(ChromePreferenceKeys.AERIUM_OPEN_APP_LINKS, true)) {
+            return false;
+        }
+        String url = IntentHandler.getUrlFromIntent(intent);
+        if (url == null || !(url.startsWith("https://") || url.startsWith("http://"))) {
+            return false;
+        }
+        @Nullable WebappDataStorage app;
+        try (StrictModeContext ignored = StrictModeContext.allowDiskReads()) {
+            WebappRegistry.warmUpSharedPrefs();
+            app = WebappRegistry.getInstance().getWebappDataStorageForUrl(url);
+        }
+        if (app == null) {
+            return false;
+        }
+        Intent launch = app.createWebappLaunchIntent();
+        if (launch == null) {
+            return false;
+        }
+        launch.putExtra(WebappConstants.EXTRA_URL, url);
+        launch.putExtra(WebappConstants.EXTRA_FORCE_NAVIGATION, true);
+        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        IntentUtils.addTrustedIntentExtras(launch);
+        return IntentUtils.safeStartActivity(activity, launch);
+    }
+}
+AERIUM_WEBAPPS_JAVA
+
+cat > chrome/android/java/res/xml/aerium_web_apps_preferences.xml <<'AERIUM_WEB_APPS_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android" />
+AERIUM_WEB_APPS_XML
+
+cat > chrome/android/java/src/org/chromium/chrome/browser/webapps/AeriumWebAppsFragment.java <<'AERIUM_WEB_APPS_FRAGMENT'
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+package org.chromium.chrome.browser.webapps;
+
+import android.content.Context;
+import android.content.Intent;
+import android.content.pm.ShortcutManager;
+import android.graphics.Bitmap;
+import android.graphics.drawable.BitmapDrawable;
+import android.os.Bundle;
+
+import androidx.appcompat.app.AlertDialog;
+import androidx.preference.Preference;
+import androidx.preference.PreferenceScreen;
+
+import org.chromium.base.IntentUtils;
+import org.chromium.base.Log;
+import org.chromium.base.StrictModeContext;
+import org.chromium.base.supplier.MonotonicObservableSupplier;
+import org.chromium.base.supplier.ObservableSuppliers;
+import org.chromium.base.supplier.SettableMonotonicObservableSupplier;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
+import org.chromium.chrome.R;
+import org.chromium.chrome.browser.browserservices.intents.BitmapHelper;
+import org.chromium.chrome.browser.browserservices.intents.WebappConstants;
+import org.chromium.chrome.browser.settings.ChromeBaseSettingsFragment;
+import org.chromium.chrome.browser.settings.SettingsNavigationFactory;
+import org.chromium.chrome.browser.settings.search.ChromeBaseSearchIndexProvider;
+import org.chromium.components.browser_ui.settings.SettingsFragment;
+import org.chromium.components.browser_ui.settings.SettingsUtils;
+import org.chromium.components.browser_ui.site_settings.SingleWebsiteSettings;
+
+import java.util.Collections;
+import java.util.List;
+
+@NullMarked
+public class AeriumWebAppsFragment extends ChromeBaseSettingsFragment {
+    private static final String TAG = "AeriumWebApps";
+
+    private final SettableMonotonicObservableSupplier<String> mPageTitle =
+            ObservableSuppliers.createMonotonic();
+
+    @Override
+    public void onCreatePreferences(@Nullable Bundle savedInstanceState, @Nullable String rootKey) {
+        SettingsUtils.addPreferencesFromResource(this, R.xml.aerium_web_apps_preferences);
+        mPageTitle.set(getString(R.string.aerium_web_apps_title));
+        populate();
+    }
+
+    private void populate() {
+        PreferenceScreen screen = getPreferenceScreen();
+        screen.removeAll();
+        Context context = getPreferenceManager().getContext();
+        List<WebappDataStorage> apps;
+        try (StrictModeContext ignored = StrictModeContext.allowDiskReads()) {
+            WebappRegistry.warmUpSharedPrefs();
+            apps = WebappRegistry.getInstance().getAeriumInstalledWebapps();
+        }
+        boolean any = false;
+        for (WebappDataStorage app : apps) {
+            Intent launch = app.createWebappLaunchIntent();
+            if (launch == null) {
+                continue;
+            }
+            any = true;
+            String title = nameOf(launch, app);
+            Preference row = new Preference(context);
+            row.setTitle(title);
+            row.setSummary(app.getScope());
+            String encodedIcon = IntentUtils.safeGetStringExtra(launch, WebappConstants.EXTRA_ICON);
+            if (encodedIcon != null) {
+                Bitmap icon = BitmapHelper.decodeBitmapFromString(encodedIcon);
+                if (icon != null) {
+                    row.setIcon(new BitmapDrawable(context.getResources(), icon));
+                }
+            }
+            row.setOnPreferenceClickListener(
+                    preference -> {
+                        showActions(title, app, launch);
+                        return true;
+                    });
+            screen.addPreference(row);
+        }
+        if (!any) {
+            Preference empty = new Preference(context);
+            empty.setSummary(R.string.aerium_web_apps_empty);
+            empty.setSelectable(false);
+            screen.addPreference(empty);
+        }
+    }
+
+    private static String nameOf(Intent launch, WebappDataStorage app) {
+        String name = IntentUtils.safeGetStringExtra(launch, WebappConstants.EXTRA_SHORT_NAME);
+        if (name == null || name.isEmpty()) {
+            name = IntentUtils.safeGetStringExtra(launch, WebappConstants.EXTRA_NAME);
+        }
+        return name == null || name.isEmpty() ? app.getUrl() : name;
+    }
+
+    private void showActions(String title, WebappDataStorage app, Intent launch) {
+        Context context = requireContext();
+        CharSequence[] actions = {
+            getString(R.string.aerium_web_apps_open),
+            getString(R.string.aerium_web_apps_site_settings),
+            getString(R.string.aerium_web_apps_remove),
+        };
+        new AlertDialog.Builder(context, R.style.ThemeOverlay_BrowserUI_AlertDialog)
+                .setTitle(title)
+                .setItems(
+                        actions,
+                        (dialog, which) -> {
+                            if (which == 0) {
+                                launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                IntentUtils.addTrustedIntentExtras(launch);
+                                IntentUtils.safeStartActivity(context, launch);
+                            } else if (which == 1) {
+                                SettingsNavigationFactory.createSettingsNavigation()
+                                        .startSettings(
+                                                context,
+                                                SingleWebsiteSettings.class,
+                                                SingleWebsiteSettings.createFragmentArgsForSite(
+                                                        app.getUrl()));
+                            } else {
+                                remove(context, app);
+                            }
+                        })
+                .show();
+    }
+
+    private void remove(Context context, WebappDataStorage app) {
+        String id = app.getId();
+        WebappRegistry.getInstance().removeAeriumWebapp(id);
+        ShortcutManager shortcuts = context.getSystemService(ShortcutManager.class);
+        if (shortcuts != null) {
+            try {
+                shortcuts.disableShortcuts(Collections.singletonList(id));
+            } catch (IllegalArgumentException | IllegalStateException e) {
+                Log.w(TAG, "Could not disable the home screen shortcut", e);
+            }
+        }
+        populate();
+    }
+
+    @Override
+    public MonotonicObservableSupplier<String> getPageTitle() {
+        return mPageTitle;
+    }
+
+    @Override
+    public @SettingsFragment.AnimationType int getAnimationType() {
+        return SettingsFragment.AnimationType.PROPERTY;
+    }
+
+    public static final ChromeBaseSearchIndexProvider SEARCH_INDEX_DATA_PROVIDER =
+            new ChromeBaseSearchIndexProvider(
+                    AeriumWebAppsFragment.class.getName(), R.xml.aerium_web_apps_preferences);
+}
+AERIUM_WEB_APPS_FRAGMENT
+
+sed_i 's|^  "java/src/org/chromium/chrome/browser/webapps/WebappRegistry.java",$|  "java/src/org/chromium/chrome/browser/webapps/AeriumWebApps.java",\n  "java/src/org/chromium/chrome/browser/webapps/AeriumWebAppsFragment.java",\n&|' \
+    chrome/android/chrome_java_sources.gni
+sed_i 's|^  "java/res/xml/appearance_preferences.xml",$|  "java/res/xml/aerium_web_apps_preferences.xml",\n&|' \
+    chrome/android/chrome_java_resources.gni
+
+sed_i 's|^import org.chromium.chrome.browser.browsing_data.ClearBrowsingDataFragment;$|import org.chromium.chrome.browser.webapps.AeriumWebAppsFragment;\n&|' \
+    $SIPR
+sed_i 's|^                    AboutChromeSettings.SEARCH_INDEX_DATA_PROVIDER,$|&\n                    AeriumWebAppsFragment.SEARCH_INDEX_DATA_PROVIDER,|' \
+    $SIPR
+
+perl -0777 -pi -e '
+    s{\n</PreferenceScreen>}{\n    <Preference\n        android:key="aerium_web_apps"\n        android:order="45"\n        android:fragment="org.chromium.chrome.browser.webapps.AeriumWebAppsFragment"\n        android:title="\@string/aerium_web_apps_title"\n        android:summary="\@string/aerium_web_apps_summary" />\n</PreferenceScreen>}
+        or die "[aerium] FATAL: no closing PreferenceScreen tag in main_preferences.xml\n";
+' $AERIUM_MAIN_PREFS
+
+sed_i 's|      <message name="IDS_AERIUM_BACKUP_TITLE" desc=|      <message name="IDS_AERIUM_WEB_APPS_TITLE" desc="Title of the Settings screen that lists websites installed as apps.">\n        Web apps\n      </message>\n      <message name="IDS_AERIUM_WEB_APPS_SUMMARY" desc="Summary under the Web apps row in Settings.">\n        Sites you installed as apps\n      </message>\n      <message name="IDS_AERIUM_WEB_APPS_EMPTY" desc="Shown on the Web apps screen when no site is installed as an app.">\n        Sites you install from the menu appear here.\n      </message>\n      <message name="IDS_AERIUM_WEB_APPS_OPEN" desc="Action that opens an installed web app.">\n        Open\n      </message>\n      <message name="IDS_AERIUM_WEB_APPS_SITE_SETTINGS" desc="Action that opens the site settings of an installed web app, such as desktop view, notifications and permissions.">\n        Site settings\n      </message>\n      <message name="IDS_AERIUM_WEB_APPS_REMOVE" desc="Action that removes an installed web app.">\n        Remove\n      </message>\n&|' \
+    chrome/browser/ui/android/strings/android_chrome_strings.grd
+
+echo "[aerium] web apps applied"
