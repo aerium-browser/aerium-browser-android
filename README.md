@@ -32,13 +32,13 @@
 
 ## Extensions, finally.
 
-uBlock Origin, floccus and other open-source extensions. Manifest V2 included.
+uBlock Origin comes preinstalled. floccus and other open-source extensions work too, Manifest V2 included.
 
 Open the [extension store](https://chromewebstore.google.com/) and install as usual. The Opera and Edge add-on stores work too, and so does a `.crx` from a release page. You still get the permissions prompt before anything installs.
 
 Worth installing, all free and open source:
 
-- **[uBlock Origin](https://github.com/gorhill/uBlock/releases/latest)**, only available from its releases page. Install this one first.
+- **[uBlock Origin](https://github.com/gorhill/uBlock)** comes preinstalled. Remove it like any other extension if you would rather not have it.
 - **[uBlock Origin Lite](https://chromewebstore.google.com/detail/ublock-origin-lite/ddkjiahejlhfcafbddmgiahcphecmpfh)**, same author and filter lists, lighter footprint.
 - **[floccus](https://chromewebstore.google.com/detail/floccus-bookmarks-sync/fnaicdffflnofjppbagibeoednhnbjhg)**, bookmark sync on storage you control.
 - **[TablissNG](https://chromewebstore.google.com/detail/tablissng/dlaogejjiafeobgofajdlkkhjlignalk)**, a new tab page that takes over the default one.
@@ -156,5 +156,6 @@ Aerium is a thin layer over other people's open-source work. Full attribution an
 - **[ungoogled-chromium](https://github.com/ungoogled-software/ungoogled-chromium)** is where several flag names and behaviours come from.
 - **[Cromite](https://github.com/uazo/cromite)**, by uazo, contributed two DNS-over-HTTPS fixes.
 - **[Bromite](https://github.com/bromite/bromite)** wrote the canvas fingerprinting shuffler.
+- **[uBlock Origin](https://github.com/gorhill/uBlock)**, by Raymond Hill, comes preinstalled as a separate **GPL-3.0** program.
 
 The Aerium name, logo and application id are not covered by the GPLv2 grant; see the trademarks section of [NOTICE](NOTICE). The code is yours to take. The identity is not, so fork it under your own name.

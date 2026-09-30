@@ -1,6 +1,6 @@
 Aerium is the browser that stays out of the way: desktop extensions on Android, with no big tech inside.
 
-Extensions: uBlock Origin, floccus and other open-source extensions, Manifest V2 included. Install from the extension store as usual, or open a .crx or .zip that is already on your phone from chrome://aerium-extensions. The permissions prompt still shows before anything installs.
+Extensions: uBlock Origin comes preinstalled, and floccus and other open-source extensions work too, Manifest V2 included. Install from the extension store as usual, or open a .crx or .zip that is already on your phone from chrome://aerium-extensions. The permissions prompt still shows before anything installs.
 
 Private by default: no telemetry and no bundled big tech services. Aerium Guard sets privacy, security and speed options in one place. Safe Browsing and DRM stay off until you turn them on. Fingerprinting resistance for canvas, text measurement and WebGL, Global Privacy Control and HTTPS upgrades are on out of the box. Site rules let you keep a site, keep it until you close Aerium, or clear it when its last tab closes. You can also choose whether links open in installed apps.
 

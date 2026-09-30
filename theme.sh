@@ -9229,3 +9229,142 @@ sed_i 's|      <message name="IDS_AERIUM_BACKUP_TITLE" desc=|      <message name
     chrome/browser/ui/android/strings/android_chrome_strings.grd
 
 echo "[aerium] app links switch applied"
+
+AERIUM_UBO_CRX=chrome/browser/resources/aerium/ublock_origin.crx
+mkdir -p "$(dirname $AERIUM_UBO_CRX)"
+AERIUM_UBO_TAG=$(curl -sSfI --retry 4 --retry-delay 5 https://github.com/gorhill/uBlock/releases/latest \
+    | tr -d '\r' | sed -n 's|^[Ll]ocation: .*/releases/tag/||p' | tail -n1)
+if [ -z "$AERIUM_UBO_TAG" ] \
+   || ! curl -sSfL --retry 4 --retry-delay 5 -o $AERIUM_UBO_CRX \
+        "https://github.com/gorhill/uBlock/releases/download/$AERIUM_UBO_TAG/uBlock0_$AERIUM_UBO_TAG.chromium.crx" \
+   || [ "$(head -c4 $AERIUM_UBO_CRX)" != "Cr24" ]; then
+    echo "[aerium] FATAL: could not fetch the uBlock Origin .crx to preinstall (tag '$AERIUM_UBO_TAG')" >&2
+    return 1
+fi
+
+sed_i 's|^      <include name="IDR_NETWORK_SPEECH_SYNTHESIS_JS" file="network_speech_synthesis/tts_extension.js" type="BINDATA" />$|      <include name="IDR_AERIUM_UBLOCK_ORIGIN_CRX" file="aerium/ublock_origin.crx" type="BINDATA" />\n&|' \
+    chrome/browser/resources/component_extension_resources.grd
+
+cat > chrome/browser/extensions/aerium_preinstall.h <<'AERIUM_PREINSTALL_H'
+// Copyright 2026 The Aerium Authors
+
+#ifndef CHROME_BROWSER_EXTENSIONS_AERIUM_PREINSTALL_H_
+#define CHROME_BROWSER_EXTENSIONS_AERIUM_PREINSTALL_H_
+
+#include <optional>
+#include <string>
+#include <utility>
+
+#include "base/files/file_path.h"
+#include "base/files/file_util.h"
+#include "base/functional/bind.h"
+#include "base/location.h"
+#include "base/memory/scoped_refptr.h"
+#include "base/memory/weak_ptr.h"
+#include "base/task/thread_pool.h"
+#include "chrome/grit/component_extension_resources.h"
+#include "content/public/browser/browser_context.h"
+#include "extensions/browser/crx_installer.h"
+#include "extensions/browser/extension_registry.h"
+#include "extensions/browser/install/crx_install_error.h"
+#include "extensions/common/extension.h"
+#include "extensions/common/manifest.h"
+#include "ui/base/resource/resource_bundle.h"
+
+namespace extensions {
+
+inline constexpr char kAeriumPreinstallMarker[] = "Aerium Preinstalled Extensions";
+inline constexpr char kAeriumUblockOriginCrx[] = "aerium-ublock-origin.crx";
+
+inline void AeriumMarkPreinstalled(const base::FilePath& profile_dir) {
+  base::ThreadPool::PostTask(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
+      base::BindOnce(
+          [](const base::FilePath& marker) {
+            if (!base::WriteFile(marker, "")) {
+              return;
+            }
+          },
+          profile_dir.AppendASCII(kAeriumPreinstallMarker)));
+}
+
+inline void AeriumInstallUblockOrigin(
+    base::WeakPtr<content::BrowserContext> context,
+    const base::FilePath& crx,
+    bool written) {
+  if (!context || !written) {
+    return;
+  }
+  scoped_refptr<CrxInstaller> installer =
+      CrxInstaller::CreateSilent(context.get());
+  installer->set_off_store_install_allow_reason(
+      CrxInstaller::OffStoreInstallAllowedFromSettingsPage);
+  installer->set_allow_silent_install(true);
+  installer->set_delete_source(true);
+  installer->AddInstallerCallback(base::BindOnce(
+      [](const base::FilePath& profile_dir,
+         const std::optional<CrxInstallError>& error) {
+        if (!error) {
+          AeriumMarkPreinstalled(profile_dir);
+        }
+      },
+      context->GetPath()));
+  installer->InstallCrx(crx);
+}
+
+inline void AeriumPreinstallIfUnmarked(
+    base::WeakPtr<content::BrowserContext> context,
+    const base::FilePath& profile_dir,
+    bool marked) {
+  if (!context || marked) {
+    return;
+  }
+  for (const auto& extension :
+       ExtensionRegistry::Get(context.get())->GenerateInstalledExtensionsSet()) {
+    if (extension->location() == mojom::ManifestLocation::kInternal ||
+        Manifest::IsUnpackedLocation(extension->location())) {
+      AeriumMarkPreinstalled(profile_dir);
+      return;
+    }
+  }
+  std::string crx_data =
+      ui::ResourceBundle::GetSharedInstance().LoadDataResourceString(
+          IDR_AERIUM_UBLOCK_ORIGIN_CRX);
+  if (crx_data.empty()) {
+    return;
+  }
+  const base::FilePath crx = profile_dir.AppendASCII(kAeriumUblockOriginCrx);
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
+      base::BindOnce(
+          [](const base::FilePath& path, const std::string& data) {
+            return base::WriteFile(path, data);
+          },
+          crx, std::move(crx_data)),
+      base::BindOnce(&AeriumInstallUblockOrigin, context, crx));
+}
+
+inline void AeriumPreinstallUblockOrigin(
+    base::WeakPtr<content::BrowserContext> context) {
+  if (!context || context->IsOffTheRecord()) {
+    return;
+  }
+  const base::FilePath profile_dir = context->GetPath();
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
+      base::BindOnce(&base::PathExists,
+                     profile_dir.AppendASCII(kAeriumPreinstallMarker)),
+      base::BindOnce(&AeriumPreinstallIfUnmarked, context, profile_dir));
+}
+
+}  // namespace extensions
+
+#endif  // CHROME_BROWSER_EXTENSIONS_AERIUM_PREINSTALL_H_
+AERIUM_PREINSTALL_H
+
+sed_i 's|^#include "chrome/browser/extensions/component_loader.h"$|#include "chrome/browser/extensions/aerium_preinstall.h"\n&|' \
+    chrome/browser/extensions/chrome_extension_system.cc
+sed_i 's|^  extension_service_->Init();$|&\n\n  ready_.Post(FROM_HERE,\n              base::BindOnce(\&AeriumPreinstallUblockOrigin,\n                             profile_->GetWeakPtr()));|' \
+    chrome/browser/extensions/chrome_extension_system.cc
+
+echo "[aerium] uBlock Origin $AERIUM_UBO_TAG bundled for first-run preinstall"

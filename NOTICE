@@ -43,6 +43,16 @@ https://github.com/bromite/bromite
 
 The canvas fingerprinting shuffler is Bromite's.
 
+uBlock Origin
+Copyright (C) Raymond Hill and contributors
+Licensed under the GNU General Public License version 3.
+https://github.com/gorhill/uBlock
+
+Aerium ships the unmodified, signed uBlock Origin package from its latest
+release and installs it once on first launch. It is a separate program, not
+part of Aerium, and can be removed like any other extension. Its source is at
+the address above.
+
 Titanium Browser, formerly Helium Browser
 Copyright (c) jqssun
 Licensed under the GNU General Public License version 2.
