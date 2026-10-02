@@ -137,6 +137,8 @@
   "IDS_AERIUM_SITE_RULES_MODE_SESSION_SUMMARY": "Limpo quando o Aerium fecha",
   "IDS_AERIUM_SITE_RULES_SUMMARY": "Quando os dados de cada site são excluídos",
   "IDS_AERIUM_SITE_RULES_TITLE": "Regras de sites",
+  "IDS_AERIUM_TRANSPARENT_NTP_TOOLBAR_SUMMARY": "Mostrar o plano de fundo da nova guia atrás da barra de endereço",
+  "IDS_AERIUM_TRANSPARENT_NTP_TOOLBAR_TITLE": "Barra de ferramentas transparente na nova guia",
   "IDS_AERIUM_UPDATE_AVAILABLE_TITLE": "Atualização disponível",
   "IDS_AERIUM_UPDATE_CHECK_SUMMARY": "Pergunta ao GitHub uma vez por dia se saiu uma versão mais nova do Aerium. Nada é baixado nem instalado. Se desativar, você não será avisado quando sair uma correção de segurança.",
   "IDS_AERIUM_UPDATE_CHECK_TITLE": "Verificar atualizações",

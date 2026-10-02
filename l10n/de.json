@@ -137,6 +137,8 @@
   "IDS_AERIUM_SITE_RULES_MODE_SESSION_SUMMARY": "Wird beim Schließen von Aerium gelöscht",
   "IDS_AERIUM_SITE_RULES_SUMMARY": "Wann die Daten jeder Website gelöscht werden",
   "IDS_AERIUM_SITE_RULES_TITLE": "Website-Regeln",
+  "IDS_AERIUM_TRANSPARENT_NTP_TOOLBAR_SUMMARY": "Hintergrund des neuen Tabs hinter der Adressleiste anzeigen",
+  "IDS_AERIUM_TRANSPARENT_NTP_TOOLBAR_TITLE": "Transparente Symbolleiste im neuen Tab",
   "IDS_AERIUM_UPDATE_AVAILABLE_TITLE": "Update verfügbar",
   "IDS_AERIUM_UPDATE_CHECK_SUMMARY": "Fragt einmal am Tag bei GitHub nach, ob eine neuere Aerium-Version erschienen ist. Es wird nichts heruntergeladen oder installiert. Wenn du dies ausschaltest, erfährst du nicht, wann ein Sicherheitsupdate erscheint.",
   "IDS_AERIUM_UPDATE_CHECK_TITLE": "Nach Updates suchen",

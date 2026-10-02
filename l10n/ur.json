@@ -137,6 +137,8 @@
   "IDS_AERIUM_SITE_RULES_MODE_SESSION_SUMMARY": "Aerium بند ہونے پر صاف",
   "IDS_AERIUM_SITE_RULES_SUMMARY": "ہر سائٹ کا ڈیٹا کب حذف ہوتا ہے",
   "IDS_AERIUM_SITE_RULES_TITLE": "سائٹ کے اصول",
+  "IDS_AERIUM_TRANSPARENT_NTP_TOOLBAR_SUMMARY": "ایڈریس بار کے پیچھے نئے ٹیب کا پس منظر دکھائیں",
+  "IDS_AERIUM_TRANSPARENT_NTP_TOOLBAR_TITLE": "نئے ٹیب پر شفاف ٹول بار",
   "IDS_AERIUM_UPDATE_AVAILABLE_TITLE": "اپ ڈیٹ دستیاب ہے",
   "IDS_AERIUM_UPDATE_CHECK_SUMMARY": "دن میں ایک بار GitHub سے پوچھتا ہے کہ آیا Aerium کا نیا ورژن جاری ہوا ہے۔ کچھ بھی ڈاؤن لوڈ یا انسٹال نہیں ہوتا۔ اسے بند کرنے کا مطلب ہے کہ سیکیورٹی فکس آنے پر آپ کو اطلاع نہیں ملے گی۔",
   "IDS_AERIUM_UPDATE_CHECK_TITLE": "اپ ڈیٹس چیک کریں",

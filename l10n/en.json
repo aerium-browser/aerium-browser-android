@@ -137,6 +137,8 @@
   "IDS_AERIUM_SITE_RULES_MODE_SESSION_SUMMARY": "Cleared when Aerium closes",
   "IDS_AERIUM_SITE_RULES_SUMMARY": "When each site's data is deleted",
   "IDS_AERIUM_SITE_RULES_TITLE": "Site rules",
+  "IDS_AERIUM_TRANSPARENT_NTP_TOOLBAR_SUMMARY": "Show your new tab background behind the address bar",
+  "IDS_AERIUM_TRANSPARENT_NTP_TOOLBAR_TITLE": "Transparent toolbar on new tab",
   "IDS_AERIUM_UPDATE_AVAILABLE_TITLE": "Update available",
   "IDS_AERIUM_UPDATE_CHECK_SUMMARY": "Asks GitHub once a day whether a newer Aerium has been released. Nothing is downloaded or installed. Turning this off means you will not be told when a security fix ships.",
   "IDS_AERIUM_UPDATE_CHECK_TITLE": "Check for updates",
