@@ -35,6 +35,7 @@ jobs:
           CHECKPOINT_PATTERN: 'build-artifact-android(-arm64)?(-b)?'
           ERROR_MARKER_PATTERN: 'build-error-android(-arm64)?'
           PROGRESS_JOB_PATTERN: ''
+          COMPLETION_JOB: 'check-completion'
           ATTEMPT_CAP: '5'
         run: |
           set -euo pipefail
@@ -63,6 +64,13 @@ jobs:
                   '[.jobs[] | select(.conclusion == "success" or .conclusion == "cancelled")
                             | select(.name | contains($part))] | length')
             [ "$finished" -gt 0 ]
+          }
+
+          finished_building() {
+            [ -n "$COMPLETION_JOB" ] || return 1
+            gh api "repos/$REPO/actions/runs/$1/jobs?per_page=100" \
+              | jq -e --arg job "$COMPLETION_JOB" \
+                  'any(.jobs[]; .name == $job and .conclusion == "success")' >/dev/null
           }
 
           stall_already_reported() {
@@ -124,6 +132,14 @@ jobs:
             echo "$HEAD_SHA has already built successfully - nothing to resume."
             exit 0
           fi
+
+          for candidate in $(jq -r '.workflow_runs[] | select(.conclusion == "failure" or .conclusion == "cancelled")
+                                    | .id' <<<"$runs_json"); do
+            if finished_building "$candidate"; then
+              echo "Run $candidate finished building $HEAD_SHA although a stage failed along the way - nothing to resume."
+              exit 0
+            fi
+          done
 
           newest_failed=$(jq -r '[.workflow_runs[] | select(.conclusion == "failure")]
                                  | sort_by(.run_number) | reverse | .[0].id // empty' <<<"$runs_json")

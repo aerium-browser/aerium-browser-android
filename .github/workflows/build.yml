@@ -9,6 +9,7 @@ on:
       - 'LICENSE'
       - '.github/ISSUE_TEMPLATE/**'
       - '.github/workflows/triage.yml'
+      - '.github/workflows/auto-resume.yml'
       - '.github/triage-rules.js'
       - 'NOTICE'
   workflow_dispatch:
