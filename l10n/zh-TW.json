@@ -137,6 +137,8 @@
   "IDS_AERIUM_SITE_RULES_MODE_SESSION_SUMMARY": "關閉 Aerium 時清除",
   "IDS_AERIUM_SITE_RULES_SUMMARY": "每個網站的資料何時刪除",
   "IDS_AERIUM_SITE_RULES_TITLE": "網站規則",
+  "IDS_AERIUM_TRANSPARENT_NTP_TOOLBAR_SUMMARY": "在網址列後方顯示新分頁背景",
+  "IDS_AERIUM_TRANSPARENT_NTP_TOOLBAR_TITLE": "新分頁上的透明工具列",
   "IDS_AERIUM_UPDATE_AVAILABLE_TITLE": "有可用的更新",
   "IDS_AERIUM_UPDATE_CHECK_SUMMARY": "每天向 GitHub 詢問一次是否發布了較新版本的 Aerium。不會下載或安裝任何內容。關閉後，安全性修正發布時您將不會收到通知。",
   "IDS_AERIUM_UPDATE_CHECK_TITLE": "檢查更新",

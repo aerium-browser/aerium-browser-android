@@ -137,6 +137,8 @@
   "IDS_AERIUM_SITE_RULES_MODE_SESSION_SUMMARY": "Gewist als Aerium sluit",
   "IDS_AERIUM_SITE_RULES_SUMMARY": "Wanneer de gegevens van elke site worden verwijderd",
   "IDS_AERIUM_SITE_RULES_TITLE": "Siteregels",
+  "IDS_AERIUM_TRANSPARENT_NTP_TOOLBAR_SUMMARY": "Toon de achtergrond van het nieuwe tabblad achter de adresbalk",
+  "IDS_AERIUM_TRANSPARENT_NTP_TOOLBAR_TITLE": "Transparante werkbalk op nieuw tabblad",
   "IDS_AERIUM_UPDATE_AVAILABLE_TITLE": "Update beschikbaar",
   "IDS_AERIUM_UPDATE_CHECK_SUMMARY": "Vraagt GitHub eenmaal per dag of er een nieuwere Aerium is uitgebracht. Er wordt niets gedownload of geïnstalleerd. Zet je dit uit, dan hoor je niet wanneer er een beveiligingsupdate verschijnt.",
   "IDS_AERIUM_UPDATE_CHECK_TITLE": "Controleren op updates",

@@ -6735,7 +6735,7 @@ sed_i 's|^            return isInSingleUrlBarMode() \&\& !mNewTabPageCoordinator
     chrome/android/java/src/org/chromium/chrome/browser/ntp/NewTabPage.java
 sed_i 's|^        return isLocationBarShownInNtp() ? getBackgroundColor() : defaultColor;$|        return getBackgroundColor();|' \
     chrome/android/java/src/org/chromium/chrome/browser/ntp/NewTabPage.java
-sed_i '/^            case VisualState.NEW_TAB_SEARCH_ENGINE_NO_LOGO:$/{n;s|^                return mToolbarBackgroundColorForNtp;$|                return urlHasFocus()\n                        ? mToolbarBackgroundColorForNtp\n                        : ColorUtils.setAlphaComponent(mToolbarBackgroundColorForNtp, 0);|}' \
+sed_i '/^            case VisualState.NEW_TAB_SEARCH_ENGINE_NO_LOGO:$/{n;s|^                return mToolbarBackgroundColorForNtp;$|                return urlHasFocus()\n                        ? mToolbarBackgroundColorForNtp\n                        : aeriumNtpToolbarColor();|}' \
     chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/top/ToolbarPhone.java
 sed_i 's|^                !mIsHomeButtonEnabled$|                true|' \
     chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/top/ToolbarPhone.java
@@ -9786,5 +9786,32 @@ sed_i 's|      <message name="IDS_AERIUM_BACKUP_TITLE" desc=|      <message name
     chrome/browser/ui/android/strings/android_chrome_strings.grd
 
 echo "[aerium] web apps applied"
+
+TBP=chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/top/ToolbarPhone.java
+sed_i 's|^    private @ColorInt int getToolbarColorForVisualState(final @VisualState int visualState) {$|    private @ColorInt int aeriumNtpToolbarColor() {\n        return org.chromium.chrome.browser.preferences.ChromeSharedPreferences.getInstance()\n                        .readBoolean(\n                                org.chromium.chrome.browser.preferences.ChromePreferenceKeys\n                                        .AERIUM_TRANSPARENT_NTP_TOOLBAR,\n                                true)\n                ? ColorUtils.setAlphaComponent(mToolbarBackgroundColorForNtp, 0)\n                : mToolbarBackgroundColorForNtp;\n    }\n\n&|' $TBP
+perl -0777 -pi -e '
+    s{(            int primaryColor =\n                    isInGeneralNtp\n                            \? )mToolbarBackgroundColorForNtp\n}
+     {$1(mIsInLoadingPhaseFromNtpToWebpage\n                                    ? mToolbarBackgroundColorForNtp\n                                    : aeriumNtpToolbarColor())\n}
+        or die "[aerium] FATAL: the focus-change toolbar colour in ToolbarPhone moved\n";
+    s{(        final \@ColorInt int finalColor =\n                isLocationBarShownInGeneralNtp\(\)\n                        \? )mToolbarBackgroundColorForNtp\n}
+     {$1aeriumNtpToolbarColor()\n}
+        or die "[aerium] FATAL: the primary-colour toolbar update in ToolbarPhone moved\n";
+' $TBP || return 1
+
+sed_i 's|    public static final String AERIUM_OPEN_APP_LINKS = "Chrome.Aerium.OpenAppLinks";|&\n\n    public static final String AERIUM_TRANSPARENT_NTP_TOOLBAR =\n            "Chrome.Aerium.TransparentNtpToolbar";|' \
+    $CPK
+sed_i 's|^                AERIUM_OPEN_APP_LINKS,$|&\n                AERIUM_TRANSPARENT_NTP_TOOLBAR,|' \
+    $CPK
+
+sed_i 's|^</PreferenceScreen>$|    <org.chromium.components.browser_ui.settings.ChromeSwitchPreference\n        android:key="aerium_transparent_ntp_toolbar"\n        android:order="3"\n        android:title="@string/aerium_transparent_ntp_toolbar_title"\n        android:summary="@string/aerium_transparent_ntp_toolbar_summary" />\n\n&|' \
+    chrome/android/java/res/xml/appearance_preferences.xml
+ASF=chrome/android/java/src/org/chromium/chrome/browser/appearance/settings/AppearanceSettingsFragment.java
+sed_i 's|^        initUiThemePref();$|&\n        initTransparentNtpToolbarPref();|' $ASF
+sed_i 's|^    private void initUiThemePref() {$|    private void initTransparentNtpToolbarPref() {\n        ChromeSwitchPreference transparentNtpToolbar =\n                (ChromeSwitchPreference) findPreference("aerium_transparent_ntp_toolbar");\n        if (transparentNtpToolbar == null) return;\n        transparentNtpToolbar.setChecked(\n                org.chromium.chrome.browser.preferences.ChromeSharedPreferences.getInstance()\n                        .readBoolean(\n                                org.chromium.chrome.browser.preferences.ChromePreferenceKeys\n                                        .AERIUM_TRANSPARENT_NTP_TOOLBAR,\n                                true));\n        transparentNtpToolbar.setOnPreferenceChangeListener(\n                (preference, newValue) -> {\n                    org.chromium.chrome.browser.preferences.ChromeSharedPreferences.getInstance()\n                            .writeBoolean(\n                                    org.chromium.chrome.browser.preferences.ChromePreferenceKeys\n                                            .AERIUM_TRANSPARENT_NTP_TOOLBAR,\n                                    (boolean) newValue);\n                    return true;\n                });\n    }\n\n&|' $ASF
+
+sed_i 's|      <message name="IDS_AERIUM_PURE_BLACK_TITLE" desc=|      <message name="IDS_AERIUM_TRANSPARENT_NTP_TOOLBAR_TITLE" desc="Title of the switch in Appearance settings that lets the new tab page background show through the toolbar.">\n        Transparent toolbar on new tab\n      </message>\n      <message name="IDS_AERIUM_TRANSPARENT_NTP_TOOLBAR_SUMMARY" desc="Summary under the Transparent toolbar on new tab switch.">\n        Show your new tab background behind the address bar\n      </message>\n&|' \
+    chrome/browser/ui/android/strings/android_chrome_strings.grd
+
+echo "[aerium] transparent new tab toolbar applied"
 
 python3 "$SCRIPT_DIR/l10n/inject.py" || return 1

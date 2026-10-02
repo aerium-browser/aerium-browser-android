@@ -137,6 +137,8 @@
   "IDS_AERIUM_SITE_RULES_MODE_SESSION_SUMMARY": "Aerium を閉じると消去",
   "IDS_AERIUM_SITE_RULES_SUMMARY": "各サイトのデータを削除するタイミング",
   "IDS_AERIUM_SITE_RULES_TITLE": "サイトのルール",
+  "IDS_AERIUM_TRANSPARENT_NTP_TOOLBAR_SUMMARY": "新しいタブの背景をアドレスバーの後ろに表示します",
+  "IDS_AERIUM_TRANSPARENT_NTP_TOOLBAR_TITLE": "新しいタブで透明なツールバー",
   "IDS_AERIUM_UPDATE_AVAILABLE_TITLE": "アップデートがあります",
   "IDS_AERIUM_UPDATE_CHECK_SUMMARY": "新しい Aerium がリリースされたかどうかを 1 日 1 回 GitHub に確認します。何もダウンロードやインストールはされません。オフにすると、セキュリティ修正のリリースが通知されなくなります。",
   "IDS_AERIUM_UPDATE_CHECK_TITLE": "アップデートを確認",

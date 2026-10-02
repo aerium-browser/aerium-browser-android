@@ -137,6 +137,8 @@
   "IDS_AERIUM_SITE_RULES_MODE_SESSION_SUMMARY": "Очищается при закрытии Aerium",
   "IDS_AERIUM_SITE_RULES_SUMMARY": "Когда удаляются данные каждого сайта",
   "IDS_AERIUM_SITE_RULES_TITLE": "Правила для сайтов",
+  "IDS_AERIUM_TRANSPARENT_NTP_TOOLBAR_SUMMARY": "Показывать фон новой вкладки за адресной строкой",
+  "IDS_AERIUM_TRANSPARENT_NTP_TOOLBAR_TITLE": "Прозрачная панель на новой вкладке",
   "IDS_AERIUM_UPDATE_AVAILABLE_TITLE": "Доступно обновление",
   "IDS_AERIUM_UPDATE_CHECK_SUMMARY": "Раз в день спрашивает GitHub, не вышла ли новая версия Aerium. Ничего не скачивается и не устанавливается. Если выключить, вы не узнаете о выходе исправления безопасности.",
   "IDS_AERIUM_UPDATE_CHECK_TITLE": "Проверять обновления",

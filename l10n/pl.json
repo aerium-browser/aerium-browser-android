@@ -137,6 +137,8 @@
   "IDS_AERIUM_SITE_RULES_MODE_SESSION_SUMMARY": "Czyszczona po zamknięciu Aerium",
   "IDS_AERIUM_SITE_RULES_SUMMARY": "Kiedy usuwane są dane każdej witryny",
   "IDS_AERIUM_SITE_RULES_TITLE": "Reguły witryn",
+  "IDS_AERIUM_TRANSPARENT_NTP_TOOLBAR_SUMMARY": "Pokazuj tło nowej karty za paskiem adresu",
+  "IDS_AERIUM_TRANSPARENT_NTP_TOOLBAR_TITLE": "Przezroczysty pasek narzędzi na nowej karcie",
   "IDS_AERIUM_UPDATE_AVAILABLE_TITLE": "Dostępna aktualizacja",
   "IDS_AERIUM_UPDATE_CHECK_SUMMARY": "Raz dziennie pyta GitHub, czy ukazała się nowsza wersja Aerium. Nic nie jest pobierane ani instalowane. Jeśli to wyłączysz, nie dowiesz się o nowej poprawce bezpieczeństwa.",
   "IDS_AERIUM_UPDATE_CHECK_TITLE": "Sprawdzaj aktualizacje",

@@ -137,6 +137,8 @@
   "IDS_AERIUM_SITE_RULES_MODE_SESSION_SUMMARY": "Aerium kapandığında temizlenir",
   "IDS_AERIUM_SITE_RULES_SUMMARY": "Her sitenin verilerinin ne zaman silineceği",
   "IDS_AERIUM_SITE_RULES_TITLE": "Site kuralları",
+  "IDS_AERIUM_TRANSPARENT_NTP_TOOLBAR_SUMMARY": "Yeni sekme arka planını adres çubuğunun arkasında göster",
+  "IDS_AERIUM_TRANSPARENT_NTP_TOOLBAR_TITLE": "Yeni sekmede saydam araç çubuğu",
   "IDS_AERIUM_UPDATE_AVAILABLE_TITLE": "Güncelleme mevcut",
   "IDS_AERIUM_UPDATE_CHECK_SUMMARY": "Günde bir kez GitHub'a daha yeni bir Aerium sürümü yayımlanıp yayımlanmadığını sorar. Hiçbir şey indirilmez veya yüklenmez. Bunu kapatırsanız bir güvenlik düzeltmesi yayımlandığında haberiniz olmaz.",
   "IDS_AERIUM_UPDATE_CHECK_TITLE": "Güncellemeleri denetle",
