@@ -9287,6 +9287,15 @@ if [ -z "$AERIUM_UBO_TAG" ] \
     echo "[aerium] FATAL: could not fetch the uBlock Origin .crx to preinstall (tag '$AERIUM_UBO_TAG')" >&2
     return 1
 fi
+python3 - "$AERIUM_UBO_CRX" <<'PYEOF' || echo "[aerium] WARNING: could not read the bundled uBlock Origin manifest"
+import json, sys, zipfile
+manifest = json.loads(zipfile.ZipFile(sys.argv[1]).read('manifest.json').decode('utf-8-sig'))
+update_url = manifest.get('update_url', '')
+if update_url.startswith('https://'):
+    print('[aerium] uBlock Origin %s updates itself from %s' % (manifest.get('version'), update_url))
+else:
+    print('[aerium] WARNING: the bundled uBlock Origin has no update_url and will never update itself')
+PYEOF
 
 sed_i 's|^      <include name="IDR_NETWORK_SPEECH_SYNTHESIS_JS" file="network_speech_synthesis/tts_extension.js" type="BINDATA" />$|      <include name="IDR_AERIUM_UBLOCK_ORIGIN_CRX" file="aerium/ublock_origin.crx" type="BINDATA" />\n&|' \
     chrome/browser/resources/component_extension_resources.grd

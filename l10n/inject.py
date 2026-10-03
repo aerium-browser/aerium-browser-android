@@ -21,7 +21,6 @@ GRDS = [
 ALSO = {
     'es': ['es-419'],
     'fr': ['fr-CA'],
-    'pt-BR': ['pt-PT'],
     'zh-TW': ['zh-HK'],
 }
 
