@@ -9814,4 +9814,9 @@ sed_i 's|      <message name="IDS_AERIUM_PURE_BLACK_TITLE" desc=|      <message 
 
 echo "[aerium] transparent new tab toolbar applied"
 
+sed_i 's|^<meta charset="utf-8">$|&\n<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">|' \
+    third_party/devtools-frontend/src/front_end/entrypoint_template.html
+
+echo "[aerium] devtools viewport applied"
+
 python3 "$SCRIPT_DIR/l10n/inject.py" || return 1
