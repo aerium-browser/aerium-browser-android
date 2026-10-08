@@ -297,7 +297,7 @@ SBBRIDGE=chrome/browser/safe_browsing/android/safe_browsing_bridge.cc
 perl -0777 -pi -e '
     my $n = s{(  reinterpret_cast<SafeBrowsingServiceInterface\*>\(\n      g_browser_process->safe_browsing_service\(\)\n?\)?\n?      ->[^;]+;\n)}
              {#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)\n$1#endif\n}s;
-    die "[aerium] FATAL: expected 1 safe_browsing_service call in $ARGV, rewrote $n - BrowserProcess only declares safe_browsing_service() under SAFE_BROWSING_AVAILABLE, which safe_browsing_mode=0 turns off\n" unless $n == 1;
+    die "[aerium] FATAL: expected 1 safe_browsing_service call in $ARGV, rewrote $n - BrowserProcess only declares safe_browsing_service() under SAFE_BROWSING_AVAILABLE, which safe_browsing_mode=0 turns off\n" unless $n == 1 || ($n == 0 && !/safe_browsing_service\(\)/);
 ' "$SBBRIDGE"
 echo "[aerium] external app redirect reporting guarded on SAFE_BROWSING_AVAILABLE"
 
