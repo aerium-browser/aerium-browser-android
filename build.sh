@@ -177,6 +177,7 @@ EOF
 
     source $SCRIPT_DIR/patch.sh
     source $SCRIPT_DIR/theme.sh
+    source $SCRIPT_DIR/devutils/chrome_phone_toolbar.sh
 
     # Some Vanadium patches modify .grd string files without updating the
     # checked-in .gritdeps snapshots (e.g. 0272 touches
@@ -217,6 +218,9 @@ EOF
 fi
 
 cd chromium/src
+
+# Keep the toolbar customization applied to resumed/checkpointed builds too.
+source "$SCRIPT_DIR/devutils/chrome_phone_toolbar.sh"
 
 # --- Resume hotfix (removable once a build that STARTED after 2026-07-20
 # goes green): theme.sh only runs during source setup, so a tree saved by an
