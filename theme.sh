@@ -387,7 +387,7 @@ inline void AeriumFirstRunDataSource::StartDataRequest(
   <div class="card">
     <div class="row">
       <div class="row-text">
-        <div class="label">uBlock Origin</div>
+        <div class="label">uBlock Origin Lite</div>
         <div class="sub">{{UBLOCK}}</div>
       </div>
     </div>
@@ -6280,7 +6280,7 @@ sed_i 's%^#endif  // CHROME_BROWSER_AERIUM_FLAG_ENTRIES_H_$%    {"aerium-reduce-
     chrome/browser/aerium_flag_entries.h
 sed_i 's%^#endif  // CHROME_BROWSER_AERIUM_FLAG_ENTRIES_H_$%    {"aerium-background-tab-freezing",\n     "Freeze background tabs",\n     "Pauses a tab a few minutes after you leave it, so it stops using battery "\n     "and data in the background. Tabs playing sound and extensions are never "\n     "paused. Turn this off if a web app must keep running in a background "\n     "tab. Aerium flag.",\n     kOsAll,\n     FEATURE_VALUE_TYPE(blink::features::kStopInBackground)},\n&%' \
     chrome/browser/aerium_flag_entries.h
-sed_i 's%^#endif  // CHROME_BROWSER_AERIUM_FLAG_ENTRIES_H_$%    {"aerium-incognito-window-shared-extensions",\n     "Share extensions with Incognito",\n     "Aerium gives Incognito its own copy of every extension, because without "\n     "it extensions stop working there. That copy never sees your Incognito "\n     "tabs, so popups like uBlock Origin say no access is needed even while "\n     "ads are blocked. Turn this on to use the normal extension in Incognito "\n     "instead, the way Chromium does. Experimental: if extensions stop "\n     "working in Incognito, turn it back off. Aerium flag.",\n     kOsAll,\n     FEATURE_VALUE_TYPE(\n         extensions_features::kAeriumIncognitoWindowSharedExtensions)},\n&%' \
+sed_i 's%^#endif  // CHROME_BROWSER_AERIUM_FLAG_ENTRIES_H_$%    {"aerium-incognito-window-shared-extensions",\n     "Share extensions with Incognito",\n     "Aerium gives Incognito its own copy of every extension, because without "\n     "it extensions stop working there. That copy never sees your Incognito "\n     "tabs, so popups like uBlock Origin Lite say no access is needed even while "\n     "ads are blocked. Turn this on to use the normal extension in Incognito "\n     "instead, the way Chromium does. Experimental: if extensions stop "\n     "working in Incognito, turn it back off. Aerium flag.",\n     kOsAll,\n     FEATURE_VALUE_TYPE(\n         extensions_features::kAeriumIncognitoWindowSharedExtensions)},\n&%' \
     chrome/browser/aerium_flag_entries.h
 
 echo "[aerium] fullscreen video throttling flag added"
@@ -9276,28 +9276,26 @@ sed_i 's|      <message name="IDS_AERIUM_BACKUP_TITLE" desc=|      <message name
 
 echo "[aerium] app links switch applied"
 
-AERIUM_UBO_CRX=chrome/browser/resources/aerium/ublock_origin.crx
+AERIUM_UBO_CRX=chrome/browser/resources/aerium/ublock_origin_lite.crx
 mkdir -p "$(dirname $AERIUM_UBO_CRX)"
-AERIUM_UBO_TAG=$(curl -sSfI --retry 4 --retry-delay 5 https://github.com/gorhill/uBlock/releases/latest \
-    | tr -d '\r' | sed -n 's|^[Ll]ocation: .*/releases/tag/||p' | tail -n1)
-if [ -z "$AERIUM_UBO_TAG" ] \
-   || ! curl -sSfL --retry 4 --retry-delay 5 -o $AERIUM_UBO_CRX \
-        "https://github.com/gorhill/uBlock/releases/download/$AERIUM_UBO_TAG/uBlock0_$AERIUM_UBO_TAG.chromium.crx" \
-   || [ "$(head -c4 $AERIUM_UBO_CRX)" != "Cr24" ]; then
-    echo "[aerium] FATAL: could not fetch the uBlock Origin .crx to preinstall (tag '$AERIUM_UBO_TAG')" >&2
+AERIUM_UBO_ID=ddkjiahejlhfcafbddmgiahcphecmpfh
+AERIUM_CWS_URL="https://clients2.google.com/service/update2/crx?response=redirect&prodversion=${VERSION}&acceptformat=crx2,crx3&x=id%3D${AERIUM_UBO_ID}%26uc"
+if ! curl -sSfL --retry 4 --retry-delay 5 -o "$AERIUM_UBO_CRX" "$AERIUM_CWS_URL" \
+   || [ "$(head -c4 "$AERIUM_UBO_CRX")" != "Cr24" ]; then
+    echo "[aerium] FATAL: could not fetch the uBlock Origin Lite .crx to preinstall" >&2
     return 1
 fi
-python3 - "$AERIUM_UBO_CRX" <<'PYEOF' || echo "[aerium] WARNING: could not read the bundled uBlock Origin manifest"
+python3 - "$AERIUM_UBO_CRX" <<'PYEOF' || echo "[aerium] WARNING: could not read the bundled uBlock Origin Lite manifest"
 import json, sys, zipfile
 manifest = json.loads(zipfile.ZipFile(sys.argv[1]).read('manifest.json').decode('utf-8-sig'))
 update_url = manifest.get('update_url', '')
 if update_url.startswith('https://'):
-    print('[aerium] uBlock Origin %s updates itself from %s' % (manifest.get('version'), update_url))
+    print('[aerium] uBlock Origin Lite %s updates itself from %s' % (manifest.get('version'), update_url))
 else:
-    print('[aerium] WARNING: the bundled uBlock Origin has no update_url and will never update itself')
+    print('[aerium] WARNING: the bundled uBlock Origin Lite has no update_url and will never update itself')
 PYEOF
 
-sed_i 's|^      <include name="IDR_NETWORK_SPEECH_SYNTHESIS_JS" file="network_speech_synthesis/tts_extension.js" type="BINDATA" />$|      <include name="IDR_AERIUM_UBLOCK_ORIGIN_CRX" file="aerium/ublock_origin.crx" type="BINDATA" />\n&|' \
+sed_i 's|^      <include name="IDR_NETWORK_SPEECH_SYNTHESIS_JS" file="network_speech_synthesis/tts_extension.js" type="BINDATA" />$|      <include name="IDR_AERIUM_UBLOCK_ORIGIN_LITE_CRX" file="aerium/ublock_origin_lite.crx" type="BINDATA" />\n&|' \
     chrome/browser/resources/component_extension_resources.grd
 
 cat > chrome/browser/extensions/aerium_preinstall.h <<'AERIUM_PREINSTALL_H'
@@ -9329,7 +9327,7 @@ cat > chrome/browser/extensions/aerium_preinstall.h <<'AERIUM_PREINSTALL_H'
 namespace extensions {
 
 inline constexpr char kAeriumPreinstallMarker[] = "Aerium Preinstalled Extensions";
-inline constexpr char kAeriumUblockOriginCrx[] = "aerium-ublock-origin.crx";
+inline constexpr char kAeriumUblockOriginLiteCrx[] = "aerium-ublock-origin-lite.crx";
 
 inline void AeriumMarkPreinstalled(const base::FilePath& profile_dir) {
   base::ThreadPool::PostTask(
@@ -9343,7 +9341,7 @@ inline void AeriumMarkPreinstalled(const base::FilePath& profile_dir) {
           profile_dir.AppendASCII(kAeriumPreinstallMarker)));
 }
 
-inline void AeriumInstallUblockOrigin(
+inline void AeriumInstallUblockOriginLite(
     base::WeakPtr<content::BrowserContext> context,
     const base::FilePath& crx,
     bool written) {
@@ -9384,11 +9382,11 @@ inline void AeriumPreinstallIfUnmarked(
   }
   std::string crx_data =
       ui::ResourceBundle::GetSharedInstance().LoadDataResourceString(
-          IDR_AERIUM_UBLOCK_ORIGIN_CRX);
+          IDR_AERIUM_UBLOCK_ORIGIN_LITE_CRX);
   if (crx_data.empty()) {
     return;
   }
-  const base::FilePath crx = profile_dir.AppendASCII(kAeriumUblockOriginCrx);
+  const base::FilePath crx = profile_dir.AppendASCII(kAeriumUblockOriginLiteCrx);
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::BindOnce(
@@ -9396,10 +9394,10 @@ inline void AeriumPreinstallIfUnmarked(
             return base::WriteFile(path, data);
           },
           crx, std::move(crx_data)),
-      base::BindOnce(&AeriumInstallUblockOrigin, context, crx));
+      base::BindOnce(&AeriumInstallUblockOriginLite, context, crx));
 }
 
-inline void AeriumPreinstallUblockOrigin(
+inline void AeriumPreinstallUblockOriginLite(
     base::WeakPtr<content::BrowserContext> context) {
   if (!context || context->IsOffTheRecord()) {
     return;
@@ -9419,10 +9417,10 @@ AERIUM_PREINSTALL_H
 
 sed_i 's|^#include "chrome/browser/extensions/component_loader.h"$|#include "chrome/browser/extensions/aerium_preinstall.h"\n&|' \
     chrome/browser/extensions/chrome_extension_system.cc
-sed_i 's|^  extension_service_->Init();$|&\n\n  ready_.Post(FROM_HERE,\n              base::BindOnce(\&AeriumPreinstallUblockOrigin,\n                             profile_->GetWeakPtr()));|' \
+sed_i 's|^  extension_service_->Init();$|&\n\n  ready_.Post(FROM_HERE,\n              base::BindOnce(\&AeriumPreinstallUblockOriginLite,\n                             profile_->GetWeakPtr()));|' \
     chrome/browser/extensions/chrome_extension_system.cc
 
-echo "[aerium] uBlock Origin $AERIUM_UBO_TAG bundled for first-run preinstall"
+echo "[aerium] uBlock Origin Lite bundled for first-run preinstall"
 
 AERIUM_FIRST_RUN_MESSAGES=$(cat <<'AERIUM_FIRST_RUN_GRD'
       <message name="IDS_AERIUM_FIRST_RUN_TITLE" desc="Title of the first-run page and its heading.">
@@ -9434,7 +9432,7 @@ AERIUM_FIRST_RUN_MESSAGES=$(cat <<'AERIUM_FIRST_RUN_GRD'
       <message name="IDS_AERIUM_FIRST_RUN_EXTENSIONS" desc="Heading of the extensions section on the first-run page.">
         Extensions, finally.
       </message>
-      <message name="IDS_AERIUM_FIRST_RUN_UBLOCK" desc="Line under the uBlock Origin row, which comes preinstalled.">
+      <message name="IDS_AERIUM_FIRST_RUN_UBLOCK" desc="Line under the uBlock Origin Lite row, which comes preinstalled.">
         Already installed and blocking ads
       </message>
       <message name="IDS_AERIUM_FIRST_RUN_MORE_EXTENSIONS" desc="Row title for installing more extensions.">
