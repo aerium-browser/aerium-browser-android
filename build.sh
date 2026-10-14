@@ -168,6 +168,9 @@ EOF
     git am --whitespace=nowarn --keep-non-patch $SCRIPT_DIR/vanadium/patches/*.patch
 
     gclient sync -D --no-history --nohooks
+    for patch in $SCRIPT_DIR/vanadium/subprojects_patches/v8/*.patch; do
+        git -C v8 apply --whitespace=nowarn "$patch"
+    done
     gclient runhooks
     rm -rf third_party/angle/third_party/VK-GL-CTS/
 
