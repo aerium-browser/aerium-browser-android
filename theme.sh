@@ -2389,17 +2389,7 @@ sed -i '/^    case WebGLDebugRendererInfo::kUnmaskedVendorWebgl:$/{n;n;i\
 # keep the name. Subframes included: an iframe's name survives its own
 # navigations the same way. Off by default; Aerium Guard Privacy seeds the
 # flag, chrome://flags/#aerium-clear-window-name can too.
-sed_i 's%^  TRACE_EVENT0("navigation", "FrameLoader::CommitDocumentLoader");$%&\
-  // Aerium: clear window.name on cross-origin navigation - see theme.sh.\
-  if (base::FeatureList::IsEnabled(blink::features::kAeriumClearWindowName) \&\&\
-      frame_->GetDocument()) {\
-    scoped_refptr<SecurityOrigin> new_origin =\
-        SecurityOrigin::Create(document_loader->Url());\
-    if (!frame_->GetDocument()->GetSecurityOrigin()->IsSameOriginWith(\
-            new_origin.get())) {\
-      frame_->Tree().SetName(AtomicString(), FrameTree::kReplicate);\
-    }\
-  }' \
+sed_i 's%^  TRACE_EVENT0("navigation", "FrameLoader::CommitDocumentLoader");$%&\n  // Aerium: clear window.name on cross-origin navigation - see theme.sh.\n  if (base::FeatureList::IsEnabled(blink::features::kAeriumClearWindowName) \&\&\n      frame_->GetDocument()) {\n    scoped_refptr<SecurityOrigin> new_origin =\n        SecurityOrigin::Create(document_loader->Url());\n    if (!frame_->GetDocument()->GetSecurityOrigin()->IsSameOriginWith(\n            new_origin.get())) {\n      frame_->Tree().SetName(AtomicString(), FrameTree::kReplicate);\n    }\n  }%' \
     third_party/blink/renderer/core/loader/frame_loader.cc
 # frame_loader.cc already includes blink/public/common/features.h and
 # weborigin/security_origin.h; only base/feature_list.h is missing. Kept in
