@@ -126,8 +126,57 @@ sed_i 's:|| !DeviceFormFactor.isNonMultiDisplayContextOnTablet(mContext):|| fals
 sed_i 's|boolean shouldShowDeveloperMenu() {|boolean shouldShowDeveloperMenu() { if (true) return DevToolsWindowAndroid.isDevToolsAllowedFor(getProfile(), mItemDelegate.getWebContents());|' chrome/android/java/src/org/chromium/chrome/browser/contextmenu/ChromeContextMenuPopulator.java
 sed_i 's|TabUtils.isUsingDesktopUserAgent(mItemDelegate.getWebContents())|(true \|\| TabUtils.isUsingDesktopUserAgent(mItemDelegate.getWebContents()))|' chrome/android/java/src/org/chromium/chrome/browser/contextmenu/ChromeContextMenuPopulator.java
 
+# --- DevTools laid out for a phone, and view-source that wraps.
+# Ported from upstream (Titanium).
+sed_i 's|<meta charset="utf-8">|&\n<meta name="viewport" content="width=device-width">|' \
+    third_party/devtools-frontend/src/front_end/entrypoint_template.html
+# Appends at end of file; there is no anchor to miss.
+sed_i '$a@media (max-width: 600px) { .settings-window-title, .tabbed-pane-header-tab-title { display: none; } .tabbed-pane-shadow.vertical-tab-layout .tabbed-pane-header-tabs { width: auto; } }' \
+    third_party/devtools-frontend/src/front_end/panels/settings/settingsScreen.css
+sed_i 's|document_->GetSettings() ? |document_->GetSettings() \&\& !document_->IsViewSource() ? |' \
+    third_party/blink/renderer/core/css/resolver/viewport_style_resolver.cc
+sed_i 's|kViewSourceLineWrappingEnabled, false|kViewSourceLineWrappingEnabled, true|' \
+    chrome/browser/prefs/browser_prefs.cc
+
+# --- DevTools opens with the profile of the tab it inspects, so an
+# incognito tab's DOM is inspectable from an incognito DevTools window.
+# Ported from upstream (Titanium).
+sed_i 's|intent.putExtra(DevToolsActivity.WEB_CONTENTS_KEY, webContents);|&intent.putExtra("org.chromium.chrome.browser.devtools.DevTools.Incognito", webContents.isIncognito());|' \
+    chrome/android/java/src/org/chromium/chrome/browser/devtools/DevToolsActivity.java
+sed_i 's|TabModel tabModel = getTabModelSelector().getModel(false);|TabModel tabModel = getTabModelSelector().getModel(getIntentDataProvider().isOffTheRecord());|' \
+    chrome/android/java/src/org/chromium/chrome/browser/devtools/DevToolsActivity.java
+sed_i 's|import org.chromium.chrome.browser.flags.ActivityType;|&\nimport org.chromium.chrome.browser.flags.CustomTabProfileType;|' \
+    chrome/android/java/src/org/chromium/chrome/browser/devtools/DevToolsIntentDataProvider.java
+sed_i '/^public class DevToolsIntentDataProvider extends BrowserServicesIntentDataProvider {$/a\ @Override public @CustomTabProfileType int getCustomTabMode() { return mIntent.getBooleanExtra("org.chromium.chrome.browser.devtools.DevTools.Incognito", false) ? CustomTabProfileType.INCOGNITO : CustomTabProfileType.REGULAR; }' \
+    chrome/android/java/src/org/chromium/chrome/browser/devtools/DevToolsIntentDataProvider.java
+sed_i 's|case CustomTabProfileType.INCOGNITO:|& if (getIntentDataProvider().getActivityType() == ActivityType.DEV_TOOLS) return null;|' \
+    chrome/android/java/src/org/chromium/chrome/browser/customtabs/BaseCustomTabActivity.java
+
 # --- Omnibox site search.
 sed_i 's|BASE_FEATURE(kOmniboxSiteSearch, DISABLED);|BASE_FEATURE(kOmniboxSiteSearch, ENABLED);|' components/omnibox/common/omnibox_features.cc
+# The Java half of the same feature. FeatureState.ENABLED_IN_TEST only turns
+# it on for test builds, so without this the C++ flip above never reached a
+# release APK. Ported from upstream (Titanium).
+sed_i 's|newFlag(OmniboxFeatureList.OMNIBOX_SITE_SEARCH, FeatureState.ENABLED_IN_TEST);|newFlag(OmniboxFeatureList.OMNIBOX_SITE_SEARCH, FeatureState.ENABLED_IN_PROD);|' \
+    components/omnibox/common/android/java/src/org/chromium/components/omnibox/OmniboxFeatures.java
+
+# --- Keep upstream flags from expiring.
+#
+# An expired flag is ignored whatever chrome://flags says, so a flag this
+# build documents dies silently at its milestone boundary. Upstream
+# (Titanium) unsets the expiry for the flags it keeps; same list here.
+# Plain sed rather than sed_i on purpose: the loop is best effort per flag,
+# and one flag upstream renames should not stop the whole build.
+for flag in "align-wakeups" "android-bottom-bar" "cct-open-in-browser-button-if-allowed-by-embedder" "darken-websites-checkbox-in-themes-setting" "enable-accessibility-sequential-focus" "enforce-incognito-isolation" "inline-pdf-v2" "jump-start-omnibox" "lock-controls-on-tablets-v2" "offline-auto-fetch" "use-fullscreen-insets-api"; do
+    sed -i "/\"name\": \"$flag\"/,/}/ s/\"expiry_milestone\": [0-9]\+/\"expiry_milestone\": -1/" chrome/browser/flag-metadata.json
+done
+
+# --- Default the magic-stack educational tip cards off.
+#
+# HomeModulesManager treats its per-module switch as default-on; the tips
+# cards are the ones nobody asked for. Ported from upstream (Titanium).
+sed_i 's|readBoolean(getSettingsPreferenceKey(moduleType), true)|readBoolean(getSettingsPreferenceKey(moduleType), !HomeModulesUtils.belongsToEducationalTipModule(moduleType))|' \
+    chrome/browser/magic_stack/android/java/src/org/chromium/chrome/browser/magic_stack/HomeModulesConfigManager.java
 
 # --- Media playback options: use the desktop set rather than the Android one.
 sed_i 's|#if BUILDFLAG(IS_ANDROID)|#if 0|' content/public/renderer/render_frame_media_playback_options.cc
@@ -147,6 +196,13 @@ sed_i 's|uncompiled_sources_ = \[|&\n  "browser_action.json",\n  "page_action.js
 sed_i 's/api::webstore_private::MV2DeprecationStatus::kHardDisable)));/api::webstore_private::MV2DeprecationStatus::kNone)));/' extensions/browser/api/webstore_private/webstore_private_api.cc
 sed_i 's/bool g_allow_mv2_for_testing = false;/bool g_allow_mv2_for_testing = true;/' extensions/browser/manifest_v2_handler.cc
 
+# --- Extension platform gates recognise desktop_android.
+# Ported from upstream (Titanium).
+sed_i 's|"platforms": \["win", "mac"\]|"platforms": ["win", "mac", "desktop_android"]|' \
+    chrome/common/extensions/api/_manifest_features.json
+sed_i 's|^  "app": {$|&\n    "platforms": ["chromeos", "linux", "mac", "win"],|' \
+    chrome/common/extensions/api/_api_features.json
+
 # --- Off-store extension downloads from the Opera and Edge catalogues, and
 # from GitHub releases.
 #
@@ -159,7 +215,7 @@ sed_i 's/bool g_allow_mv2_for_testing = false;/bool g_allow_mv2_for_testing = tr
 # GitHub serves those assets as application/octet-stream rather than as an
 # extension MIME type, which is a second obstacle - see the CRX-by-filename
 # block in theme.sh. Both are needed; either alone leaves the file inert.
-sed_i '/^bool OffStoreInstallAllowedByPrefs(/a\  for (const char* d : {"addons.opera.com", "operacdn.com", "microsoftedge.microsoft.com", "edge.microsoft.com", "delivery.mp.microsoft.com", "github.com", "githubusercontent.com"}) if (item.GetURL().DomainIs(d) || item.GetReferrerUrl().DomainIs(d)) return true;' chrome/browser/download/download_crx_util.cc
+sed_i '/^bool OffStoreInstallAllowedByPrefs(/a\  if (const auto\& o = item.GetRequestInitiator(); o \&\& o->scheme() == "chrome-extension") return true;\n  for (const char* d : {"addons.opera.com", "operacdn.com", "microsoftedge.microsoft.com", "edge.microsoft.com", "delivery.mp.microsoft.com", "github.com", "githubusercontent.com"}) if (item.GetURL().DomainIs(d) || item.GetReferrerUrl().DomainIs(d)) return true;' chrome/browser/download/download_crx_util.cc
 # sed -i 's/bool g_allow_offstore_install_for_testing = false;/bool g_allow_offstore_install_for_testing = true;/' chrome/browser/download/download_crx_util.cc
 
 # --- Manifest V2 extensions keep working.
@@ -206,6 +262,19 @@ sed_i '/private void showPopupOnAnchor() {/,/private void closePopup() {/ s|if (
 sed_i 's|buttonView.setIsPressed(true);|if (buttonView != null) buttonView.setIsPressed(true);|' chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/extensions/ExtensionActionListMediator.java
 sed_i '/[[:space:]]mWindowAndroid,/!b;n;s|[[:space:]]buttonView,|buttonView != null ? buttonView : mRecyclerViewDelegate.getContainerView(),|' chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/extensions/ExtensionActionListMediator.java # set popup anchor
 
+# --- Extension popups size to their content on a phone.
+# The auto-resize floor above suits tablets; on a phone the popup instead
+# skips auto-resize and takes its full content size once loaded. Ported from
+# upstream (Titanium).
+sed_i 's|#include "base/android/jni_string.h"|&\n#include "ui/base/device_form_factor.h"|' \
+    chrome/browser/ui/android/extensions/extension_action_popup_contents.cc
+sed_i 's|render_frame_host->GetView()->EnableAutoResize(kMinSize, kMaxSize);|if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_PHONE) return;\n&|' \
+    chrome/browser/ui/android/extensions/extension_action_popup_contents.cc
+sed_i '/^void ExtensionActionPopupContents::OnLoaded() {$/,/^}$/ s|^}$|if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_PHONE) Java_ExtensionActionPopupContents_resizeDueToAutoResize(AttachCurrentThread(), java_object_, 100000, 100000);\n}|' \
+    chrome/browser/ui/android/extensions/extension_action_popup_contents.cc
+sed_i 's|mPopupWindowAndroid =$|{ View decor = activity.getWindow().getDecorView(); webContents.setSize(decor.getWidth(), decor.getHeight()); }\n&|' \
+    chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/extensions/ExtensionActionPopup.java
+
 # --- Omnibox results keep the mobile shape on this build.
 sed_i 's/is_desktop_android = !!BUILDFLAG(IS_DESKTOP_ANDROID);/is_desktop_android = false;/' components/omnibox/browser/zero_suggest_verbatim_match_provider.cc
 sed_i 's/is_android_mobile = is_android_any \&\& !is_android_desktop;/is_android_mobile = is_android_any \&\& is_android_desktop;/' components/omnibox/browser/autocomplete_result.cc
@@ -216,6 +285,15 @@ sed_i 's/is_android_mobile = is_android_any \&\& !is_android_desktop;/is_android
 # nothing left to do. Removed rather than re-anchored.
 
 # --- Hide the extensions menu button while it is unpinned.
+#
+# Vanadium's extensions toolbar keeps a menu button whose pinned state is a
+# preference, but the button stays visible either way. Hide it until pinned,
+# once at inflate and again after every layout pass. Ported from upstream
+# (Titanium), which is where this section's placeholder waited.
+sed_i '/Pref.PIN_EXTENSIONS_MENU_BUTTON, this::updateMenuButtonPinState);$/a\if (!mPrefService.getBoolean(Pref.PIN_EXTENSIONS_MENU_BUTTON)) { mContainer.findViewById(R.id.extensions_menu_button).setVisibility(View.GONE); }' \
+    chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/extensions/ExtensionsToolbarCoordinatorImpl.java
+sed_i '/"ExtensionsToolbarCoordinatorImpl.requestLayoutWithViewUtils()");$/a\if (!isMenuButtonPinned()) { mContainer.findViewById(R.id.extensions_menu_button).setVisibility(View.GONE); }' \
+    chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/extensions/ExtensionsToolbarCoordinatorImpl.java
 
 # --- Extensions in incognito, and incognito as its own window.
 
@@ -226,6 +304,16 @@ sed_i 's|public static boolean shouldOpenIncognitoAsWindow() {|public static boo
 
 # --- Keep extension hosts at a process importance Android will not evict.
 sed_i 's|host_contents_->SetColorProviderSource(NoOpColorProviderSource::Get());|&\nhost_contents_->SetPrimaryPageImportance(content::ChildProcessImportance::IMPORTANT, content::ChildProcessImportance::NORMAL);|' extensions/browser/extension_host.cc
+# The Java half of the same job: the browser side recomputes renderer
+# importance on its own, and an extension process started in the background
+# lands at the service level there - evicted under memory pressure no matter
+# what the C++ side asked for. Ported from upstream (Titanium).
+sed_i 's|private @ChildProcessImportance int mEffectiveImportance;$|&private final boolean mIsExtensionProcess;|' \
+    content/public/android/java/src/org/chromium/content/browser/ChildProcessLauncherHelperImpl.java
+sed_i 's|^ *if (!ApplicationStatus.isInitialized()) return;$|mIsExtensionProcess = Arrays.asList(commandLine).contains("--extension-process"); if (mIsExtensionProcess) mEffectiveImportance = ChildProcessImportance.IMPORTANT;\&|' \
+    content/public/android/java/src/org/chromium/content/browser/ChildProcessLauncherHelperImpl.java
+sed_i 's|@ChildProcessImportance int importance) {$|\&if (mIsExtensionProcess) importance = ChildProcessImportance.IMPORTANT;|' \
+    content/public/android/java/src/org/chromium/content/browser/ChildProcessLauncherHelperImpl.java
 
 # --- Touch filtering on the extension install dialog.
 sed_i 's|.with(ModalDialogProperties.FILTER_TOUCH_FOR_SECURITY, true)|.with(ModalDialogProperties.FILTER_TOUCH_FOR_SECURITY, false)|' chrome/browser/ui/android/extensions/java/src/org/chromium/chrome/browser/ui/extensions/ExtensionInstallDialogBridge.java

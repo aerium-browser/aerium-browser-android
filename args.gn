@@ -40,4 +40,8 @@ enable_av1_decoder = true
 enable_dav1d_decoder = true
 include_both_v8_snapshots = false
 include_both_v8_snapshots_android_secondary_abi = false
+# Carried from the Vanadium base (upstream Titanium keeps both as well):
+# wasm via the DrumBrake interpreter in jitless mode, with bounds checks.
+v8_enable_drumbrake = true
+v8_drumbrake_bounds_checks = true
 generate_linker_map = false
