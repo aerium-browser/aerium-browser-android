@@ -9872,4 +9872,14 @@ perl -0777 -pi -e '
 
 echo "[aerium] new tab background under bottom bar applied"
 
+AERIUM_TB=chrome/android/java/src/org/chromium/chrome/browser
+AERIUM_TM=chrome/android/features/tab_ui/java/src/org/chromium/chrome/browser/tasks/tab_management
+
+sed_i 's|^    public boolean shouldShowRecentTabsItem() {$|&\n        if (true) return false;|' \
+    $AERIUM_TB/tabbed_mode/HistoryItemBuilder.java
+sed_i 's|^    public static boolean shouldShowRecentTabsIph() {$|&\n        if (true) return false;|' \
+    $AERIUM_TB/multiwindow/MultiWindowUtils.java
+
+echo "[aerium] recent tabs removed"
+
 python3 "$SCRIPT_DIR/l10n/inject.py" || return 1
