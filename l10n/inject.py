@@ -16,6 +16,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 GRDS = [
     'chrome/browser/ui/android/strings/android_chrome_strings.grd',
     'chrome/app/generated_resources.grd',
+    'components/browser_ui/strings/android/browser_ui_strings.grd',
 ]
 
 ALSO = {

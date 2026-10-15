@@ -9919,4 +9919,137 @@ perl -0777 -pi -e '
 
 echo "[aerium] tab groups removed"
 
+AERIUM_SWS=components/browser_ui/site_settings/android/java/src/org/chromium/components/browser_ui/site_settings/SingleWebsiteSettings.java
+
+sed_i 's|^        android:widgetLayout="@layout/clear_storage" />$|&\n    <org.chromium.components.browser_ui.settings.ChromeBasePreference\n        android:key="aerium_site_data_rule"\n        android:title="@string/aerium_site_data_rule_title" />|' \
+    components/browser_ui/site_settings/android/java/res/xml/single_website_preferences.xml
+
+sed_i -e 's|^import org.chromium.content_public.browser.BrowserContextHandle;$|&\nimport org.chromium.components.user_prefs.UserPrefs;\nimport org.json.JSONArray;\nimport org.json.JSONException;\nimport org.json.JSONObject;|' \
+    -e 's|^import java.util.List;$|&\nimport java.util.Locale;|' \
+    -e 's|^        PREF_CLEAR_DATA,$|&\n        "aerium_site_data_rule",|' \
+    -e 's|^        setUpClearDataPreference();$|&\n        aeriumSetUpSiteRulePreference();|' \
+    -e 's|^        return findPreference(PREF_CLEAR_DATA) != null;$|        return findPreference(PREF_CLEAR_DATA) != null\n                \|\| findPreference("aerium_site_data_rule") != null;|' \
+    $AERIUM_SWS
+
+AERIUM_SWS_JAVA=$(cat <<'AERIUM_SWS_EOF'
+    private static final String AERIUM_SITE_RULES_PREF =
+            "browser.clear_data.aerium_on_exit.site_rules";
+
+    @RequiresNonNull({"mSite"})
+    private void aeriumSetUpSiteRulePreference() {
+        Preference preference = findPreference("aerium_site_data_rule");
+        if (preference == null) return;
+        String origin = mSite.getAddress().getOrigin();
+        String domain = mSite.getAddress().getDomainAndRegistry();
+        if (domain == null
+                || domain.isEmpty()
+                || domain.contains("*")
+                || !(origin.startsWith("http://") || origin.startsWith("https://"))) {
+            getPreferenceScreen().removePreference(preference);
+            return;
+        }
+        final String site = domain.toLowerCase(Locale.US);
+        final String[] modes = {"", "keep", "session", "ephemeral"};
+        final String[] labels = {
+            getString(R.string.aerium_site_data_rule_default),
+            getString(R.string.aerium_site_data_rule_keep),
+            getString(R.string.aerium_site_data_rule_session),
+            getString(R.string.aerium_site_data_rule_ephemeral),
+        };
+        final int[] checked = {0};
+        String mode = aeriumSiteRuleMode(site);
+        for (int i = 0; i < modes.length; i++) {
+            if (modes[i].equals(mode)) checked[0] = i;
+        }
+        preference.setSummary(labels[checked[0]]);
+        preference.setOnPreferenceClickListener(
+                pref -> {
+                    new AlertDialog.Builder(
+                                    getContext(), R.style.ThemeOverlay_BrowserUI_AlertDialog)
+                            .setTitle(R.string.aerium_site_data_rule_title)
+                            .setSingleChoiceItems(
+                                    labels,
+                                    checked[0],
+                                    (dialog, which) -> {
+                                        aeriumSaveSiteRule(site, modes[which]);
+                                        checked[0] = which;
+                                        pref.setSummary(labels[which]);
+                                        dialog.dismiss();
+                                    })
+                            .setNegativeButton(R.string.cancel, null)
+                            .show();
+                    return true;
+                });
+    }
+
+    private JSONArray aeriumReadSiteRules() {
+        try {
+            return new JSONArray(
+                    UserPrefs.get(getBrowserContextHandle()).getString(AERIUM_SITE_RULES_PREF));
+        } catch (JSONException e) {
+            return new JSONArray();
+        }
+    }
+
+    private static boolean aeriumRuleCovers(JSONObject rule, String site) {
+        String pattern = rule.optString("pattern", "").trim().toLowerCase(Locale.US);
+        return pattern.equals(site) || pattern.endsWith("." + site);
+    }
+
+    private String aeriumSiteRuleMode(String site) {
+        JSONArray rules = aeriumReadSiteRules();
+        for (int i = 0; i < rules.length(); i++) {
+            JSONObject rule = rules.optJSONObject(i);
+            if (rule == null || !aeriumRuleCovers(rule, site)) continue;
+            String mode = rule.optString("mode", "");
+            return mode.isEmpty() ? "keep" : mode;
+        }
+        return "";
+    }
+
+    private void aeriumSaveSiteRule(String site, String mode) {
+        JSONArray rules = aeriumReadSiteRules();
+        JSONArray result = new JSONArray();
+        JSONObject keep = null;
+        for (int i = 0; i < rules.length(); i++) {
+            JSONObject rule = rules.optJSONObject(i);
+            if (rule != null && aeriumRuleCovers(rule, site)) {
+                if (keep == null) keep = rule.optJSONObject("keep");
+                continue;
+            }
+            result.put(rules.opt(i));
+        }
+        if (!mode.isEmpty()) {
+            try {
+                if (keep == null) {
+                    keep = new JSONObject();
+                    keep.put("site_data", true);
+                    keep.put("cache", true);
+                    keep.put("downloads", true);
+                }
+                JSONObject rule = new JSONObject();
+                rule.put("pattern", site);
+                rule.put("keep", keep);
+                rule.put("mode", mode);
+                result.put(rule);
+            } catch (JSONException e) {
+                return;
+            }
+        }
+        UserPrefs.get(getBrowserContextHandle())
+                .setString(AERIUM_SITE_RULES_PREF, result.toString());
+    }
+
+AERIUM_SWS_EOF
+)
+AERIUM_SWS_JAVA="$AERIUM_SWS_JAVA" perl -0777 -pi -e '
+    s{(    \@RequiresNonNull\(\{"mSite"\}\)\n    private void setUpClearDataPreference\(\) \{\n)}{$ENV{AERIUM_SWS_JAVA}\n$1}
+        or die "[aerium] FATAL: SingleWebsiteSettings.setUpClearDataPreference() moved\n";
+' $AERIUM_SWS || return 1
+
+sed_i 's|^      <message name="IDS_GOT_IT" desc=|      <message name="IDS_AERIUM_SITE_DATA_RULE_TITLE" desc="Row on a site'"'"'s settings page that chooses when Aerium deletes that site'"'"'s cookies and storage.">\n        Automatic deletion\n      </message>\n      <message name="IDS_AERIUM_SITE_DATA_RULE_DEFAULT" desc="Option: the site has no rule of its own and follows the browser-wide delete on exit settings.">\n        Follow the browsing data settings\n      </message>\n      <message name="IDS_AERIUM_SITE_DATA_RULE_KEEP" desc="Option: the site keeps its data when the browser closes.">\n        Keep this site when Aerium closes\n      </message>\n      <message name="IDS_AERIUM_SITE_DATA_RULE_SESSION" desc="Option: the site keeps its data until the browser closes, then it is deleted.">\n        Keep this site until Aerium closes, then clear it\n      </message>\n      <message name="IDS_AERIUM_SITE_DATA_RULE_EPHEMERAL" desc="Option: the site'"'"'s data is deleted as soon as its last tab closes.">\n        Clear this site as soon as its last tab closes\n      </message>\n&|' \
+    components/browser_ui/strings/android/browser_ui_strings.grd
+
+echo "[aerium] per-site data rule applied"
+
 python3 "$SCRIPT_DIR/l10n/inject.py" || return 1
