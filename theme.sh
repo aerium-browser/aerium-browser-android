@@ -2386,10 +2386,13 @@ sed -i '/^    case WebGLDebugRendererInfo::kUnmaskedVendorWebgl:$/{n;n;i\
 # current - the new one installs inside document_loader_->CommitNavigation()
 # further down the same function - so its origin is the one the name belongs
 # to. Same-document navigations never reach this function, so fragment hops
-# keep the name. Subframes included: an iframe's name survives its own
-# navigations the same way. Off by default; Aerium Guard Privacy seeds the
-# flag, chrome://flags/#aerium-clear-window-name can too.
-sed_i 's%^  TRACE_EVENT0("navigation", "FrameLoader::CommitDocumentLoader");$%&\n  // Aerium: clear window.name on cross-origin navigation - see theme.sh.\n  if (base::FeatureList::IsEnabled(blink::features::kAeriumClearWindowName) \&\&\n      frame_->GetDocument()) {\n    scoped_refptr<SecurityOrigin> new_origin =\n        SecurityOrigin::Create(document_loader->Url());\n    if (!frame_->GetDocument()->GetSecurityOrigin()->IsSameOriginWith(\n            new_origin.get())) {\n      frame_->Tree().SetName(AtomicString(), FrameTree::kReplicate);\n    }\n  }%' \
+# keep the name. Top-level frames only: an iframe's name is how its parent
+# and window.open(url, name) find it, and payment and 3-D Secure frames break
+# when it disappears. The initial about:blank of a new window is skipped too,
+# so a popup opened with a name keeps it through its first load. Off by
+# default; Aerium Guard Privacy seeds the flag,
+# chrome://flags/#aerium-clear-window-name can too.
+sed_i 's%^  TRACE_EVENT0("navigation", "FrameLoader::CommitDocumentLoader");$%&\n  // Aerium: clear window.name on cross-origin navigation - see theme.sh.\n  if (base::FeatureList::IsEnabled(blink::features::kAeriumClearWindowName) \&\&\n      frame_->IsMainFrame() \&\& frame_->GetDocument() \&\&\n      !frame_->GetDocument()->IsInitialEmptyDocument()) {\n    scoped_refptr<SecurityOrigin> new_origin =\n        SecurityOrigin::Create(document_loader->Url());\n    if (!frame_->GetDocument()->GetSecurityOrigin()->IsSameOriginWith(\n            new_origin.get())) {\n      frame_->Tree().SetName(AtomicString(), FrameTree::kReplicate);\n    }\n  }%' \
     third_party/blink/renderer/core/loader/frame_loader.cc
 # frame_loader.cc already includes blink/public/common/features.h and
 # weborigin/security_origin.h; only base/feature_list.h is missing. Kept in
@@ -6275,10 +6278,11 @@ cat > chrome/browser/aerium_flag_entries.h <<'AERIUM_FLAG_ENTRIES_EOF'
      kOsAll, FEATURE_VALUE_TYPE(blink::features::kFontAccess)},
     {"aerium-clear-window-name",
      "Clear window.name on navigation",
-     "Reset window.name to an empty string on every cross-site navigation. "
+     "Reset window.name to an empty string on every top-level cross-site "
+     "navigation. "
      "The window.name property persists across navigations and is commonly "
      "abused for cross-site tracking. Brave and other privacy browsers clear "
-     "it on reload; this does the same on any navigation. "
+     "it on reload; this does the same on any top-level navigation. "
      "Aerium Guard Privacy turns this on. Aerium flag.",
      kOsAll, FEATURE_VALUE_TYPE(blink::features::kAeriumClearWindowName)},
 #endif  // CHROME_BROWSER_AERIUM_FLAG_ENTRIES_H_
@@ -9854,7 +9858,7 @@ sed_i 's|      <message name="IDS_AERIUM_PURE_BLACK_TITLE" desc=|      <message 
 
 echo "[aerium] transparent new tab toolbar applied"
 
-sed_i 's|^<meta charset="utf-8">$|&\n<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">|' \
+sed_i 's|^<meta name="viewport" content="width=device-width">$|<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">|' \
     third_party/devtools-frontend/src/front_end/entrypoint_template.html
 
 echo "[aerium] devtools viewport applied"
