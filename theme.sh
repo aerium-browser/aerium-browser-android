@@ -9882,4 +9882,41 @@ sed_i 's|^    public static boolean shouldShowRecentTabsIph() {$|&\n        if (
 
 echo "[aerium] recent tabs removed"
 
+sed_i -e 's|^    /\* package \*/ boolean shouldShowTabGroupsParentItem(@Nullable Tab currentTab) {$|&\n        if (true) return false;|' \
+    -e 's|^    /\* package \*/ boolean shouldShowAddToGroup(@Nullable Tab currentTab) {$|&\n        if (true) return false;|' \
+    $AERIUM_TB/tabbed_mode/TabGroupItemBuilder.java
+sed_i 's|^        modelList.add(mTabGroupItemBuilder.buildNewTabGroupItemWithoutTab());$|        if (false) modelList.add(mTabGroupItemBuilder.buildNewTabGroupItemWithoutTab());|' \
+    $AERIUM_TB/tabbed_mode/TabbedAppMenuPropertiesDelegate.java
+sed_i 's|^    private void maybeBuildAddToGroup(ModelList itemList) {$|&\n        if (true) return;|' \
+    chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/top/TabSwitcherActionMenuCoordinator.java
+sed_i 's|^                    linkGroup.add(openInNewTabInGroupItem);$|                    if (false) linkGroup.add(openInNewTabInGroupItem);|' \
+    $AERIUM_TB/contextmenu/ChromeContextMenuPopulator.java
+sed_i 's|^                return mNavigationDelegate.isOpenInNewTabInGroupEnabled();$|                return false;|' \
+    $AERIUM_TB/native_page/ContextMenuManager.java
+sed_i 's|^        itemList.add(createMoveToTabGroupItem(tabs, isIncognito));$|        if (false) itemList.add(createMoveToTabGroupItem(tabs, isIncognito));|' \
+    $AERIUM_TB/compositor/overlays/strip/TabContextMenuCoordinator.java
+sed_i 's|^        itemList.add(buildGroupItem(tab, isIncognito));$|        if (false) itemList.add(buildGroupItem(tab, isIncognito));|' \
+    $AERIUM_TM/pinned_tabs/PinnedTabStripItemContextMenuCoordinator.java
+sed_i 's|^            if (hasTabPropertiesModel(hoveredViewHolder)$|            if (false \&\& hasTabPropertiesModel(hoveredViewHolder)|' \
+    $AERIUM_TM/TabGridItemTouchHelperCallback.java
+perl -0777 -pi -e '
+    s{        if \(!hasTabGroups\) \{\n(            itemList\.add\(\n.*?R\.string\.menu_add_tab_to_new_group.*?\n        \}) else \{\n(            \@StringRes\n            int title =\n                    TabGroupUiUtils\.getAddToGroupMenuItemString\(tab\.getTabGroupId\(\), hasTabGroups\);\n)}
+     {        if (false) \{\n$1 else if (false) \{\n$2}s
+        or die "[aerium] FATAL: TabGridContextMenuCoordinator no longer builds the add to group item\n";
+' $AERIUM_TM/TabGridContextMenuCoordinator.java || return 1
+perl -0777 -pi -e '
+    s{(            )(mTabListEditorActions\.add\(\n                    TabListEditorAddToGroupAction\.createAction\(\n                            mActivity,\n                            mTabGroupCreationDialogManager,\n)}{$1if (false) $2}
+        or die "[aerium] FATAL: TabListEditorManager no longer adds the add to group action\n";
+' $AERIUM_TM/TabListEditorManager.java || return 1
+perl -0777 -pi -e '
+    s{(            )(builder\.registerPane\(\n                    PaneId\.TAB_GROUPS, LazyOneshotSupplier\.fromSupplier\(this::createTabGroupsPane\)\);\n)}{$1if (false) $2}
+        or die "[aerium] FATAL: ChromeTabbedActivity no longer registers the tab groups pane\n";
+' $AERIUM_TB/ChromeTabbedActivity.java || return 1
+perl -0777 -pi -e '
+    my $n = s{(        )(listItems\.add\(\n                buildContextMenuItem\(\n                        getOpenBookmarkQuantityTitle\(\n                                R\.string\.contextmenu_open_all_in_new_tab_group,\n)}{$1if (false) $2}g;
+    $n == 2 or die "[aerium] FATAL: BookmarkBarContextMenuMediator no longer has two open in new tab group items\n";
+' chrome/browser/bookmarks/android/java/src/org/chromium/chrome/browser/bookmarks/bar/BookmarkBarContextMenuMediator.java || return 1
+
+echo "[aerium] tab groups removed"
+
 python3 "$SCRIPT_DIR/l10n/inject.py" || return 1
