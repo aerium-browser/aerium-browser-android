@@ -9882,8 +9882,9 @@ sed_i 's|^    public static boolean shouldShowRecentTabsIph() {$|&\n        if (
 
 echo "[aerium] recent tabs removed"
 
-sed_i -e 's|^    /\* package \*/ boolean shouldShowTabGroupsParentItem(@Nullable Tab currentTab) {$|&\n        if (true) return false;|' \
-    -e 's|^    /\* package \*/ boolean shouldShowAddToGroup(@Nullable Tab currentTab) {$|&\n        if (true) return false;|' \
+sed_i 's|^    /\* package \*/ boolean shouldShowTabGroupsParentItem(@Nullable Tab currentTab) {$|&\n        if (true) return false;|' \
+    $AERIUM_TB/tabbed_mode/TabGroupItemBuilder.java
+sed_i 's|^    /\* package \*/ boolean shouldShowAddToGroup(@Nullable Tab currentTab) {$|&\n        if (true) return false;|' \
     $AERIUM_TB/tabbed_mode/TabGroupItemBuilder.java
 sed_i 's|^        modelList.add(mTabGroupItemBuilder.buildNewTabGroupItemWithoutTab());$|        if (false) modelList.add(mTabGroupItemBuilder.buildNewTabGroupItemWithoutTab());|' \
     $AERIUM_TB/tabbed_mode/TabbedAppMenuPropertiesDelegate.java
@@ -9924,11 +9925,15 @@ AERIUM_SWS=components/browser_ui/site_settings/android/java/src/org/chromium/com
 sed_i 's|^        android:widgetLayout="@layout/clear_storage" />$|&\n    <org.chromium.components.browser_ui.settings.ChromeBasePreference\n        android:key="aerium_site_data_rule"\n        android:title="@string/aerium_site_data_rule_title" />|' \
     components/browser_ui/site_settings/android/java/res/xml/single_website_preferences.xml
 
-sed_i -e 's|^import org.chromium.content_public.browser.BrowserContextHandle;$|&\nimport org.chromium.components.user_prefs.UserPrefs;\nimport org.json.JSONArray;\nimport org.json.JSONException;\nimport org.json.JSONObject;|' \
-    -e 's|^import java.util.List;$|&\nimport java.util.Locale;|' \
-    -e 's|^        PREF_CLEAR_DATA,$|&\n        "aerium_site_data_rule",|' \
-    -e 's|^        setUpClearDataPreference();$|&\n        aeriumSetUpSiteRulePreference();|' \
-    -e 's|^        return findPreference(PREF_CLEAR_DATA) != null;$|        return findPreference(PREF_CLEAR_DATA) != null\n                \|\| findPreference("aerium_site_data_rule") != null;|' \
+sed_i 's|^import org.chromium.content_public.browser.BrowserContextHandle;$|&\nimport org.chromium.components.user_prefs.UserPrefs;\nimport org.json.JSONArray;\nimport org.json.JSONException;\nimport org.json.JSONObject;|' \
+    $AERIUM_SWS
+sed_i 's|^import java.util.List;$|&\nimport java.util.Locale;|' \
+    $AERIUM_SWS
+sed_i 's|^        PREF_CLEAR_DATA,$|&\n        "aerium_site_data_rule",|' \
+    $AERIUM_SWS
+sed_i 's|^        setUpClearDataPreference();$|&\n        aeriumSetUpSiteRulePreference();|' \
+    $AERIUM_SWS
+sed_i 's|^        return findPreference(PREF_CLEAR_DATA) != null;$|        return findPreference(PREF_CLEAR_DATA) != null\n                \|\| findPreference("aerium_site_data_rule") != null;|' \
     $AERIUM_SWS
 
 AERIUM_SWS_JAVA=$(cat <<'AERIUM_SWS_EOF'
