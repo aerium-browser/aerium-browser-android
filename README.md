@@ -18,8 +18,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/aerium-browser/aerium-browser-android/releases/latest"><img src="https://img.shields.io/github/v/release/aerium-browser/aerium-browser-android?color=1b2c5e&label=release" alt="Latest release"></a>
-  <a href="https://github.com/aerium-browser/aerium-browser-android/releases"><img src="https://img.shields.io/github/downloads/aerium-browser/aerium-browser-android/total?color=1b2c5e&label=downloads" alt="Downloads"></a>
+  <a href="https://github.com/aerium-browser/aerium-browser-android/releases/latest"><img src="https://img.shields.io/badge/platform-Android-1b2c5e" alt="Platform Android"></a>
+  <a href="https://github.com/aerium-browser/aerium-browser-android/releases/latest"><img src="https://img.shields.io/badge/engine-Chromium-1b2c5e" alt="Engine Chromium"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--2.0-1b2c5e" alt="License GPL-2.0"></a>
 </p>
 
