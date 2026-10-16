@@ -2376,30 +2376,6 @@ sed -i '/^    case WebGLDebugRendererInfo::kUnmaskedVendorWebgl:$/{n;n;i\
 }' \
     third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
 
-# --- Clear window.name on cross-origin navigation.
-#
-# window.name lives on the frame, not on the document: FrameTree keeps it
-# across navigations, so a page that sets it hands it to whatever site the
-# user visits next in the same tab. Brave clears it on reload; Aerium clears
-# it on any commit whose origin differs from the document that held the name.
-# At FrameLoader::CommitDocumentLoader entry the previous document is still
-# current - the new one installs inside document_loader_->CommitNavigation()
-# further down the same function - so its origin is the one the name belongs
-# to. Same-document navigations never reach this function, so fragment hops
-# keep the name. Top-level frames only: an iframe's name is how its parent
-# and window.open(url, name) find it, and payment and 3-D Secure frames break
-# when it disappears. The initial about:blank of a new window is skipped too,
-# so a popup opened with a name keeps it through its first load. Off by
-# default; Aerium Guard Privacy seeds the flag,
-# chrome://flags/#aerium-clear-window-name can too.
-sed_i 's%^  TRACE_EVENT0("navigation", "FrameLoader::CommitDocumentLoader");$%&\n  // Aerium: clear window.name on cross-origin navigation - see theme.sh.\n  if (base::FeatureList::IsEnabled(blink::features::kAeriumClearWindowName) \&\&\n      frame_->IsMainFrame() \&\& frame_->GetDocument() \&\&\n      !frame_->GetDocument()->IsInitialEmptyDocument()) {\n    scoped_refptr<SecurityOrigin> new_origin =\n        SecurityOrigin::Create(document_loader->Url());\n    if (!frame_->GetDocument()->GetSecurityOrigin()->IsSameOriginWith(\n            new_origin.get())) {\n      frame_->Tree().SetName(AtomicString(), FrameTree::kReplicate);\n    }\n  }%' \
-    third_party/blink/renderer/core/loader/frame_loader.cc
-# frame_loader.cc already includes blink/public/common/features.h and
-# weborigin/security_origin.h; only base/feature_list.h is missing. Kept in
-# alphabetical position between auto_reset.h and notreached.h.
-sed_i 's|^#include "base/auto_reset.h"$|&\n#include "base/feature_list.h"|' \
-    third_party/blink/renderer/core/loader/frame_loader.cc
-
 # --- The About page points at Aerium rather than nowhere.
 #
 # The desktop repos do this in chrome/common/url_constants.h, where
@@ -6195,16 +6171,12 @@ unset AERIUM_TZ_HELPERS AERIUM_TZ_INIT
 sed_i '/^const base::FeatureParam<std::string> kSpoofWebGLVendorParam{\&kSpoofWebGLInfo, kSpoofWebGLVendor, " "};$/a\
 BASE_FEATURE(kAeriumTimeZone, "AeriumTimeZone", base::FEATURE_DISABLED_BY_DEFAULT);\
 const char kAeriumTimeZoneId[] = "zone";\
-const base::FeatureParam<std::string> kAeriumTimeZoneIdParam{\&kAeriumTimeZone, kAeriumTimeZoneId, "random"};\
-\
-BASE_FEATURE(kAeriumClearWindowName, "AeriumClearWindowName", base::FEATURE_DISABLED_BY_DEFAULT);' \
+const base::FeatureParam<std::string> kAeriumTimeZoneIdParam{\&kAeriumTimeZone, kAeriumTimeZoneId, "random"};' \
     third_party/blink/common/features.cc
 sed_i '/^BLINK_COMMON_EXPORT extern const base::FeatureParam<std::string> kSpoofWebGLVendorParam;$/a\
 BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE(kAeriumTimeZone);\
 BLINK_COMMON_EXPORT extern const char kAeriumTimeZoneId[];\
-BLINK_COMMON_EXPORT extern const base::FeatureParam<std::string> kAeriumTimeZoneIdParam;\
-\
-BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE(kAeriumClearWindowName);' \
+BLINK_COMMON_EXPORT extern const base::FeatureParam<std::string> kAeriumTimeZoneIdParam;' \
     third_party/blink/public/common/features.h
 
 # chrome://flags. Two new headers rather than editing the middle of
@@ -6278,13 +6250,16 @@ cat > chrome/browser/aerium_flag_entries.h <<'AERIUM_FLAG_ENTRIES_EOF'
      kOsAll, FEATURE_VALUE_TYPE(blink::features::kFontAccess)},
     {"aerium-clear-window-name",
      "Clear window.name on navigation",
-     "Reset window.name to an empty string on every top-level cross-site "
-     "navigation. "
-     "The window.name property persists across navigations and is commonly "
-     "abused for cross-site tracking. Brave and other privacy browsers clear "
-     "it on reload; this does the same on any top-level navigation. "
+     "Reset window.name to an empty string when a tab moves to another site "
+     "and no other window can reach the page it left. The window.name "
+     "property persists across navigations and is commonly abused for "
+     "cross-site tracking. Popups that still talk to the page that opened "
+     "them keep their name, so sign-in windows keep working. This is the "
+     "behaviour the HTML standard describes and Firefox and Safari ship. "
      "Aerium Guard Privacy turns this on. Aerium flag.",
-     kOsAll, FEATURE_VALUE_TYPE(blink::features::kAeriumClearWindowName)},
+     kOsAll,
+     FEATURE_VALUE_TYPE(
+         ::features::kClearCrossSiteCrossBrowsingContextGroupWindowName)},
 #endif  // CHROME_BROWSER_AERIUM_FLAG_ENTRIES_H_
 AERIUM_FLAG_ENTRIES_EOF
 sed_i '/^const FeatureEntry kFeatureEntries\[\] = {$/i\
