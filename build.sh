@@ -131,7 +131,12 @@ if [ ! -f chromium/src/BUILD.gn ]; then
     cd src
     git init
     git remote add origin $CHROMIUM_SOURCE
-    git fetch --depth 1 $CHROMIUM_SOURCE +refs/tags/$VERSION:chromium_$VERSION
+    for attempt in 1 2 3 4 5; do
+        git fetch --depth 1 $CHROMIUM_SOURCE +refs/tags/$VERSION:chromium_$VERSION && break
+        [ "$attempt" = 5 ] && exit 1
+        echo "[aerium] chromium fetch failed (attempt $attempt), retrying in $((attempt * 30))s"
+        sleep $((attempt * 30))
+    done
     git checkout $VERSION
     export COMMIT=$(git show-ref -s $VERSION | head -n1)
     cat > ../.gclient <<EOF
