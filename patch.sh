@@ -310,9 +310,9 @@ sed_i 's|host_contents_->SetColorProviderSource(NoOpColorProviderSource::Get());
 # what the C++ side asked for. Ported from upstream (Titanium).
 sed_i 's|private @ChildProcessImportance int mEffectiveImportance;$|&private final boolean mIsExtensionProcess;|' \
     content/public/android/java/src/org/chromium/content/browser/ChildProcessLauncherHelperImpl.java
-sed_i 's|^ *if (!ApplicationStatus.isInitialized()) return;$|mIsExtensionProcess = Arrays.asList(commandLine).contains("--extension-process"); if (mIsExtensionProcess) mEffectiveImportance = ChildProcessImportance.IMPORTANT;\&|' \
+sed_i 's|^ *if (!ApplicationStatus.isInitialized()) return;$|mIsExtensionProcess = Arrays.asList(commandLine).contains("--extension-process"); if (mIsExtensionProcess) mEffectiveImportance = ChildProcessImportance.IMPORTANT;&|' \
     content/public/android/java/src/org/chromium/content/browser/ChildProcessLauncherHelperImpl.java
-sed_i 's|@ChildProcessImportance int importance) {$|\&if (mIsExtensionProcess) importance = ChildProcessImportance.IMPORTANT;|' \
+sed_i 's|@ChildProcessImportance int importance) {$|&if (mIsExtensionProcess) importance = ChildProcessImportance.IMPORTANT;|' \
     content/public/android/java/src/org/chromium/content/browser/ChildProcessLauncherHelperImpl.java
 
 # --- Touch filtering on the extension install dialog.
