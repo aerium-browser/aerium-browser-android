@@ -349,6 +349,27 @@ inline void AeriumOnboardingRequest(const std::string& value) {
   prefs.WriteString(kAeriumOnboardingRequestKey, value);
 }
 
+inline constexpr char kAeriumUboGithubKey[] =
+    "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqyTdDTMXfZ/EbpM+rAHvNb/+CFb/9mTu9eB9hgr67RvqL4A8jh5JGlhepDKeKGbFfrFc9gT3sd3OgZEzhFU+eTGxGBeVaverTJBKkMRW414lirw/hDg5uWbDDkGJfoG8B3y0GhhCsopJqajO/yL4olt1/5/dVKuYZvunenkKWEGRgPyDAJX9auMuydjJ5G4lKZa8P03PeZxYEvlr/c6RDviiFwshmazHDJJP9XrLX4uqy6a0Tx4lXUvYVGvSt7nKgMHsoy68eJps5lANpGpEIAOyJDTKCyjPzLmghvWJTqcxyCqijIgZAz58gQZWYDy9lM7zbjySiwkj7PDarYzQ2QIDAQAB";
+
+inline void AeriumPinUnpackedId(const base::FilePath& dir) {
+  const base::FilePath manifest = dir.AppendASCII("manifest.json");
+  std::string text;
+  if (!base::ReadFileToString(manifest, &text)) {
+    return;
+  }
+  std::optional<base::Value> parsed =
+      base::JSONReader::Read(text, base::JSON_PARSE_RFC);
+  if (!parsed || !parsed->is_dict() || parsed->GetDict().Find("key")) {
+    return;
+  }
+  parsed->GetDict().Set("key", kAeriumUboGithubKey);
+  std::optional<std::string> updated = base::WriteJson(*parsed);
+  if (updated && !base::WriteFile(manifest, *updated)) {
+    return;
+  }
+}
+
 class AeriumFirstRunDataSource : public content::URLDataSource {
  public:
   explicit AeriumFirstRunDataSource(Profile* profile) : profile_(profile) {}
@@ -622,6 +643,17 @@ h1:focus{outline:none}
   </div>
 </section>
 
+<section class="step" id="restoring">
+  <div class="top"><span style="width:44px"></span><span style="width:44px"></span></div>
+  <div class="head"><h1>{{RESTORE_TITLE}}</h1><p class="sub">{{RESTORE_SUB}}</p></div>
+  <div class="card">
+    <div class="li progress" id="rs-row"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 4H6a2 2 0 0 0-2 2v4"/><path d="M14 4h4a2 2 0 0 1 2 2v4"/><path d="M10 20H6a2 2 0 0 1-2-2v-4"/><path d="M14 20h4a2 2 0 0 0 2-2v-4"/></svg><span class="lt" id="rs-text" aria-live="polite"></span><span class="lk">{{EXTENSIONS}}</span><span class="bar"><i id="rs-fill"></i></span></div>
+  </div>
+  <p class="sub" id="rs-manual" hidden></p>
+  <div class="grow"></div>
+  <div class="foot"><button class="primary" type="button" id="rs-finish">{{START_BROWSING}}</button></div>
+</section>
+
 <script id="data" type="application/json">{{DATA}}</script>
 <script>
 (() => {
@@ -631,7 +663,17 @@ h1:focus{outline:none}
   const DNS_ORDER = ['Quad9Secure', 'Mullvad', 'MullvadAdblock', 'NextDns', 'Cloudflare', 'CleanBrowsingFamily', 'OpenDNS'];
   const DNS_TAGS = {Quad9Secure: S.dnsMalware, Mullvad: S.dnsNoLogs, MullvadAdblock: S.dnsAds, NextDns: S.dnsFilters, Cloudflare: '1.1.1.1', CleanBrowsingFamily: S.dnsFamily, OpenDNS: 'Cisco'};
   const sysDark = matchMedia('(prefers-color-scheme: dark)').matches;
+  const restoreList = (() => {
+    if (!location.hash.startsWith('#restore=')) return null;
+    try {
+      const v = JSON.parse(decodeURIComponent(location.hash.slice(9)));
+      return Array.isArray(v) ? v : null;
+    } catch (e) {
+      return null;
+    }
+  })();
   const state = {
+    restoring: !!restoreList,
     guard: ['recommended', 'privacy', 'performance', 'security'].includes(D.guard) ? D.guard : 'recommended',
     dns: 'Quad9Secure', custom: '',
     theme: sysDark ? 'black' : 'light', themeTouched: false,
@@ -663,13 +705,18 @@ h1:focus{outline:none}
   }
 
   function show(id) {
-    if (!STEPS.includes(id)) id = 'welcome';
-    if (state.applied && id !== 'ready') {
-      history.replaceState(null, '', '#ready');
-      id = 'ready';
+    if (state.restoring) {
+      id = 'restoring';
+    } else {
+      if (!STEPS.includes(id)) id = 'welcome';
+      if (state.applied && id !== 'ready') {
+        history.replaceState(null, '', '#ready');
+        id = 'ready';
+      }
     }
     $$('.step').forEach(s => s.classList.toggle('on', s.id === id));
     if (id === 'ready') renderReady();
+    if (id === 'restoring') renderRestore();
     if (id === 'extensions') renderInstall();
     window.scrollTo(0, 0);
     const h = $('#' + id + ' h1');
@@ -806,10 +853,44 @@ h1:focus{outline:none}
     const fin = $('#finish');
     fin.setAttribute('aria-disabled', String(state.busy));
   }
+  function renderRestore() {
+    const txt = $('#rs-text');
+    $('#rs-row').classList.toggle('busy', state.busy);
+    if (state.total === 0) {
+      txt.textContent = S.none;
+    } else if (state.busy) {
+      txt.textContent = fmt(S.installing, Math.min(state.done + 1, state.total), state.total);
+      $('#rs-fill').style.width = Math.round(100 * state.done / state.total) + '%';
+    } else {
+      const ok = state.done - state.failed;
+      txt.textContent = state.failed ? fmt(S.someFailed, ok, state.failed) : fmt(S.installed, ok);
+    }
+    $('#rs-finish').setAttribute('aria-disabled', String(state.busy));
+  }
   window.aeriumOnboardingProgress = (done, failed, finished) => {
     state.done = done; state.failed = failed; state.busy = !finished;
-    renderProgress();
+    if (state.restoring) renderRestore();
+    else renderProgress();
   };
+  if (restoreList) {
+    const installs = restoreList.filter(e => e && typeof e.id === 'string' && (e.source === 'cws' || e.source === 'github'));
+    const manual = restoreList.filter(e => e && e.source === 'other' && e.name).map(e => String(e.name));
+    state.applied = true;
+    state.total = installs.length;
+    state.busy = installs.length > 0;
+    state.done = 0; state.failed = 0;
+    if (manual.length) {
+      const note = $('#rs-manual');
+      note.textContent = fmt(S.restoreManual, manual.join(', '));
+      note.hidden = false;
+    }
+    history.replaceState(null, '', '#restoring');
+    if (installs.length) send('aeriumOnboardingApply', {extensions: installs.map(e => ({id: e.id, source: e.source, aerogel: !!e.aerogel}))});
+  }
+  $('#rs-finish').addEventListener('click', () => {
+    if (state.busy) return;
+    send('aeriumOnboardingFinish', {theme: '', top: null});
+  });
 
   $('#finish').addEventListener('click', () => {
     if (state.busy) return;
@@ -874,6 +955,8 @@ h1:focus{outline:none}
       {"{{PICK_ONE}}", IDS_AERIUM_ONB_PICK_ONE},
       {"{{READY_TITLE}}", IDS_AERIUM_ONB_READY_TITLE},
       {"{{RESTORE}}", IDS_AERIUM_ONB_RESTORE},
+      {"{{RESTORE_SUB}}", IDS_AERIUM_ONB_RESTORE_SUB},
+      {"{{RESTORE_TITLE}}", IDS_AERIUM_ONB_RESTORE_TITLE},
       {"{{SEARCH}}", IDS_AERIUM_ONB_SEARCH},
       {"{{SKIP}}", IDS_AERIUM_ONB_SKIP},
       {"{{START}}", IDS_AERIUM_ONB_START},
@@ -903,6 +986,7 @@ h1:focus{outline:none}
       {"dnsAds", IDS_AERIUM_ONB_DNS_ADS},
       {"dnsFilters", IDS_AERIUM_ONB_DNS_FILTERS},
       {"dnsFamily", IDS_AERIUM_ONB_DNS_FAMILY},
+      {"restoreManual", IDS_AERIUM_ONB_RESTORE_MANUAL},
   };
   base::DictValue strings;
   for (const auto& [key, id] : kScriptStrings) {
@@ -1295,7 +1379,10 @@ inline void AeriumFirstRun::OnZipUnpacked(
     }
     return;
   }
-  std::move(register_cb).Run(zip_file, unzip_dir, error);
+  base::ThreadPool::PostTaskAndReply(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      base::BindOnce(&AeriumPinUnpackedId, unzip_dir),
+      base::BindOnce(std::move(register_cb), zip_file, unzip_dir, error));
 }
 
 inline void AeriumFirstRun::OnExtensionInstalled(
@@ -1424,10 +1511,13 @@ import android.app.role.RoleManager;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.net.Uri;
 import android.provider.Settings;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.IntentUtils;
+import org.chromium.base.task.PostTask;
+import org.chromium.base.task.TaskTraits;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.night_mode.GlobalNightModeStateProviderHolder;
@@ -1435,9 +1525,11 @@ import org.chromium.chrome.browser.night_mode.ThemeType;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 import org.chromium.chrome.browser.settings.AeriumBackupFragment;
+import org.chromium.chrome.browser.settings.AeriumExtensionBackup;
 import org.chromium.chrome.browser.settings.AeriumToolbarPrefs;
 import org.chromium.chrome.browser.settings.SettingsNavigationFactory;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.ui.base.PageTransition;
 
@@ -1464,6 +1556,23 @@ public final class AeriumOnboardingRequests {
                     if (ChromePreferenceKeys.AERIUM_ONBOARDING_REQUEST.equals(key)) handle();
                 };
         prefs.registerOnSharedPreferenceChangeListener(sListener);
+        PostTask.postTask(TaskTraits.UI_DEFAULT, AeriumOnboardingRequests::openPendingRestore);
+    }
+
+    private static void openPendingRestore() {
+        ChromeTabbedActivity activity = sActivity.get();
+        if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
+        SharedPreferences prefs = ContextUtils.getAppSharedPreferences();
+        String pending = prefs.getString(AeriumExtensionBackup.PENDING_KEY, "");
+        if (pending == null || pending.isEmpty()) return;
+        prefs.edit().remove(AeriumExtensionBackup.PENDING_KEY).apply();
+        activity.getTabCreator(false)
+                .createNewTab(
+                        new LoadUrlParams(
+                                FIRST_RUN_URL + "#restore=" + Uri.encode(pending),
+                                PageTransition.AUTO_TOPLEVEL),
+                        TabLaunchType.FROM_CHROME_UI,
+                        null);
     }
 
     private static void handle() {
@@ -8476,7 +8585,7 @@ import org.chromium.components.prefs.PrefService;
 import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.url.GURL;
 
-import java.io.ByteArrayOutputStream;
+import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -8495,8 +8604,8 @@ public class AeriumBackupFragment extends ChromeBaseSettingsFragment {
     private static final int REQUEST_EXPORT = 4212;
     private static final int REQUEST_RESTORE = 4213;
 
-    private static final String BACKUP_MIME_TYPE = "application/json";
-    private static final int BACKUP_VERSION = 2;
+    private static final String BACKUP_MIME_TYPE = "application/zip";
+    private static final int BACKUP_VERSION = 3;
     private static final int RESTART_SNACKBAR_DURATION_MS = 10000;
 
     private static final String SHARED_PREF_PREFIX = "Chrome.Aerium.";
@@ -8600,7 +8709,7 @@ public class AeriumBackupFragment extends ChromeBaseSettingsFragment {
         Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType(BACKUP_MIME_TYPE);
-        intent.putExtra(Intent.EXTRA_TITLE, "aerium-backup.json");
+        intent.putExtra(Intent.EXTRA_TITLE, "aerium-backup.zip");
         try {
             startActivityForResult(intent, REQUEST_EXPORT);
         } catch (RuntimeException e) {
@@ -8610,7 +8719,7 @@ public class AeriumBackupFragment extends ChromeBaseSettingsFragment {
     private void startRestore() {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
-        intent.setType(BACKUP_MIME_TYPE);
+        intent.setType("*/*");
         try {
             startActivityForResult(intent, REQUEST_RESTORE);
         } catch (RuntimeException e) {
@@ -8634,8 +8743,11 @@ public class AeriumBackupFragment extends ChromeBaseSettingsFragment {
         Context context = getContext();
         if (context == null) return;
         byte[] bytes;
+        JSONArray extensions;
         try {
-            bytes = buildBackup().toString(2).getBytes(StandardCharsets.UTF_8);
+            JSONObject backup = buildBackup();
+            extensions = backup.optJSONArray("extensions");
+            bytes = backup.toString(2).getBytes(StandardCharsets.UTF_8);
         } catch (JSONException e) {
             showToast(R.string.aerium_backup_export_failed);
             return;
@@ -8646,7 +8758,7 @@ public class AeriumBackupFragment extends ChromeBaseSettingsFragment {
                     boolean ok;
                     try (OutputStream out = context.getContentResolver().openOutputStream(uri)) {
                         if (out == null) throw new IOException("no output stream for " + uri);
-                        out.write(bytes);
+                        AeriumExtensionBackup.writeZip(out, bytes, extensions);
                         ok = true;
                     } catch (IOException e) {
                         ok = false;
@@ -8669,22 +8781,30 @@ public class AeriumBackupFragment extends ChromeBaseSettingsFragment {
                 TaskTraits.BEST_EFFORT_MAY_BLOCK,
                 () -> {
                     String json = null;
-                    try (InputStream in = context.getContentResolver().openInputStream(uri)) {
-                        if (in == null) throw new IOException("no input stream for " + uri);
-                        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-                        byte[] chunk = new byte[8192];
-                        int read;
-                        while ((read = in.read(chunk)) != -1) {
-                            buffer.write(chunk, 0, read);
+                    try (InputStream raw = context.getContentResolver().openInputStream(uri)) {
+                        if (raw == null) throw new IOException("no input stream for " + uri);
+                        BufferedInputStream in = new BufferedInputStream(raw);
+                        in.mark(4);
+                        int first = in.read();
+                        int second = in.read();
+                        in.reset();
+                        if (first == 'P' && second == 'K') {
+                            json = AeriumExtensionBackup.readZip(in);
+                        } else {
+                            json =
+                                    new String(
+                                            AeriumExtensionBackup.readAll(in),
+                                            StandardCharsets.UTF_8);
                         }
-                        json = buffer.toString(StandardCharsets.UTF_8.name());
                     } catch (IOException e) {
+                        json = null;
                     }
                     String finalJson = json;
                     PostTask.postTask(
                             TaskTraits.UI_DEFAULT,
                             () -> {
                                 if (finalJson == null) {
+                                    discardStaged();
                                     showToast(R.string.aerium_backup_restore_failed);
                                     return;
                                 }
@@ -8693,10 +8813,16 @@ public class AeriumBackupFragment extends ChromeBaseSettingsFragment {
                                     showToast(R.string.aerium_backup_restore_done);
                                     showRestartSnackbar();
                                 } catch (JSONException e) {
+                                    discardStaged();
                                     showToast(R.string.aerium_backup_restore_failed);
                                 }
                             });
                 });
+    }
+
+    private static void discardStaged() {
+        PostTask.postTask(
+                TaskTraits.BEST_EFFORT_MAY_BLOCK, AeriumExtensionBackup::discardStaged);
     }
 
     private void showRestartSnackbar() {
@@ -8735,6 +8861,7 @@ public class AeriumBackupFragment extends ChromeBaseSettingsFragment {
         root.put("tabs", collectTabs());
         root.put("permissions", collectPermissions());
         root.put("permission_defaults", collectPermissionDefaults());
+        root.put("extensions", AeriumExtensionBackup.collect(getProfilePrefs()));
         JSONObject settings = new JSONObject();
         settings.put("shared_preferences", collectSharedPreferences());
         settings.put("profile_prefs", collectPrefs(getProfilePrefs(), PROFILE_PREFS));
@@ -8766,6 +8893,9 @@ public class AeriumBackupFragment extends ChromeBaseSettingsFragment {
 
         JSONArray tabs = root.optJSONArray("tabs");
         if (tabs != null) restoreTabs(tabs);
+
+        AeriumToolbarPrefs.refreshCache();
+        AeriumExtensionBackup.queueInstalls(root.optJSONArray("extensions"), getProfilePrefs());
     }
 
     private static boolean isInternalScheme(@Nullable String scheme) {
@@ -9113,7 +9243,7 @@ sed_i 's|^import org.chromium.chrome.browser.browsing_data.ClearBrowsingDataFrag
 sed_i 's|^                    AboutChromeSettings.SEARCH_INDEX_DATA_PROVIDER,$|&\n                    AeriumBackupFragment.SEARCH_INDEX_DATA_PROVIDER,|' \
     $SIPR
 
-sed_i 's|      <message name="IDS_AERIUM_MEDIA_TITLE" desc=|      <message name="IDS_AERIUM_BACKUP_TITLE" desc="Title of the Backup and restore settings screen, and its row in the main Settings list.">\n        Backup and restore\n      </message>\n      <message name="IDS_AERIUM_BACKUP_SUMMARY" desc="Summary under that row.">\n        Save or bring back your open tabs, site permissions, settings and chrome://flags\n      </message>\n      <message name="IDS_AERIUM_BACKUP_EXPORT_TITLE" desc="Row that saves a backup file.">\n        Export backup\n      </message>\n      <message name="IDS_AERIUM_BACKUP_EXPORT_SUMMARY" desc="Summary under that row, naming what is and is not included.">\n        Open tabs, site permissions, browser and Aerium settings, and chrome://flags. Not passwords, history or cookies.\n      </message>\n      <message name="IDS_AERIUM_BACKUP_RESTORE_TITLE" desc="Row that reads a previously saved backup file.">\n        Restore from backup\n      </message>\n      <message name="IDS_AERIUM_BACKUP_RESTORE_SUMMARY" desc="Summary under that row.">\n        Reopens the saved tabs, and brings back the saved permissions, settings and chrome://flags. Restart Aerium to apply.\n      </message>\n      <message name="IDS_AERIUM_BACKUP_EXPORT_DONE" desc="Toast shown after a backup file is written successfully.">\n        Backup saved\n      </message>\n      <message name="IDS_AERIUM_BACKUP_EXPORT_FAILED" desc="Toast shown when saving the backup file failed.">\n        Could not save the backup\n      </message>\n      <message name="IDS_AERIUM_BACKUP_RESTORE_DONE" desc="Toast shown after a backup file is read and applied successfully.">\n        Backup restored\n      </message>\n      <message name="IDS_AERIUM_BACKUP_RESTORE_FAILED" desc="Toast shown when the chosen file could not be read as a backup.">\n        Could not read that backup file\n      </message>\n&|' \
+sed_i 's|      <message name="IDS_AERIUM_MEDIA_TITLE" desc=|      <message name="IDS_AERIUM_BACKUP_TITLE" desc="Title of the Backup and restore settings screen, and its row in the main Settings list.">\n        Backup and restore\n      </message>\n      <message name="IDS_AERIUM_BACKUP_SUMMARY" desc="Summary under that row.">\n        Save or bring back your open tabs, extensions, site permissions, settings and chrome://flags\n      </message>\n      <message name="IDS_AERIUM_BACKUP_EXPORT_TITLE" desc="Row that saves a backup file.">\n        Export backup\n      </message>\n      <message name="IDS_AERIUM_BACKUP_EXPORT_SUMMARY" desc="Summary under that row, naming what is and is not included.">\n        Open tabs, extensions and their settings, site permissions, browser and Aerium settings, and chrome://flags. Not passwords, history or cookies.\n      </message>\n      <message name="IDS_AERIUM_BACKUP_RESTORE_TITLE" desc="Row that reads a previously saved backup file.">\n        Restore from backup\n      </message>\n      <message name="IDS_AERIUM_BACKUP_RESTORE_SUMMARY" desc="Summary under that row.">\n        Reopens the saved tabs, and brings back the saved extensions, permissions, settings and chrome://flags. Restart Aerium to finish.\n      </message>\n      <message name="IDS_AERIUM_BACKUP_EXPORT_DONE" desc="Toast shown after a backup file is written successfully.">\n        Backup saved\n      </message>\n      <message name="IDS_AERIUM_BACKUP_EXPORT_FAILED" desc="Toast shown when saving the backup file failed.">\n        Could not save the backup\n      </message>\n      <message name="IDS_AERIUM_BACKUP_RESTORE_DONE" desc="Toast shown after a backup file is read and applied successfully.">\n        Backup restored\n      </message>\n      <message name="IDS_AERIUM_BACKUP_RESTORE_FAILED" desc="Toast shown when the chosen file could not be read as a backup.">\n        Could not read that backup file\n      </message>\n&|' \
     chrome/browser/ui/android/strings/android_chrome_strings.grd
 
 echo "[aerium] backup/restore settings screen registered"
@@ -10452,6 +10582,15 @@ AERIUM_FIRST_RUN_MESSAGES=$(cat <<'AERIUM_FIRST_RUN_GRD'
       <message name="IDS_AERIUM_ONB_START_BROWSING" desc="Button that closes the first-run page and opens a new tab.">
         Start browsing
       </message>
+      <message name="IDS_AERIUM_ONB_RESTORE_TITLE" desc="Heading of the page that reinstalls the extensions from a restored backup.">
+        Bringing back your extensions
+      </message>
+      <message name="IDS_AERIUM_ONB_RESTORE_SUB" desc="Text under that heading.">
+        Their settings come back with them. Keep this page open until it's done.
+      </message>
+      <message name="IDS_AERIUM_ONB_RESTORE_MANUAL" desc="Shown when some extensions in the backup did not come from the store, so Aerium can not reinstall them. NAMES is a comma separated list of extension names.">
+        Add these again yourself: <ph name="NAMES">$1<ex>floccus, SponsorBlock</ex></ph>
+      </message>
 AERIUM_FIRST_RUN_GRD
 )
 AERIUM_FIRST_RUN_MESSAGES="$AERIUM_FIRST_RUN_MESSAGES" perl -0777 -pi -e '
@@ -11341,7 +11480,7 @@ public final class AeriumToolbarPrefs {
         boolean top = layout == CLASSIC || layout == SPLIT;
         boolean bar = layout == SPLIT || layout == THUMB;
         prefs().edit().putInt(BOTTOM_BAR, bar ? 1 : 0).apply();
-        writeCache();
+        refreshCache();
         if (top != isAddressBarOnTop()) {
             sChangingLayout = true;
             try {
@@ -11358,12 +11497,12 @@ public final class AeriumToolbarPrefs {
 
     public static void setMenuInBar(boolean value) {
         prefs().edit().putBoolean(MENU_IN_BAR, value).apply();
-        writeCache();
+        refreshCache();
     }
 
     public static void setHomeInBar(boolean value) {
         prefs().edit().putBoolean(HOME_IN_BAR, value).apply();
-        writeCache();
+        refreshCache();
     }
 
     public static void setKeepBarsVisible(boolean value) {
@@ -11378,7 +11517,7 @@ public final class AeriumToolbarPrefs {
                 + (isHomeInBar() ? "false" : "true");
     }
 
-    private static void writeCache() {
+    public static void refreshCache() {
         boolean bar = isBottomBarOn();
         SharedPreferences.Editor editor = prefs().edit().putBoolean(CACHED_FLAG, bar);
         if (bar) {
@@ -11979,6 +12118,409 @@ sed_i 's|^                    AboutChromeSettings.SEARCH_INDEX_DATA_PROVIDER,$|&
 
 sed_i 's|      <message name="IDS_AERIUM_MEDIA_TITLE" desc=|      <message name="IDS_AERIUM_TOOLBAR_TITLE" desc="Title of the settings screen that sets the toolbar layout, its buttons and the menu items, and its row in the main Settings list.">\n        Toolbar and menu\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_LAYOUT" desc="Header above the four toolbar layout choices.">\n        Layout\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_CLASSIC" desc="Name of the layout with the address bar at the top and no bar at the bottom.">\n        Classic\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_CLASSIC_SUMMARY" desc="Description under the Classic layout choice.">\n        Address bar at the top\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_SPLIT" desc="Name of the layout with the address bar at the top and a bar of buttons at the bottom.">\n        Split\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_SPLIT_SUMMARY" desc="Description under the Split layout choice.">\n        Address bar at the top, buttons at the bottom\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_THUMB" desc="Name of the layout with the address bar and a bar of buttons both at the bottom, where the thumb reaches.">\n        Thumb\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_THUMB_SUMMARY" desc="Description under the Thumb layout choice.">\n        Address bar and buttons at the bottom, easy to reach\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_MINIMAL" desc="Name of the layout with only the address bar, at the bottom.">\n        Minimal\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_MINIMAL_SUMMARY" desc="Description under the Minimal layout choice.">\n        Only the address bar, at the bottom\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_BUTTONS" desc="Header above the toolbar button options.">\n        Buttons\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_MENU_BOTTOM" desc="Switch that puts the menu button in the bottom bar.">\n        Menu button at the bottom\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_MENU_BOTTOM_SUMMARY" desc="Summary under that switch. Split and Thumb are the layout names above.">\n        Off keeps it next to the address bar. Works with Split and Thumb.\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_HOME_BOTTOM" desc="Switch that puts the home button in the bottom bar.">\n        Home button at the bottom\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_HOME_BOTTOM_SUMMARY" desc="Summary under that switch. Split and Thumb are the layout names above.">\n        Off keeps it next to the address bar. Works with Split and Thumb.\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_SHORTCUT_SUMMARY" desc="Summary under the row that picks the toolbar shortcut button.">\n        One extra button next to the address bar\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_SCROLLING" desc="Header above the scrolling option.">\n        Scrolling\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_HIDE_ON_SCROLL" desc="Switch that lets the toolbar and bottom bar slide away while a page scrolls.">\n        Hide bars while scrolling\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_HIDE_ON_SCROLL_SUMMARY" desc="Summary under that switch.">\n        Gives pages more room. Turn off to keep the bars in place.\n      </message>\n      <message name="IDS_AERIUM_MENU_TITLE" desc="Header above the row that opens the menu items screen.">\n        Menu\n      </message>\n      <message name="IDS_AERIUM_MENU_ITEMS" desc="Title of the screen with a switch for each item of the main menu, and its row.">\n        Menu items\n      </message>\n      <message name="IDS_AERIUM_MENU_ITEMS_SUMMARY" desc="Summary under the Menu items row.">\n        Choose what the menu shows\n      </message>\n      <message name="IDS_AERIUM_MENU_QUICK_ROW" desc="Header above the switches for the row of icons at the top of the menu.">\n        Quick row\n      </message>\n      <message name="IDS_AERIUM_MENU_ITEMS_SECTION" desc="Header above the switches for the menu list items.">\n        Items\n      </message>\n      <message name="IDS_AERIUM_MENU_RESET" desc="Row that turns every menu item back on.">\n        Show everything again\n      </message>\n      <message name="IDS_AERIUM_MENU_RESET_SUMMARY" desc="Summary under that row. Settings is the name of the menu item that can not be hidden.">\n        Settings always stays in the menu\n      </message>\n      <message name="IDS_AERIUM_MENU_ITEM_FORWARD" desc="Switch for the forward arrow in the quick row of the menu.">\n        Forward\n      </message>\n      <message name="IDS_AERIUM_MENU_ITEM_BOOKMARK" desc="Switch for the star that bookmarks the page, in the quick row of the menu.">\n        Bookmark\n      </message>\n      <message name="IDS_AERIUM_MENU_ITEM_PAGE_INFO" desc="Switch for the page info icon in the quick row of the menu.">\n        Page info\n      </message>\n      <message name="IDS_AERIUM_MENU_ITEM_RELOAD" desc="Switch for the reload icon in the quick row of the menu.">\n        Reload\n      </message>\n&|' \
     chrome/browser/ui/android/strings/android_chrome_strings.grd
+
+cat > $AERIUM_TB_SRC/settings/AeriumExtensionBackup.java <<'AERIUM_EXTENSION_BACKUP_JAVA'
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+package org.chromium.chrome.browser.settings;
+
+import android.content.Context;
+
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import org.chromium.base.ContextUtils;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
+import org.chromium.components.prefs.PrefService;
+
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Locale;
+import java.util.Set;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
+import java.util.zip.ZipOutputStream;
+
+@NullMarked
+public final class AeriumExtensionBackup {
+    public static final String PENDING_KEY = "aerium_restore_extensions";
+    public static final String UBO_GITHUB_ID = "lndecelodlhfnppkffahdhmjmijkoipg";
+    public static final String UBO_GITHUB_REPO = "gorhill/uBlock";
+
+    public static final String SOURCE_STORE = "cws";
+    public static final String SOURCE_GITHUB = "github";
+    public static final String SOURCE_OTHER = "other";
+
+    static final String JSON_ENTRY = "backup.json";
+    private static final String DATA_PREFIX = "extensions/";
+    private static final String STAGING_DIR = "aerium_restore";
+    private static final String PROFILE_DIR = "Default";
+    private static final String LOCAL_SETTINGS = "Local Extension Settings";
+    private static final String SYNC_SETTINGS = "Sync Extension Settings";
+    private static final String INDEXED_DB = "IndexedDB";
+    private static final String[] ROOTS = {LOCAL_SETTINGS, SYNC_SETTINGS, INDEXED_DB};
+    private static final String STORE_UPDATE_HOST = "clients2.google.com";
+    private static final int LOCATION_INTERNAL = 1;
+    private static final int LOCATION_UNPACKED = 4;
+    private static final int FROM_WEBSTORE = 1 << 3;
+    private static final int WAS_INSTALLED_BY_DEFAULT = 1 << 7;
+    private static final long MAX_DIR_BYTES = 128L * 1024 * 1024;
+
+    private AeriumExtensionBackup() {}
+
+    private static File chromeDir() {
+        return ContextUtils.getApplicationContext().getDir("chrome", Context.MODE_PRIVATE);
+    }
+
+    private static File profileDir() {
+        return new File(chromeDir(), PROFILE_DIR);
+    }
+
+    private static File stagingDir() {
+        return new File(chromeDir(), STAGING_DIR);
+    }
+
+    private static boolean isId(String id) {
+        if (id.length() != 32) return false;
+        for (int i = 0; i < id.length(); i++) {
+            char c = id.charAt(i);
+            if (c < 'a' || c > 'p') return false;
+        }
+        return true;
+    }
+
+    private static String[] dataPaths(String id) {
+        String origin = INDEXED_DB + "/chrome-extension_" + id + "_0.indexeddb.";
+        return new String[] {
+            LOCAL_SETTINGS + "/" + id, SYNC_SETTINGS + "/" + id, origin + "leveldb", origin + "blob",
+        };
+    }
+
+    private static @Nullable String readText(File file) {
+        if (!file.isFile() || file.length() > 4 * 1024 * 1024) return null;
+        try (InputStream in = new FileInputStream(file)) {
+            return new String(readAll(in), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    static byte[] readAll(InputStream in) throws IOException {
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        byte[] chunk = new byte[8192];
+        int read;
+        while ((read = in.read(chunk)) != -1) {
+            buffer.write(chunk, 0, read);
+        }
+        return buffer.toByteArray();
+    }
+
+    private static @Nullable JSONObject readJson(File file) {
+        String text = readText(file);
+        if (text == null) return null;
+        if (!text.isEmpty() && text.charAt(0) == '﻿') text = text.substring(1);
+        try {
+            return new JSONObject(text);
+        } catch (JSONException e) {
+            return null;
+        }
+    }
+
+    private static @Nullable File installDir(JSONObject entry) {
+        String path = entry.optString("path", "");
+        if (path.isEmpty()) return null;
+        File dir = new File(path);
+        if (!dir.isAbsolute()) dir = new File(new File(profileDir(), "Extensions"), path);
+        return dir;
+    }
+
+    private static String localizedName(JSONObject manifest, @Nullable File dir) {
+        String name = manifest.optString("name", "");
+        if (!name.startsWith("__MSG_") || !name.endsWith("__") || dir == null) return name;
+        String key = name.substring(6, name.length() - 2).toLowerCase(Locale.ROOT);
+        String locale = manifest.optString("default_locale", "en");
+        JSONObject messages = readJson(new File(dir, "_locales/" + locale + "/messages.json"));
+        if (messages == null) return name;
+        Iterator<String> keys = messages.keys();
+        while (keys.hasNext()) {
+            String candidate = keys.next();
+            if (!candidate.toLowerCase(Locale.ROOT).equals(key)) continue;
+            JSONObject message = messages.optJSONObject(candidate);
+            if (message != null) return message.optString("message", name);
+        }
+        return name;
+    }
+
+    public static JSONArray collect(@Nullable PrefService prefs) throws JSONException {
+        JSONArray result = new JSONArray();
+        if (prefs == null) return result;
+        String json = prefs.getJson("extensions.settings");
+        if (json == null || json.isEmpty()) return result;
+        JSONObject all;
+        try {
+            all = new JSONObject(json);
+        } catch (JSONException e) {
+            return result;
+        }
+        Iterator<String> ids = all.keys();
+        while (ids.hasNext()) {
+            String id = ids.next();
+            JSONObject entry = all.optJSONObject(id);
+            if (entry == null || !isId(id)) continue;
+            int location = entry.optInt("location", 0);
+            if (location != LOCATION_INTERNAL && location != LOCATION_UNPACKED) continue;
+            int flags = entry.optInt("creation_flags", 0);
+            if ((flags & WAS_INSTALLED_BY_DEFAULT) != 0) continue;
+            if (entry.optBoolean("was_installed_by_default", false)) continue;
+            if (entry.optBoolean("was_installed_by_oem", false)) continue;
+            File dir = installDir(entry);
+            JSONObject manifest = entry.optJSONObject("manifest");
+            if (manifest == null && dir != null) manifest = readJson(new File(dir, "manifest.json"));
+            if (manifest == null) manifest = new JSONObject();
+            String source = SOURCE_OTHER;
+            if (location == LOCATION_INTERNAL) {
+                boolean store =
+                        (flags & FROM_WEBSTORE) != 0
+                                || entry.optBoolean("from_webstore", false)
+                                || manifest.optString("update_url", "").contains(STORE_UPDATE_HOST);
+                if (store) source = SOURCE_STORE;
+            } else if (id.equals(UBO_GITHUB_ID)) {
+                source = SOURCE_GITHUB;
+            }
+            JSONObject item = new JSONObject();
+            item.put("id", id);
+            item.put("source", source);
+            item.put("name", localizedName(manifest, dir));
+            item.put("version", manifest.optString("version", ""));
+            item.put("aerogel", entry.optBoolean("incognito", false));
+            result.put(item);
+        }
+        return result;
+    }
+
+    private static Set<String> restorableIds(@Nullable JSONArray extensions) {
+        Set<String> ids = new HashSet<>();
+        if (extensions == null) return ids;
+        for (int i = 0; i < extensions.length(); i++) {
+            JSONObject item = extensions.optJSONObject(i);
+            if (item == null) continue;
+            String id = item.optString("id", "");
+            String source = item.optString("source", "");
+            if (isId(id) && (source.equals(SOURCE_STORE) || source.equals(SOURCE_GITHUB))) {
+                ids.add(id);
+            }
+        }
+        return ids;
+    }
+
+    private static long sizeOf(File file) {
+        if (file.isFile()) return file.length();
+        long total = 0;
+        File[] children = file.listFiles();
+        if (children == null) return 0;
+        for (File child : children) {
+            total += sizeOf(child);
+            if (total > MAX_DIR_BYTES) return total;
+        }
+        return total;
+    }
+
+    private static boolean skipFile(String name) {
+        return name.equals("LOCK") || name.equals("LOG") || name.equals("LOG.old");
+    }
+
+    private static void addTree(ZipOutputStream zip, File file, String name, byte[] buffer)
+            throws IOException {
+        if (file.isDirectory()) {
+            File[] children = file.listFiles();
+            if (children == null) return;
+            for (File child : children) {
+                addTree(zip, child, name + "/" + child.getName(), buffer);
+            }
+            return;
+        }
+        if (!file.isFile() || skipFile(file.getName())) return;
+        try (InputStream in = new FileInputStream(file)) {
+            zip.putNextEntry(new ZipEntry(DATA_PREFIX + name));
+            int read;
+            while ((read = in.read(buffer)) != -1) {
+                zip.write(buffer, 0, read);
+            }
+            zip.closeEntry();
+        } catch (IOException e) {
+            zip.closeEntry();
+        }
+    }
+
+    public static void writeZip(OutputStream out, byte[] json, @Nullable JSONArray extensions)
+            throws IOException {
+        ZipOutputStream zip = new ZipOutputStream(out);
+        zip.putNextEntry(new ZipEntry(JSON_ENTRY));
+        zip.write(json);
+        zip.closeEntry();
+        byte[] buffer = new byte[64 * 1024];
+        File profile = profileDir();
+        for (String id : restorableIds(extensions)) {
+            for (String path : dataPaths(id)) {
+                File dir = new File(profile, path);
+                if (!dir.isDirectory() || sizeOf(dir) > MAX_DIR_BYTES) continue;
+                addTree(zip, dir, path, buffer);
+            }
+        }
+        zip.finish();
+        zip.flush();
+    }
+
+    private static boolean allowedDataPath(String path, Set<String> ids) {
+        if (path.contains("..") || path.startsWith("/") || path.contains("\\")) return false;
+        for (String id : ids) {
+            for (String root : dataPaths(id)) {
+                if (path.startsWith(root + "/")) return true;
+            }
+        }
+        return false;
+    }
+
+    public static void deleteTree(File file) {
+        File[] children = file.isDirectory() ? file.listFiles() : null;
+        if (children != null) {
+            for (File child : children) deleteTree(child);
+        }
+        file.delete();
+    }
+
+    public static @Nullable String readZip(InputStream in) throws IOException {
+        File staging = stagingDir();
+        deleteTree(staging);
+        String json = null;
+        Set<String> ids = new HashSet<>();
+        String stagingPath = staging.getCanonicalPath() + File.separator;
+        byte[] buffer = new byte[64 * 1024];
+        ZipInputStream zip = new ZipInputStream(in);
+        ZipEntry entry;
+        while ((entry = zip.getNextEntry()) != null) {
+            String name = entry.getName();
+            if (entry.isDirectory()) continue;
+            if (name.equals(JSON_ENTRY) && json == null) {
+                json = new String(readAll(zip), StandardCharsets.UTF_8);
+                try {
+                    ids = restorableIds(new JSONObject(json).optJSONArray("extensions"));
+                } catch (JSONException e) {
+                    ids = new HashSet<>();
+                }
+                continue;
+            }
+            if (json == null || !name.startsWith(DATA_PREFIX)) continue;
+            String path = name.substring(DATA_PREFIX.length());
+            if (!allowedDataPath(path, ids)) continue;
+            File target = new File(staging, path);
+            if (!target.getCanonicalPath().startsWith(stagingPath)) continue;
+            File parent = target.getParentFile();
+            if (parent == null || (!parent.isDirectory() && !parent.mkdirs())) continue;
+            try (OutputStream out = new FileOutputStream(target)) {
+                int read;
+                while ((read = zip.read(buffer)) != -1) {
+                    out.write(buffer, 0, read);
+                }
+            }
+        }
+        return json;
+    }
+
+    public static void discardStaged() {
+        deleteTree(stagingDir());
+    }
+
+    public static void applyStaged() {
+        File staging = stagingDir();
+        if (!staging.isDirectory()) return;
+        File profile = profileDir();
+        for (String root : ROOTS) {
+            File[] entries = new File(staging, root).listFiles();
+            if (entries == null) continue;
+            File target = new File(profile, root);
+            if (!target.isDirectory() && !target.mkdirs()) continue;
+            for (File entry : entries) {
+                File dest = new File(target, entry.getName());
+                deleteTree(dest);
+                entry.renameTo(dest);
+            }
+        }
+        deleteTree(staging);
+    }
+
+    public static void queueInstalls(@Nullable JSONArray extensions, @Nullable PrefService prefs) {
+        if (extensions == null || extensions.length() == 0) return;
+        Set<String> installed = new HashSet<>();
+        try {
+            JSONArray current = collect(prefs);
+            for (int i = 0; i < current.length(); i++) {
+                JSONObject item = current.optJSONObject(i);
+                if (item != null) installed.add(item.optString("id", ""));
+            }
+        } catch (JSONException e) {
+        }
+        JSONArray pending = new JSONArray();
+        try {
+            for (int i = 0; i < extensions.length(); i++) {
+                JSONObject item = extensions.optJSONObject(i);
+                if (item == null) continue;
+                String id = item.optString("id", "");
+                String source = item.optString("source", "");
+                if (!isId(id) || installed.contains(id)) continue;
+                JSONObject entry = new JSONObject();
+                if (source.equals(SOURCE_STORE)) {
+                    entry.put("id", id);
+                } else if (source.equals(SOURCE_GITHUB) && id.equals(UBO_GITHUB_ID)) {
+                    entry.put("id", UBO_GITHUB_REPO);
+                } else {
+                    source = SOURCE_OTHER;
+                    entry.put("id", id);
+                }
+                entry.put("source", source);
+                entry.put("aerogel", item.optBoolean("aerogel", false));
+                entry.put("name", item.optString("name", ""));
+                pending.put(entry);
+            }
+        } catch (JSONException e) {
+            return;
+        }
+        if (pending.length() == 0) return;
+        ContextUtils.getAppSharedPreferences()
+                .edit()
+                .putString(PENDING_KEY, pending.toString())
+                .apply();
+    }
+}
+AERIUM_EXTENSION_BACKUP_JAVA
+
+sed_i 's|^  "java/src/org/chromium/chrome/browser/browsing_data/BrowsingDataCounterBridge.java",$|  "java/src/org/chromium/chrome/browser/settings/AeriumExtensionBackup.java",\n&|' \
+    chrome/android/chrome_java_sources.gni
+sed_i 's%^        PopupCreatorFactory.setInstance(new PopupCreatorImpl());$%&\n        org.chromium.chrome.browser.settings.AeriumExtensionBackup.applyStaged();%' \
+    $CAI
+
+sed_i 's|^    public int getPrefType(String preference) {$|    public String getJson(String preference) {\n        return PrefServiceJni.get().getJson(mNativePrefServiceAndroid, preference);\n    }\n\n&|' \
+    $PSJ
+sed_i 's|^        int getPrefType(long nativePrefServiceAndroid, String preference);$|        @JniType("std::string")\n        String getJson(long nativePrefServiceAndroid, String preference);\n\n&|' \
+    $PSJ
+sed_i 's|^  int32_t GetPrefType(JNIEnv\* env,$|  std::string GetJson(JNIEnv* env,\n                      const base::android::JavaRef<jstring>\& j_preference);\n&|' \
+    $PSH
+sed_i 's|^#include "base/android/jni_string.h"$|&\n#include "base/json/json_writer.h"|' \
+    $PSC
+sed_i 's|^int32_t PrefServiceAndroid::GetPrefType($|std::string PrefServiceAndroid::GetJson(\n    JNIEnv* env,\n    const JavaRef<jstring>\& j_preference) {\n  const PrefService::Preference* preference = pref_service_->FindPreference(\n      base::android::ConvertJavaStringToUTF8(env, j_preference));\n  if (!preference \|\| !preference->GetValue()) {\n    return std::string();\n  }\n  return base::WriteJson(*preference->GetValue()).value_or(std::string());\n}\n\n&|' \
+    $PSC
 
 echo "[aerium] toolbar layouts and menu items applied"
 
