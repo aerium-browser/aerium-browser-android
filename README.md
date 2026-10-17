@@ -45,12 +45,13 @@ Worth installing, all free and open source:
 - **[Cookie AutoDelete V3](https://chromewebstore.google.com/detail/cookie-autodelete-v3/jofioghmpdcgiiobkhmdojhjbjiejfbd)**, clears a site's cookies once its tabs close.
 - **[Decentraleyes](https://chromewebstore.google.com/detail/decentraleyes/ldpochfccmkkmhdbclfhpagapcfdljkj)**, serves common libraries locally instead of from a CDN.
 
-Pin an extension to the toolbar from its <kbd>⋮</kbd> menu in the extensions list. To allow one in Incognito, open **Manage extensions → Details → Allow in Incognito**.
+Pin an extension to the toolbar from its <kbd>⋮</kbd> menu in the extensions list. To allow one in Aerogel tabs, open **Manage extensions → Details → Allow in Aerogel**.
 
 ## Private by default.
 
 - **Nothing phones home.** No telemetry, no background chatter.
 - **Aerium Guard** sets privacy, security and speed options in one place.
+- **Aerogel tabs** are Aerium's private tabs. They close without a trace, and you pick which extensions run in them.
 - **Safe Browsing and DRM stay off** until you turn them on.
 - **Global Privacy Control** is sent on every page.
 - **Fingerprinting resistance** for canvas, text measurement and WebGL, always on.

@@ -10942,4 +10942,81 @@ sed_i 's|^      <message name="IDS_GOT_IT" desc=|      <message name="IDS_AERIUM
 
 echo "[aerium] per-site data rule applied"
 
+cat > components/browser_ui/styles/android/java/res/drawable/ic_incognito_24dp.xml <<'AERIUM_IC_INCOGNITO_24DP_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="960"
+    android:viewportHeight="960"
+    android:tint="?attr/colorControlNormal">
+  <path
+      android:fillColor="#00000000"
+      android:strokeColor="@android:color/white"
+      android:strokeWidth="70"
+      android:strokeLineJoin="round"
+      android:pathData="M480,120L792,300L792,660L480,840L168,660L168,300Z" />
+  <path
+      android:fillColor="@android:color/white"
+      android:pathData="M336,400a44,44 0,1 0,88,0a44,44 0,1 0,-88,0ZM536,460a44,44 0,1 0,88,0a44,44 0,1 0,-88,0ZM396,600a44,44 0,1 0,88,0a44,44 0,1 0,-88,0Z" />
+</vector>
+AERIUM_IC_INCOGNITO_24DP_XML
+
+cat > components/browser_ui/styles/android/java/res/drawable/ic_incognito_fill_24dp.xml <<'AERIUM_IC_INCOGNITO_FILL_24DP_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="960"
+    android:viewportHeight="960"
+    android:tint="?attr/colorControlNormal">
+  <path
+      android:fillColor="@android:color/white"
+      android:fillType="evenOdd"
+      android:pathData="M480,96L813,288L813,672L480,864L147,672L147,288ZM336,400a44,44 0,1 0,88,0a44,44 0,1 0,-88,0ZM536,460a44,44 0,1 0,88,0a44,44 0,1 0,-88,0ZM396,600a44,44 0,1 0,88,0a44,44 0,1 0,-88,0Z" />
+</vector>
+AERIUM_IC_INCOGNITO_FILL_24DP_XML
+
+cat > components/browser_ui/styles/android/java/res/drawable/ic_incognito_fill_18dp.xml <<'AERIUM_IC_INCOGNITO_FILL_18DP_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="18dp"
+    android:height="18dp"
+    android:viewportWidth="960"
+    android:viewportHeight="960"
+    android:tint="?attr/colorControlNormal">
+  <path
+      android:fillColor="@android:color/white"
+      android:fillType="evenOdd"
+      android:pathData="M480,96L813,288L813,672L480,864L147,672L147,288ZM336,400a44,44 0,1 0,88,0a44,44 0,1 0,-88,0ZM536,460a44,44 0,1 0,88,0a44,44 0,1 0,-88,0ZM396,600a44,44 0,1 0,88,0a44,44 0,1 0,-88,0Z" />
+</vector>
+AERIUM_IC_INCOGNITO_FILL_18DP_XML
+
+cat > components/browser_ui/styles/android/java/res/drawable/ic_incognito_circle_fill_24dp.xml <<'AERIUM_IC_INCOGNITO_CIRCLE_FILL_24DP_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="960"
+    android:viewportHeight="960"
+    android:tint="?attr/colorControlNormal">
+  <path
+      android:fillColor="@android:color/white"
+      android:fillType="evenOdd"
+      android:pathData="M0,480a480,480 0,1 0,960,0a480,480 0,1 0,-960,0ZM480,264L667.2,372L667.2,588L480,696L292.8,588L292.8,372ZM393.6,432a26.4,26.4 0,1 0,52.8,0a26.4,26.4 0,1 0,-52.8,0ZM513.6,468a26.4,26.4 0,1 0,52.8,0a26.4,26.4 0,1 0,-52.8,0ZM429.6,552a26.4,26.4 0,1 0,52.8,0a26.4,26.4 0,1 0,-52.8,0Z" />
+</vector>
+AERIUM_IC_INCOGNITO_CIRCLE_FILL_24DP_XML
+
+for d in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
+    cp "$SCRIPT_DIR/res/aerogel/$d/incognito_splash.png" chrome/android/java/res/drawable-$d/incognito_splash.png || return 1
+    cp "$SCRIPT_DIR/res/aerogel/$d/location_bar_incognito_badge.png" chrome/android/java/res/drawable-$d/location_bar_incognito_badge.png || return 1
+    cp "$SCRIPT_DIR/res/aerogel/$d/shortcut_incognito.png" chrome/android/java/res/drawable-$d/shortcut_incognito.png || return 1
+    cp "$SCRIPT_DIR/res/aerogel/$d/incognito_small.png" chrome/browser/ui/android/toolbar/java/res/drawable-$d/incognito_small.png || return 1
+    cp "$SCRIPT_DIR/res/aerogel/$d/incognito_favicon.png" chrome/browser/ui/android/favicon/java/res/drawable-$d/incognito_favicon.png || return 1
+done
+
+python3 "$SCRIPT_DIR/l10n/aerogel.py" || return 1
+
+echo "[aerium] Aerogel tabs applied"
+
 python3 "$SCRIPT_DIR/l10n/inject.py" || return 1
