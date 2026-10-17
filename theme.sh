@@ -9305,50 +9305,61 @@ cat > chrome/android/java/res/xml/aerium_guard_preferences.xml <<'AERIUM_GUARD_X
 <!-- Copyright 2026 The Chromium Authors
      Use of this source code is governed by a BSD-style license that can be
      found in the LICENSE file. -->
-<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
-    <Preference
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <org.chromium.chrome.browser.settings.AeriumGuardStatusPreference
         android:key="aerium_guard_status"
         android:persistent="false"
         android:selectable="false"
         android:title="@string/aerium_guard_status_title" />
-    <Preference
+    <org.chromium.components.browser_ui.settings.AeriumChoicePreference
         android:key="aerium_guard_recommended"
         android:persistent="false"
+        android:icon="@drawable/aerium_ic_guard_recommended"
         android:title="@string/aerium_guard_recommended_title"
-        android:summary="@string/aerium_guard_recommended_summary" />
-    <Preference
+        android:summary="@string/aerium_onb_mode_recommended_sub" />
+    <org.chromium.components.browser_ui.settings.AeriumChoicePreference
         android:key="aerium_guard_privacy"
         android:persistent="false"
+        android:icon="@drawable/aerium_ic_guard_privacy"
         android:title="@string/aerium_guard_privacy_title"
-        android:summary="@string/aerium_guard_privacy_summary" />
-    <Preference
+        android:summary="@string/aerium_guard_privacy_short" />
+    <org.chromium.components.browser_ui.settings.AeriumChoicePreference
         android:key="aerium_guard_performance"
         android:persistent="false"
+        android:icon="@drawable/aerium_ic_guard_performance"
         android:title="@string/aerium_guard_performance_title"
-        android:summary="@string/aerium_guard_performance_summary" />
-    <Preference
+        android:summary="@string/aerium_guard_performance_short" />
+    <org.chromium.components.browser_ui.settings.AeriumChoicePreference
         android:key="aerium_guard_security"
         android:persistent="false"
+        android:icon="@drawable/aerium_ic_guard_security"
         android:title="@string/aerium_guard_security_title"
-        android:summary="@string/aerium_guard_security_summary" />
+        android:summary="@string/aerium_guard_security_short" />
     <PreferenceCategory
         android:key="aerium_guard_profiles"
         android:title="@string/aerium_guard_profiles_title" />
-    <Preference
+    <org.chromium.components.browser_ui.settings.ChromeBasePreference
+        android:key="aerium_guard_actions"
+        android:layout="@layout/aerium_group_break"
+        android:persistent="false"
+        android:selectable="false"
+        app:backgroundStyle="none" />
+    <org.chromium.components.browser_ui.settings.AeriumRowPreference
         android:key="aerium_guard_profile_save"
         android:persistent="false"
-        android:title="@string/aerium_guard_profile_save_title"
-        android:summary="@string/aerium_guard_profile_save_summary" />
-    <Preference
+        android:icon="@drawable/aerium_ic_guard_save"
+        android:title="@string/aerium_guard_save_current" />
+    <org.chromium.components.browser_ui.settings.AeriumRowPreference
         android:key="aerium_guard_profile_import"
         android:persistent="false"
-        android:title="@string/aerium_guard_profile_import_title"
-        android:summary="@string/aerium_guard_profile_import_summary" />
-    <Preference
+        android:icon="@drawable/aerium_ic_guard_import"
+        android:title="@string/aerium_guard_import_file" />
+    <org.chromium.components.browser_ui.settings.AeriumRowPreference
         android:key="aerium_guard_profile_paste"
         android:persistent="false"
-        android:title="@string/aerium_guard_profile_paste_title"
-        android:summary="@string/aerium_guard_profile_paste_summary" />
+        android:icon="@drawable/aerium_ic_guard_paste"
+        android:title="@string/aerium_guard_import_clipboard" />
 </PreferenceScreen>
 AERIUM_GUARD_XML
 
@@ -9396,6 +9407,8 @@ import org.chromium.chrome.browser.settings.search.ChromeBaseSearchIndexProvider
 import org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager.SnackbarManageable;
+import org.chromium.components.browser_ui.settings.AeriumChoicePreference;
+import org.chromium.components.browser_ui.settings.AeriumRowPreference;
 import org.chromium.components.browser_ui.settings.SettingsFragment;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
 import org.chromium.components.browser_ui.site_settings.WebsitePreferenceBridge;
@@ -9493,6 +9506,7 @@ public class AeriumGuardFragment extends ChromeBaseSettingsFragment {
                             .apply();
                     prefs().setString(REQUESTED_PRESET, preset);
                     updateStatus();
+                    updateChoices(preset, SECURITY.equals(preset));
                     showRestartSnackbar();
                     return true;
                 });
@@ -9512,16 +9526,20 @@ public class AeriumGuardFragment extends ChromeBaseSettingsFragment {
         list.removeAll();
         List<AeriumGuardProfile> profiles = AeriumGuardProfile.loadAll();
         if (profiles.isEmpty()) {
-            Preference empty = new Preference(getStyledContext());
+            AeriumRowPreference empty = new AeriumRowPreference(getStyledContext());
+            empty.setValueFromSummary(false);
             empty.setTitle(R.string.aerium_guard_profiles_empty);
             empty.setSelectable(false);
             list.addPreference(empty);
             return;
         }
         for (AeriumGuardProfile profile : profiles) {
-            Preference row = new Preference(getStyledContext());
+            AeriumRowPreference row = new AeriumRowPreference(getStyledContext());
             row.setTitle(profile.getName());
-            row.setSummary(R.string.aerium_guard_profile_row_summary);
+            row.setSummary(R.string.aerium_guard_profile_actions);
+            row.setValueFromSummary(false);
+            row.setIcon(R.drawable.aerium_ic_guard_profile);
+            row.setAeriumChevron(true);
             row.setOnPreferenceClickListener(
                     preference -> {
                         showProfileActions(profile);
@@ -9851,6 +9869,19 @@ public class AeriumGuardFragment extends ChromeBaseSettingsFragment {
                             : getString(R.string.aerium_guard_active_custom);
         }
         status.setSummary(summary);
+        updateChoices(active, jitBlocked);
+    }
+
+    private void updateChoices(String active, boolean jitBlocked) {
+        choose(PREF_RECOMMENDED, RECOMMENDED.equals(active) && !jitBlocked);
+        choose(PREF_PRIVACY, PRIVACY.equals(active) && !jitBlocked);
+        choose(PREF_PERFORMANCE, PERFORMANCE.equals(active) && !jitBlocked);
+        choose(PREF_SECURITY, SECURITY.equals(active) && jitBlocked);
+    }
+
+    private void choose(String key, boolean checked) {
+        Preference pref = findPreference(key);
+        if (pref instanceof AeriumChoicePreference choice) choice.setChecked(checked);
     }
 
     private boolean isJitBlocked() {
@@ -14197,6 +14228,236 @@ perl -0777 -pi -e '
 echo "[aerium] canvas palette, font and settings look applied"
 
 AERIUM_CANVAS_DRAWABLES=chrome/android/java/res/drawable
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_guard_recommended.xml <<'AERIUM_IC_GUARD_RECOMMENDED_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="19dp"
+    android:height="19dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.85"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M12 3l7 3v5c0 5-3.5 8.5-7 10-3.5-1.5-7-5-7-10V6z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.85"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M9 12l2 2 4-4" />
+</vector>
+AERIUM_IC_GUARD_RECOMMENDED_XML
+
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_guard_privacy.xml <<'AERIUM_IC_GUARD_PRIVACY_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="19dp"
+    android:height="19dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M4 7h16" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M9 7V4h6v3" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M6 7l1 13h10l1-13" />
+</vector>
+AERIUM_IC_GUARD_PRIVACY_XML
+
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_guard_performance.xml <<'AERIUM_IC_GUARD_PERFORMANCE_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="19dp"
+    android:height="19dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M13 3L5 13h6l-1 8 8-10h-6z" />
+</vector>
+AERIUM_IC_GUARD_PERFORMANCE_XML
+
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_guard_security.xml <<'AERIUM_IC_GUARD_SECURITY_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="19dp"
+    android:height="19dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M7,11h10a2,2 0,0 1,2,2v5a2,2 0,0 1,-2,2h-10a2,2 0,0 1,-2,-2v-5a2,2 0,0 1,2,-2Z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M8 11V8a4 4 0 0 1 8 0v3" />
+</vector>
+AERIUM_IC_GUARD_SECURITY_XML
+
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_guard_profile.xml <<'AERIUM_IC_GUARD_PROFILE_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="19dp"
+    android:height="19dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M5 4h11l3 3v13H5z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M8 4v5h7V4" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M8 20v-6h8v6" />
+</vector>
+AERIUM_IC_GUARD_PROFILE_XML
+
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_guard_save.xml <<'AERIUM_IC_GUARD_SAVE_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="19dp"
+    android:height="19dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M5 4h11l3 3v13H5z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M8 4v5h7V4" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M8 20v-6h8v6" />
+</vector>
+AERIUM_IC_GUARD_SAVE_XML
+
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_guard_import.xml <<'AERIUM_IC_GUARD_IMPORT_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="19dp"
+    android:height="19dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M14 3v5h5" />
+</vector>
+AERIUM_IC_GUARD_IMPORT_XML
+
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_guard_paste.xml <<'AERIUM_IC_GUARD_PASTE_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="19dp"
+    android:height="19dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M8.5,4h7a1.5,1.5 0,0 1,1.5,1.5v1a1.5,1.5 0,0 1,-1.5,1.5h-7a1.5,1.5 0,0 1,-1.5,-1.5v-1a1.5,1.5 0,0 1,1.5,-1.5Z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M7 6H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-1" />
+</vector>
+AERIUM_IC_GUARD_PASTE_XML
+
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_guard_status.xml <<'AERIUM_IC_GUARD_STATUS_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="22dp"
+    android:height="22dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/aeriumOnAcc"
+        android:strokeWidth="1.85"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M12 3l7 3v5c0 5-3.5 8.5-7 10-3.5-1.5-7-5-7-10V6z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/aeriumOnAcc"
+        android:strokeWidth="1.85"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M9 12l2 2 4-4" />
+</vector>
+AERIUM_IC_GUARD_STATUS_XML
+
 cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_guard.xml <<'AERIUM_IC_GUARD_XML'
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
@@ -14727,7 +14988,7 @@ cat > $AERIUM_CANVAS_DRAWABLES/aerium_settings_find.xml <<'AERIUM_SETTINGS_FIND_
 </vector>
 AERIUM_SETTINGS_FIND_XML
 
-sed_i 's|^  "java/res/drawable/acute_24dp.xml",$|  "java/res/drawable/aerium_ic_about.xml",\n  "java/res/drawable/aerium_ic_accessibility.xml",\n  "java/res/drawable/aerium_ic_appearance.xml",\n  "java/res/drawable/aerium_ic_backup.xml",\n  "java/res/drawable/aerium_ic_default_browser.xml",\n  "java/res/drawable/aerium_ic_developer.xml",\n  "java/res/drawable/aerium_ic_downloads.xml",\n  "java/res/drawable/aerium_ic_extensions.xml",\n  "java/res/drawable/aerium_ic_guard.xml",\n  "java/res/drawable/aerium_ic_languages.xml",\n  "java/res/drawable/aerium_ic_media.xml",\n  "java/res/drawable/aerium_ic_notifications.xml",\n  "java/res/drawable/aerium_ic_privacy.xml",\n  "java/res/drawable/aerium_ic_search.xml",\n  "java/res/drawable/aerium_ic_sites.xml",\n  "java/res/drawable/aerium_ic_tabs.xml",\n  "java/res/drawable/aerium_ic_toolbar.xml",\n  "java/res/drawable/aerium_ic_web_apps.xml",\n  "java/res/drawable/aerium_settings_find.xml",\n&|' \
+sed_i 's|^  "java/res/drawable/acute_24dp.xml",$|  "java/res/drawable/aerium_ic_about.xml",\n  "java/res/drawable/aerium_ic_accessibility.xml",\n  "java/res/drawable/aerium_ic_appearance.xml",\n  "java/res/drawable/aerium_ic_backup.xml",\n  "java/res/drawable/aerium_ic_default_browser.xml",\n  "java/res/drawable/aerium_ic_developer.xml",\n  "java/res/drawable/aerium_ic_downloads.xml",\n  "java/res/drawable/aerium_ic_extensions.xml",\n  "java/res/drawable/aerium_ic_guard.xml",\n  "java/res/drawable/aerium_ic_guard_import.xml",\n  "java/res/drawable/aerium_ic_guard_paste.xml",\n  "java/res/drawable/aerium_ic_guard_performance.xml",\n  "java/res/drawable/aerium_ic_guard_privacy.xml",\n  "java/res/drawable/aerium_ic_guard_profile.xml",\n  "java/res/drawable/aerium_ic_guard_recommended.xml",\n  "java/res/drawable/aerium_ic_guard_save.xml",\n  "java/res/drawable/aerium_ic_guard_security.xml",\n  "java/res/drawable/aerium_ic_guard_status.xml",\n  "java/res/drawable/aerium_ic_languages.xml",\n  "java/res/drawable/aerium_ic_media.xml",\n  "java/res/drawable/aerium_ic_notifications.xml",\n  "java/res/drawable/aerium_ic_privacy.xml",\n  "java/res/drawable/aerium_ic_search.xml",\n  "java/res/drawable/aerium_ic_sites.xml",\n  "java/res/drawable/aerium_ic_tabs.xml",\n  "java/res/drawable/aerium_ic_toolbar.xml",\n  "java/res/drawable/aerium_ic_web_apps.xml",\n  "java/res/drawable/aerium_settings_find.xml",\n&|' \
     chrome/android/chrome_java_resources.gni
 
 cat > $AERIUM_SETTINGS_RES/drawable/aerium_row_chevron.xml <<'AERIUM_ROW_CHEVRON_XML'
@@ -15190,6 +15451,209 @@ perl -0777 -pi -e '
     s{import androidx\.core\.content\.ContextCompat;\n}{}
         or die "[aerium] FATAL: SettingsSearchCoordinator imports moved\n";
 ' $AERIUM_SSC || return 1
+cat > $AERIUM_SETTINGS_RES/layout/aerium_choice_widget.xml <<'AERIUM_CHOICE_WIDGET_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<RadioButton xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/Widget.BrowserUI.RadioButton"
+    android:id="@+id/aerium_choice"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:background="@null"
+    android:clickable="false"
+    android:focusable="false"
+    android:importantForAccessibility="no" />
+AERIUM_CHOICE_WIDGET_XML
+sed_i 's|^    "java/res/layout/button_preference_button.xml",$|    "java/res/layout/aerium_choice_widget.xml",\n&|' \
+    components/browser_ui/settings/android/BUILD.gn
+cat > $AERIUM_SETTINGS_WIDGET/AeriumChoicePreference.java <<'AERIUM_CHOICE_PREFERENCE_JAVA'
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+package org.chromium.components.browser_ui.settings;
+
+import android.content.Context;
+import android.util.AttributeSet;
+import android.view.View;
+import android.view.accessibility.AccessibilityNodeInfo;
+import android.widget.RadioButton;
+
+import androidx.preference.PreferenceViewHolder;
+
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
+
+@NullMarked
+public class AeriumChoicePreference extends AeriumRowPreference {
+    private boolean mChecked;
+
+    public AeriumChoicePreference(Context context) {
+        this(context, null);
+    }
+
+    public AeriumChoicePreference(Context context, @Nullable AttributeSet attrs) {
+        super(context, attrs);
+        setWidgetLayoutResource(R.layout.aerium_choice_widget);
+        setValueFromSummary(false);
+    }
+
+    public void setChecked(boolean checked) {
+        if (mChecked == checked) return;
+        mChecked = checked;
+        setAccentIcon(checked);
+        notifyChanged();
+    }
+
+    public boolean isChecked() {
+        return mChecked;
+    }
+
+    @Override
+    public void onBindViewHolder(PreferenceViewHolder holder) {
+        super.onBindViewHolder(holder);
+        View choice = holder.findViewById(R.id.aerium_choice);
+        if (choice instanceof RadioButton radio) radio.setChecked(mChecked);
+        holder.itemView.setAccessibilityDelegate(
+                new View.AccessibilityDelegate() {
+                    @Override
+                    public void onInitializeAccessibilityNodeInfo(
+                            View host, AccessibilityNodeInfo info) {
+                        super.onInitializeAccessibilityNodeInfo(host, info);
+                        info.setClassName(RadioButton.class.getName());
+                        info.setCheckable(true);
+                        info.setChecked(mChecked);
+                    }
+                });
+    }
+}
+AERIUM_CHOICE_PREFERENCE_JAVA
+sed_i 's|^    "widget/java/src/org/chromium/components/browser_ui/settings/ButtonPreference.java",$|    "widget/java/src/org/chromium/components/browser_ui/settings/AeriumChoicePreference.java",\n&|' \
+    components/browser_ui/settings/android/BUILD.gn
+
+cat > chrome/android/java/res/drawable/aerium_guard_status_bg.xml <<'AERIUM_GUARD_STATUS_BG_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="22dp" />
+    <solid android:color="?attr/aeriumAccSoft" />
+</shape>
+AERIUM_GUARD_STATUS_BG_XML
+cat > chrome/android/java/res/drawable/aerium_guard_status_tile.xml <<'AERIUM_GUARD_STATUS_TILE_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="15dp" />
+    <solid android:color="?attr/aeriumAcc" />
+</shape>
+AERIUM_GUARD_STATUS_TILE_XML
+cat > chrome/android/java/res/layout/aerium_guard_status.xml <<'AERIUM_GUARD_STATUS_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginStart="16dp"
+    android:layout_marginEnd="16dp"
+    android:layout_marginBottom="16dp"
+    android:background="@drawable/aerium_guard_status_bg"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingStart="18dp"
+    android:paddingEnd="18dp"
+    android:paddingTop="16dp"
+    android:paddingBottom="16dp">
+
+    <FrameLayout
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:layout_marginEnd="14dp"
+        android:background="@drawable/aerium_guard_status_tile">
+
+        <ImageView
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:layout_gravity="center"
+            android:importantForAccessibility="no"
+            android:src="@drawable/aerium_ic_guard_status" />
+    </FrameLayout>
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/aerium_guard_status_label"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textAppearance="@style/TextAppearance.TextMedium.Secondary"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/aerium_guard_status_value"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:fontFamily="@font/aerium_sans_semibold"
+            android:textColor="?attr/colorOnSurface"
+            android:textFontWeight="600"
+            android:textSize="20sp" />
+    </LinearLayout>
+</LinearLayout>
+AERIUM_GUARD_STATUS_XML
+cat > chrome/android/java/src/org/chromium/chrome/browser/settings/AeriumGuardStatusPreference.java <<'AERIUM_GUARD_STATUS_JAVA'
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+package org.chromium.chrome.browser.settings;
+
+import android.content.Context;
+import android.util.AttributeSet;
+import android.view.View;
+import android.widget.TextView;
+
+import androidx.preference.PreferenceViewHolder;
+
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
+import org.chromium.chrome.R;
+import org.chromium.components.browser_ui.settings.ChromeBasePreference;
+
+@NullMarked
+public class AeriumGuardStatusPreference extends ChromeBasePreference {
+    public AeriumGuardStatusPreference(Context context) {
+        this(context, null);
+    }
+
+    public AeriumGuardStatusPreference(Context context, @Nullable AttributeSet attrs) {
+        super(context, attrs);
+        setLayoutResource(R.layout.aerium_guard_status);
+        setSelectable(false);
+        setPersistent(false);
+    }
+
+    @Override
+    public @BackgroundStyle int getCustomBackgroundStyle() {
+        return BackgroundStyle.NONE;
+    }
+
+    @Override
+    public void onBindViewHolder(PreferenceViewHolder holder) {
+        super.onBindViewHolder(holder);
+        View label = holder.findViewById(R.id.aerium_guard_status_label);
+        if (label instanceof TextView text) text.setText(getTitle());
+        View value = holder.findViewById(R.id.aerium_guard_status_value);
+        if (value instanceof TextView text) text.setText(getSummary());
+    }
+}
+AERIUM_GUARD_STATUS_JAVA
+sed_i 's|^  "java/src/org/chromium/chrome/browser/browsing_data/BrowsingDataCounterBridge.java",$|  "java/src/org/chromium/chrome/browser/settings/AeriumGuardStatusPreference.java",\n&|' \
+    chrome/android/chrome_java_sources.gni
+sed_i 's|^  "java/res/drawable/acute_24dp.xml",$|  "java/res/drawable/aerium_guard_status_bg.xml",\n  "java/res/drawable/aerium_guard_status_tile.xml",\n&|' \
+    chrome/android/chrome_java_resources.gni
+sed_i 's|^  "java/res/layout/account_chooser_dialog_item.xml",$|  "java/res/layout/aerium_guard_status.xml",\n&|' \
+    chrome/android/chrome_java_resources.gni
 AERIUM_CANVAS_GRD=$(cat <<'AERIUM_CANVAS_GRD_XML'
       <message name="IDS_AERIUM_SETTINGS_FIND" desc="Placeholder in the search box at the top of Settings.">
         Find a setting
@@ -15211,6 +15675,27 @@ AERIUM_CANVAS_GRD=$(cat <<'AERIUM_CANVAS_GRD_XML'
       </message>
       <message name="IDS_AERIUM_TABS_LIST" desc="Value shown next to Tabs when open tabs are shown as a list.">
         List
+      </message>
+      <message name="IDS_AERIUM_GUARD_PRIVACY_SHORT" desc="Short line under the Privacy mode on the Aerium Guard screen.">
+        Wipes data on close, no suggestions
+      </message>
+      <message name="IDS_AERIUM_GUARD_PERFORMANCE_SHORT" desc="Short line under the Performance mode on the Aerium Guard screen.">
+        Pages load before you tap
+      </message>
+      <message name="IDS_AERIUM_GUARD_SECURITY_SHORT" desc="Short line under the Security mode on the Aerium Guard screen. JIT is the JavaScript just in time compiler.">
+        No JIT, HTTPS only
+      </message>
+      <message name="IDS_AERIUM_GUARD_PROFILE_ACTIONS" desc="Line under each saved profile on the Aerium Guard screen.">
+        Apply, share or export
+      </message>
+      <message name="IDS_AERIUM_GUARD_SAVE_CURRENT" desc="Row on the Aerium Guard screen that saves the current settings as a named profile.">
+        Save current settings
+      </message>
+      <message name="IDS_AERIUM_GUARD_IMPORT_FILE" desc="Row on the Aerium Guard screen that adds a profile from a file.">
+        Import from a file
+      </message>
+      <message name="IDS_AERIUM_GUARD_IMPORT_CLIPBOARD" desc="Row on the Aerium Guard screen that adds a profile copied to the clipboard.">
+        Import from clipboard
       </message>
 AERIUM_CANVAS_GRD_XML
 )
