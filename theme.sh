@@ -1808,14 +1808,14 @@ sed_i 's|"opt_out", true};|"opt_out", false};|' \
 # New Tab Page, settings, sheets and cards at once, and can be switched on and
 # off per launch instead of being baked in.
 #
-# Every surface role goes to #000000, including the overflow menu, the cards
-# inside settings and the progress-bar track. Those three float over or sit on
-# another surface, so black-on-black leaves them without an edge - that is a
-# deliberate trade, taking the boundary in exchange for the pixels being off.
-# elevationOverlayEnabled is turned off because Material's elevation overlay
+# The page itself goes to #000000. Cards, menus, sheets and the toolbar take
+# the near black steps of the design (#0B0D11, then #15181F), which keeps an
+# edge between a surface and what it sits on while leaving almost every pixel
+# of the panel dark. elevationOverlayEnabled is turned off because Material's
+# elevation overlay
 # lightens a surface in proportion to its elevation, which would put the grey
 # straight back.
-sed_i 's|^</resources>$|    <!-- Aerium: see theme.sh. Pure black for OLED panels. -->\n    <style name="ThemeOverlay.BrowserUI.AeriumPureBlack" parent="">\n        <item name="android:colorBackground">@android:color/black</item>\n        <item name="colorSurface">@android:color/black</item>\n        <item name="colorSurfaceDim">@android:color/black</item>\n        <item name="colorSurfaceContainerLowest">@android:color/black</item>\n        <item name="colorSurfaceContainerLow">@android:color/black</item>\n        <item name="colorSurfaceContainer">@android:color/black</item>\n        <item name="colorSurfaceContainerHigh">@android:color/black</item>\n        <item name="colorSurfaceBright">@android:color/black</item>\n        <item name="colorSurfaceContainerHighest">@android:color/black</item>\n        <item name="aeriumIncognitoBgColor">@android:color/black</item>\n        <item name="elevationOverlayEnabled">false</item>\n        <!-- Aerium: pin the text roles too. A dialog inflated against a\n             context this overlay never reached (its own themed window,\n             rather than the Activity'"'"'s) otherwise keeps whatever on-surface\n             tone that context started with, which can end up too close to\n             this overlay'"'"'s black - the permission prompt being the case that\n             was actually seen. Plain white/near-white always reads against\n             black, so pinning it here can only help, never regress contrast\n             on a context this overlay does reach. -->\n        <item name="colorOnSurface">@android:color/white</item>\n        <item name="colorOnSurfaceVariant">#CCFFFFFF</item>\n        <item name="colorOnBackground">@android:color/white</item>\n        <item name="globalFilledButtonBgColor">?attr/colorPrimary</item>\n        <item name="globalFilledButtonTextColor">?attr/colorOnPrimary</item>\n        <item name="globalFilledTonalButtonBgColor">?attr/colorPrimaryContainer</item>\n        <item name="globalFilledTonalButtonTextColor">?attr/colorOnPrimaryContainer</item>\n        <item name="globalTextButtonTextColor">?attr/colorPrimary</item>\n    </style>\n&|' \
+sed_i 's|^</resources>$|    <!-- Aerium: see theme.sh. Pure black for OLED panels. -->\n    <style name="ThemeOverlay.BrowserUI.AeriumPureBlack" parent="">\n        <item name="colorPrimary">#9CB2F0</item>\n        <item name="colorPrimaryInverse">#1B2C5E</item>\n        <item name="colorOnPrimary">#05080F</item>\n        <item name="colorPrimaryContainer">#141B2D</item>\n        <item name="colorOnPrimaryContainer">#F2F4F8</item>\n        <item name="colorSecondaryContainer">#141B2D</item>\n        <item name="colorOnSecondaryContainer">#F2F4F8</item>\n        <item name="colorTertiaryContainer">#161838</item>\n        <item name="colorOnTertiaryContainer">#F2F4F8</item>\n        <item name="android:colorBackground">#000000</item>\n        <item name="colorSurface">#000000</item>\n        <item name="colorSurfaceDim">#000000</item>\n        <item name="colorSurfaceContainerLowest">#000000</item>\n        <item name="colorSurfaceContainerLow">#0B0D11</item>\n        <item name="colorSurfaceContainer">#0B0D11</item>\n        <item name="colorSurfaceContainerHigh">#15181F</item>\n        <item name="colorSurfaceBright">#0B0D11</item>\n        <item name="colorSurfaceContainerHighest">#15181F</item>\n        <item name="colorSurfaceVariant">#15181F</item>\n        <item name="colorSurfaceInverse">#F2F4F8</item>\n        <item name="colorOnSurfaceInverse">#000000</item>\n        <item name="colorOutline">#20242E</item>\n        <item name="colorOutlineVariant">#20242E</item>\n        <item name="aeriumIncognitoBgColor">@android:color/black</item>\n        <item name="elevationOverlayEnabled">false</item>\n        <!-- Aerium: pin the text roles too. A dialog inflated against a\n             context this overlay never reached (its own themed window,\n             rather than the Activity'"'"'s) otherwise keeps whatever on-surface\n             tone that context started with, which can end up too close to\n             this overlay'"'"'s black - the permission prompt being the case that\n             was actually seen. Plain white/near-white always reads against\n             black, so pinning it here can only help, never regress contrast\n             on a context this overlay does reach. -->\n        <item name="colorOnSurface">#F2F4F8</item>\n        <item name="colorOnSurfaceVariant">#97A0B0</item>\n        <item name="colorOnBackground">#F2F4F8</item>\n        <item name="globalFilledButtonBgColor">?attr/colorPrimary</item>\n        <item name="globalFilledButtonTextColor">?attr/colorOnPrimary</item>\n        <item name="globalFilledTonalButtonBgColor">?attr/colorPrimaryContainer</item>\n        <item name="globalFilledTonalButtonTextColor">?attr/colorOnPrimaryContainer</item>\n        <item name="globalTextButtonTextColor">?attr/colorPrimary</item>\n        <item name="aeriumBg">#000000</item>\n        <item name="aeriumSf">#0B0D11</item>\n        <item name="aeriumSf2">#15181F</item>\n        <item name="aeriumLine">#20242E</item>\n        <item name="aeriumInk">#F2F4F8</item>\n        <item name="aeriumInk2">#97A0B0</item>\n        <item name="aeriumAcc">#9CB2F0</item>\n        <item name="aeriumOnAcc">#05080F</item>\n        <item name="aeriumAccSoft">#141B2D</item>\n        <item name="aeriumHaze">#9AA5FF</item>\n        <item name="aeriumHazeSoft">#161838</item>\n        <item name="aeriumOnHaze">#070A20</item>\n    </style>\n&|' \
     components/browser_ui/styles/android/java/res/values/themes.xml
 
 
@@ -2238,16 +2238,10 @@ sed_i 's|^    static void applyThemeOverlays(Context context) {$|&\n        // A
 # a brand. Below Android 12 the same call is a no-op and the baseline palette
 # shows through, so today Aerium has two different unbranded looks.
 #
-# The values are the desktop ones, unchanged, so the two platforms agree: the
-# same #2C6BAE seed, the same pale ladder in light, the same DEEP navy ladder
-# in dark that replaced the first, too-light attempt.
-#
-# Surfaces and the primary role only. On-colours, secondary, tertiary, error
-# and the outlines are left to the baseline palette, for the same reason the
-# desktop mixer leaves them to the generated one: Chromium tuned its contrast
-# against surfaces of these lightnesses, and re-deriving readability by hand
-# buys nothing. Baseline on-surface is near-black in light and near-white in
-# dark, which is right over both ladders.
+# The values are the ones the redesign is drawn with: a navy accent, a cool
+# grey page with white cards in light, and a slate ladder in dark. The same
+# values are written into the BrowserUI theme template further down, so a
+# window this overlay never reaches looks the same as one it does.
 #
 # Only the wallpaper branch is replaced, not shouldApplyDynamicColors(). The
 # branch above it honours a colour the user picked for the New Tab Page, and
@@ -2258,7 +2252,7 @@ sed_i 's|^    static void applyThemeOverlays(Context context) {$|&\n        // A
 # on, the AeriumPureBlack overlay is applied after this one and takes the
 # surfaces to black, leaving the primary from here - which is the intended
 # stack: brand accent on an OLED-black ground.
-sed_i 's|^</resources>$|    <!-- Aerium: see theme.sh. The desktop palette, applied to Android. -->\n    <style name="ThemeOverlay.BrowserUI.AeriumBrandLight" parent="">\n        <item name="colorPrimary">#2C6BAE</item>\n        <item name="colorOnPrimary">#FFFFFF</item>\n        <item name="colorPrimaryContainer">#D8E6F5</item>\n        <item name="colorOnPrimaryContainer">#0B2138</item>\n        <item name="colorSurface">#F2F7FD</item>\n        <item name="colorSurfaceDim">#DCE7F4</item>\n        <item name="colorSurfaceBright">#FFFFFF</item>\n        <item name="colorSurfaceContainerLowest">#FFFFFF</item>\n        <item name="colorSurfaceContainerLow">#F7FAFE</item>\n        <item name="colorSurfaceContainer">#E9F1FB</item>\n        <item name="colorSurfaceContainerHigh">#E1ECF9</item>\n        <item name="colorSurfaceContainerHighest">#D8E6F5</item>\n        <item name="globalFilledButtonBgColor">?attr/colorPrimary</item>\n        <item name="globalFilledButtonTextColor">?attr/colorOnPrimary</item>\n        <item name="globalFilledTonalButtonBgColor">?attr/colorPrimaryContainer</item>\n        <item name="globalFilledTonalButtonTextColor">?attr/colorOnPrimaryContainer</item>\n        <item name="globalTextButtonTextColor">?attr/colorPrimary</item>\n    </style>\n\n    <style name="ThemeOverlay.BrowserUI.AeriumBrandDark" parent="">\n        <item name="colorPrimary">#7FC4E4</item>\n        <item name="colorOnPrimary">#06283D</item>\n        <item name="globalFilledButtonBgColor">?attr/colorPrimary</item>\n        <item name="globalFilledButtonTextColor">?attr/colorOnPrimary</item>\n        <item name="globalFilledTonalButtonBgColor">?attr/colorPrimaryContainer</item>\n        <item name="globalFilledTonalButtonTextColor">?attr/colorOnPrimaryContainer</item>\n        <item name="globalTextButtonTextColor">?attr/colorPrimary</item>\n    </style>\n\n&|' \
+sed_i 's|^</resources>$|    <!-- Aerium: see theme.sh. The Aerium palette. -->\n    <style name="ThemeOverlay.BrowserUI.AeriumBrandLight" parent="">\n        <item name="colorPrimary">#1B2C5E</item>\n        <item name="colorPrimaryInverse">#9CB2F0</item>\n        <item name="colorOnPrimary">#FFFFFF</item>\n        <item name="colorPrimaryContainer">#E2E7F3</item>\n        <item name="colorOnPrimaryContainer">#0F1626</item>\n        <item name="colorSecondaryContainer">#E2E7F3</item>\n        <item name="colorOnSecondaryContainer">#0F1626</item>\n        <item name="colorTertiaryContainer">#E7E9FC</item>\n        <item name="colorOnTertiaryContainer">#0F1626</item>\n        <item name="android:colorBackground">#F4F5F7</item>\n        <item name="colorSurface">#F4F5F7</item>\n        <item name="colorSurfaceDim">#ECEEF2</item>\n        <item name="colorSurfaceContainerLowest">#FFFFFF</item>\n        <item name="colorSurfaceContainerLow">#FFFFFF</item>\n        <item name="colorSurfaceContainer">#FFFFFF</item>\n        <item name="colorSurfaceContainerHigh">#ECEEF2</item>\n        <item name="colorSurfaceBright">#FFFFFF</item>\n        <item name="colorSurfaceContainerHighest">#ECEEF2</item>\n        <item name="colorSurfaceVariant">#ECEEF2</item>\n        <item name="colorSurfaceInverse">#1A1E26</item>\n        <item name="colorOnSurfaceInverse">#EEF1F6</item>\n        <item name="colorOutline">#DDE0E6</item>\n        <item name="colorOutlineVariant">#DDE0E6</item>\n        <item name="colorOnSurface">#0F1626</item>\n        <item name="colorOnSurfaceVariant">#5A6373</item>\n        <item name="colorOnBackground">#0F1626</item>\n        <item name="globalFilledButtonBgColor">?attr/colorPrimary</item>\n        <item name="globalFilledButtonTextColor">?attr/colorOnPrimary</item>\n        <item name="globalFilledTonalButtonBgColor">?attr/colorPrimaryContainer</item>\n        <item name="globalFilledTonalButtonTextColor">?attr/colorOnPrimaryContainer</item>\n        <item name="globalTextButtonTextColor">?attr/colorPrimary</item>\n        <item name="aeriumBg">#F4F5F7</item>\n        <item name="aeriumSf">#FFFFFF</item>\n        <item name="aeriumSf2">#ECEEF2</item>\n        <item name="aeriumLine">#DDE0E6</item>\n        <item name="aeriumInk">#0F1626</item>\n        <item name="aeriumInk2">#5A6373</item>\n        <item name="aeriumAcc">#1B2C5E</item>\n        <item name="aeriumOnAcc">#FFFFFF</item>\n        <item name="aeriumAccSoft">#E2E7F3</item>\n        <item name="aeriumHaze">#5464E6</item>\n        <item name="aeriumHazeSoft">#E7E9FC</item>\n        <item name="aeriumOnHaze">#FFFFFF</item>\n    </style>\n\n    <style name="ThemeOverlay.BrowserUI.AeriumBrandDark" parent="">\n        <item name="colorPrimary">#9CB2F0</item>\n        <item name="colorPrimaryInverse">#1B2C5E</item>\n        <item name="colorOnPrimary">#0D1424</item>\n        <item name="colorPrimaryContainer">#232C45</item>\n        <item name="colorOnPrimaryContainer">#EEF1F6</item>\n        <item name="colorSecondaryContainer">#232C45</item>\n        <item name="colorOnSecondaryContainer">#EEF1F6</item>\n        <item name="colorTertiaryContainer">#23264A</item>\n        <item name="colorOnTertiaryContainer">#EEF1F6</item>\n        <item name="android:colorBackground">#111419</item>\n        <item name="colorSurface">#111419</item>\n        <item name="colorSurfaceDim">#111419</item>\n        <item name="colorSurfaceContainerLowest">#111419</item>\n        <item name="colorSurfaceContainerLow">#1A1E26</item>\n        <item name="colorSurfaceContainer">#1A1E26</item>\n        <item name="colorSurfaceContainerHigh">#242934</item>\n        <item name="colorSurfaceBright">#1A1E26</item>\n        <item name="colorSurfaceContainerHighest">#242934</item>\n        <item name="colorSurfaceVariant">#242934</item>\n        <item name="colorSurfaceInverse">#EEF1F6</item>\n        <item name="colorOnSurfaceInverse">#111419</item>\n        <item name="colorOutline">#2E3442</item>\n        <item name="colorOutlineVariant">#2E3442</item>\n        <item name="colorOnSurface">#EEF1F6</item>\n        <item name="colorOnSurfaceVariant">#A0A8B8</item>\n        <item name="colorOnBackground">#EEF1F6</item>\n        <item name="globalFilledButtonBgColor">?attr/colorPrimary</item>\n        <item name="globalFilledButtonTextColor">?attr/colorOnPrimary</item>\n        <item name="globalFilledTonalButtonBgColor">?attr/colorPrimaryContainer</item>\n        <item name="globalFilledTonalButtonTextColor">?attr/colorOnPrimaryContainer</item>\n        <item name="globalTextButtonTextColor">?attr/colorPrimary</item>\n        <item name="aeriumBg">#111419</item>\n        <item name="aeriumSf">#1A1E26</item>\n        <item name="aeriumSf2">#242934</item>\n        <item name="aeriumLine">#2E3442</item>\n        <item name="aeriumInk">#EEF1F6</item>\n        <item name="aeriumInk2">#A0A8B8</item>\n        <item name="aeriumAcc">#9CB2F0</item>\n        <item name="aeriumOnAcc">#0D1424</item>\n        <item name="aeriumAccSoft">#232C45</item>\n        <item name="aeriumHaze">#9AA5FF</item>\n        <item name="aeriumHazeSoft">#23264A</item>\n        <item name="aeriumOnHaze">#0D1030</item>\n    </style>\n\n&|' \
     components/browser_ui/styles/android/java/res/values/themes.xml
 
 sed_i 's|^                DynamicColors.applyToActivityIfAvailable(this);$|                // Aerium: our palette rather than the wallpaper'"'"'s - see theme.sh.\n                // Applied on every OS version, where the call it replaces did\n                // nothing below Android 12.\n                applySingleThemeOverlay(\n                        getNightModeStateProvider().isInNightMode()\n                                ? R.style.ThemeOverlay_BrowserUI_AeriumBrandDark\n                                : R.style.ThemeOverlay_BrowserUI_AeriumBrandLight);|' \
@@ -13671,5 +13665,514 @@ perl -0777 -pi -e '
 ' chrome/browser/ui/android/bottombar/java/src/org/chromium/chrome/browser/ui/bottombar/BottomBarCoordinator.java || return 1
 
 echo "[aerium] toolbar layouts and menu items applied"
+
+AERIUM_FONT_RES=ui/android/java/res/font
+for _aerium_weight in regular medium semibold bold; do
+    cp "$SCRIPT_DIR/res/font/aerium_sans_$_aerium_weight.ttf" \
+        "$AERIUM_FONT_RES/aerium_sans_$_aerium_weight.ttf" || return 1
+done
+cat > $AERIUM_FONT_RES/aerium_sans.xml <<'AERIUM_SANS_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<font-family xmlns:android="http://schemas.android.com/apk/res/android">
+    <font
+        android:font="@font/aerium_sans_regular"
+        android:fontStyle="normal"
+        android:fontWeight="400" />
+    <font
+        android:font="@font/aerium_sans_medium"
+        android:fontStyle="normal"
+        android:fontWeight="500" />
+    <font
+        android:font="@font/aerium_sans_semibold"
+        android:fontStyle="normal"
+        android:fontWeight="600" />
+    <font
+        android:font="@font/aerium_sans_bold"
+        android:fontStyle="normal"
+        android:fontWeight="700" />
+</font-family>
+AERIUM_SANS_XML
+cat > $AERIUM_FONT_RES/aerium_sans_medium.xml <<'AERIUM_SANS_MEDIUM_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<font-family xmlns:android="http://schemas.android.com/apk/res/android">
+    <font
+        android:font="@font/aerium_sans_medium"
+        android:fontStyle="normal"
+        android:fontWeight="400" />
+    <font
+        android:font="@font/aerium_sans_bold"
+        android:fontStyle="normal"
+        android:fontWeight="700" />
+</font-family>
+AERIUM_SANS_MEDIUM_XML
+cat > $AERIUM_FONT_RES/aerium_sans_semibold.xml <<'AERIUM_SANS_SEMIBOLD_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<font-family xmlns:android="http://schemas.android.com/apk/res/android">
+    <font
+        android:font="@font/aerium_sans_semibold"
+        android:fontStyle="normal"
+        android:fontWeight="400" />
+    <font
+        android:font="@font/aerium_sans_bold"
+        android:fontStyle="normal"
+        android:fontWeight="700" />
+</font-family>
+AERIUM_SANS_SEMIBOLD_XML
+cp $AERIUM_FONT_RES/aerium_sans.xml $AERIUM_FONT_RES/accent_font.xml || return 1
+sed_i 's|^    "java/res/font/accent_font.xml",$|&\n    "java/res/font/aerium_sans.xml",\n    "java/res/font/aerium_sans_bold.ttf",\n    "java/res/font/aerium_sans_medium.ttf",\n    "java/res/font/aerium_sans_medium.xml",\n    "java/res/font/aerium_sans_regular.ttf",\n    "java/res/font/aerium_sans_semibold.ttf",\n    "java/res/font/aerium_sans_semibold.xml",|' \
+    ui/android/BUILD.gn
+
+perl -0777 -pi -e '
+    s{(<style name="TextAppearance" parent="android:TextAppearance" tools:ignore="UnusedResources">\n        <item name="android:fontFamily">)sans-serif(</item>)}{$1\@font/aerium_sans$2}
+        or die "[aerium] FATAL: the base TextAppearance no longer sets sans-serif\n";
+    s{(<style name="TextAppearance.MediumStyle" tools:ignore="UnusedResources">\n        <item name="android:fontFamily">)sans-serif-medium(</item>)}{$1\@font/aerium_sans_medium$2\n        <item name="android:textFontWeight">500</item>}
+        or die "[aerium] FATAL: TextAppearance.MediumStyle no longer sets sans-serif-medium\n";
+    for my $h ("Headline", "Headline2") {
+        s{(<style name="TextAppearance.$h">\n        <item name="android:fontFamily">)\@font/accent_font(</item>)}{$1\@font/aerium_sans_semibold$2\n        <item name="android:textFontWeight">600</item>\n        <item name="android:letterSpacing">-0.01</item>}
+            or die "[aerium] FATAL: TextAppearance.$h no longer uses accent_font\n";
+    }
+' ui/android/java/res/values/styles.xml || return 1
+
+sed_i 's|^    <attr name="colorButtonSizeOverlay" format="reference" />$|&\n\n    <attr name="aeriumBg" format="color" />\n    <attr name="aeriumSf" format="color" />\n    <attr name="aeriumSf2" format="color" />\n    <attr name="aeriumLine" format="color" />\n    <attr name="aeriumInk" format="color" />\n    <attr name="aeriumInk2" format="color" />\n    <attr name="aeriumAcc" format="color" />\n    <attr name="aeriumOnAcc" format="color" />\n    <attr name="aeriumAccSoft" format="color" />\n    <attr name="aeriumHaze" format="color" />\n    <attr name="aeriumHazeSoft" format="color" />\n    <attr name="aeriumOnHaze" format="color" />|' \
+    components/browser_ui/styles/android/java/res/values/attrs.xml
+
+AERIUM_PALETTE_LIGHT=$(cat <<'AERIUM_PALETTE_LIGHT_XML'
+        <item name="colorPrimary">#1B2C5E</item>
+        <item name="colorPrimaryInverse">#9CB2F0</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorPrimaryContainer">#E2E7F3</item>
+        <item name="colorOnPrimaryContainer">#0F1626</item>
+        <item name="colorSecondaryContainer">#E2E7F3</item>
+        <item name="colorOnSecondaryContainer">#0F1626</item>
+        <item name="colorAccent">@macro/default_control_color_active</item>
+        <item name="android:colorBackground">#F4F5F7</item>
+        <item name="colorOnBackground">#0F1626</item>
+        <item name="colorSurface">#F4F5F7</item>
+        <item name="colorOnSurface">#0F1626</item>
+        <item name="colorSurfaceVariant">#ECEEF2</item>
+        <item name="colorSurfaceContainerLowest">#FFFFFF</item>
+        <item name="colorSurfaceContainerLow">#FFFFFF</item>
+        <item name="colorSurfaceContainer">#FFFFFF</item>
+        <item name="colorSurfaceContainerHigh">#ECEEF2</item>
+        <item name="colorSurfaceContainerHighest">#ECEEF2</item>
+        <item name="colorSurfaceBright">#FFFFFF</item>
+        <item name="colorSurfaceDim">#ECEEF2</item>
+        <item name="colorOnSurfaceVariant">#5A6373</item>
+        <item name="colorSurfaceInverse">#1A1E26</item>
+        <item name="colorOnSurfaceInverse">#EEF1F6</item>
+        <item name="colorOutline">#DDE0E6</item>
+        <item name="colorOutlineVariant">#DDE0E6</item>
+        <item name="colorTertiaryContainer">#E7E9FC</item>
+        <item name="colorOnTertiaryContainer">#0F1626</item>
+        <item name="colorError">@color/baseline_error_40</item>
+        <item name="aeriumBg">#F4F5F7</item>
+        <item name="aeriumSf">#FFFFFF</item>
+        <item name="aeriumSf2">#ECEEF2</item>
+        <item name="aeriumLine">#DDE0E6</item>
+        <item name="aeriumInk">#0F1626</item>
+        <item name="aeriumInk2">#5A6373</item>
+        <item name="aeriumAcc">#1B2C5E</item>
+        <item name="aeriumOnAcc">#FFFFFF</item>
+        <item name="aeriumAccSoft">#E2E7F3</item>
+        <item name="aeriumHaze">#5464E6</item>
+        <item name="aeriumHazeSoft">#E7E9FC</item>
+        <item name="aeriumOnHaze">#FFFFFF</item>
+AERIUM_PALETTE_LIGHT_XML
+)
+AERIUM_PALETTE_DARK=$(cat <<'AERIUM_PALETTE_DARK_XML'
+        <item name="colorPrimary">#9CB2F0</item>
+        <item name="colorPrimaryInverse">#1B2C5E</item>
+        <item name="colorOnPrimary">#0D1424</item>
+        <item name="colorPrimaryContainer">#232C45</item>
+        <item name="colorOnPrimaryContainer">#EEF1F6</item>
+        <item name="colorSecondaryContainer">#232C45</item>
+        <item name="colorOnSecondaryContainer">#EEF1F6</item>
+        <item name="android:colorBackground">#111419</item>
+        <item name="colorOnBackground">#EEF1F6</item>
+        <item name="colorSurface">#111419</item>
+        <item name="colorOnSurface">#EEF1F6</item>
+        <item name="colorSurfaceVariant">#242934</item>
+        <item name="colorOnSurfaceVariant">#A0A8B8</item>
+        <item name="colorSurfaceInverse">#EEF1F6</item>
+        <item name="colorOnSurfaceInverse">#111419</item>
+        <item name="colorSurfaceBright">#1A1E26</item>
+        <item name="colorSurfaceDim">#111419</item>
+        <item name="colorSurfaceContainerLowest">#111419</item>
+        <item name="colorSurfaceContainerLow">#1A1E26</item>
+        <item name="colorSurfaceContainer">#1A1E26</item>
+        <item name="colorSurfaceContainerHigh">#242934</item>
+        <item name="colorSurfaceContainerHighest">#242934</item>
+        <item name="colorOutline">#2E3442</item>
+        <item name="colorOutlineVariant">#2E3442</item>
+        <item name="colorTertiaryContainer">#23264A</item>
+        <item name="colorOnTertiaryContainer">#EEF1F6</item>
+        <item name="colorError">@color/baseline_error_80</item>
+        <item name="aeriumBg">#111419</item>
+        <item name="aeriumSf">#1A1E26</item>
+        <item name="aeriumSf2">#242934</item>
+        <item name="aeriumLine">#2E3442</item>
+        <item name="aeriumInk">#EEF1F6</item>
+        <item name="aeriumInk2">#A0A8B8</item>
+        <item name="aeriumAcc">#9CB2F0</item>
+        <item name="aeriumOnAcc">#0D1424</item>
+        <item name="aeriumAccSoft">#232C45</item>
+        <item name="aeriumHaze">#9AA5FF</item>
+        <item name="aeriumHazeSoft">#23264A</item>
+        <item name="aeriumOnHaze">#0D1030</item>
+AERIUM_PALETTE_DARK_XML
+)
+AERIUM_PALETTE_LIGHT="$AERIUM_PALETTE_LIGHT" AERIUM_PALETTE_DARK="$AERIUM_PALETTE_DARK" perl -0777 -pi -e '
+    s{(\{% macro color_palette_light_attributes\(\) %\}\n).*?(\n        \{% endmacro %\})}{$1$ENV{AERIUM_PALETTE_LIGHT}$2}s
+        or die "[aerium] FATAL: the light palette macro moved in the BrowserUI theme template\n";
+    s{(\{% macro color_palette_dark_attributes\(\) %\}\n).*?(\n        \{% endmacro %\})}{$1$ENV{AERIUM_PALETTE_DARK}$2}s
+        or die "[aerium] FATAL: the dark palette macro moved in the BrowserUI theme template\n";
+    (s{(<item name="defaultFontFamily">)sans-serif(</item>\n        <item name="defaultMediumFontFamily">)sans-serif-medium(</item>\n)}{$1\@font/aerium_sans$2\@font/aerium_sans_medium$3        <item name="android:fontFamily">\@font/aerium_sans</item>\n        <item name="fontFamily">\@font/aerium_sans</item>\n}g) == 2
+        or die "[aerium] FATAL: the BrowserUI theme template no longer names its default fonts twice\n";
+' components/browser_ui/theme/android/templates/res/values/themes.xml || return 1
+
+sed_i 's|<item android:color="?attr/colorSurfaceContainerHighest"/>|<item android:color="?attr/colorOutlineVariant"/>|' \
+    components/browser_ui/styles/android/java/res/color/divider_color.xml
+sed_i 's|^    <macro name="settings_bg_color">?attr/colorSurfaceContainerHigh</macro>$|    <macro name="settings_bg_color">?attr/colorSurface</macro>|' \
+    components/browser_ui/styles/android/java/res/values/semantic_colors_dynamic.xml
+perl -0777 -pi -e '
+    s{(public static \@ColorInt int getSettingsBackgroundColor\(Context context\) \{\n        return resolve\(R\.attr\.)colorSurfaceContainerHigh(, context\);)}{$1colorSurface$2}
+        or die "[aerium] FATAL: SemanticColorUtils.getSettingsBackgroundColor() moved\n";
+' components/browser_ui/styles/android/java/src/org/chromium/components/browser_ui/styles/SemanticColorUtils.java || return 1
+
+AERIUM_WIDGET_DIMENS=components/browser_ui/widget/android/java/res/values/dimens.xml
+sed_i 's|^    <dimen name="settings_item_rounded_corner_radius_default">16dp</dimen>$|    <dimen name="settings_item_rounded_corner_radius_default">20dp</dimen>|' $AERIUM_WIDGET_DIMENS
+sed_i 's|^    <dimen name="settings_item_rounded_corner_radius_inner">4dp</dimen>$|    <dimen name="settings_item_rounded_corner_radius_inner">0dp</dimen>|' $AERIUM_WIDGET_DIMENS
+sed_i 's|^    <dimen name="settings_item_container_vertical_margin">1dp</dimen>$|    <dimen name="settings_item_container_vertical_margin">0dp</dimen>|' $AERIUM_WIDGET_DIMENS
+sed_i 's|^    <dimen name="settings_section_bottom_margin">8dp</dimen>$|    <dimen name="settings_section_bottom_margin">16dp</dimen>|' $AERIUM_WIDGET_DIMENS
+sed_i 's|^    <dimen name="settings_item_default_padding">16dp</dimen>$|    <dimen name="settings_item_default_padding">9dp</dimen>|' $AERIUM_WIDGET_DIMENS
+sed_i 's|^    <dimen name="settings_item_vertical_padding_multi_line">12dp</dimen>$|    <dimen name="settings_item_vertical_padding_multi_line">9dp</dimen>|' $AERIUM_WIDGET_DIMENS
+
+AERIUM_CVS=components/browser_ui/widget/android/java/src/org/chromium/components/browser_ui/widget/containment/ContainmentViewStyler.java
+AERIUM_CVS_BODY=$(cat <<'AERIUM_CVS_JAVA'
+        Drawable background =
+                createInteractiveRoundedDrawable(
+                        view.getContext(),
+                        style.getTopRadius(),
+                        style.getBottomRadius(),
+                        style.getBackgroundColor());
+        if (style.getBottomRadius() == 0f && style.getBackgroundColor() != Color.TRANSPARENT) {
+            TypedValue line = new TypedValue();
+            if (view.getContext().getTheme().resolveAttribute(R.attr.aeriumLine, line, true)) {
+                GradientDrawable divider = new GradientDrawable();
+                divider.setColor(line.data);
+                LayerDrawable layers = new LayerDrawable(new Drawable[] {background, divider});
+                layers.setLayerGravity(1, Gravity.BOTTOM | Gravity.FILL_HORIZONTAL);
+                layers.setLayerHeight(
+                        1,
+                        Math.max(
+                                1, Math.round(view.getResources().getDisplayMetrics().density)));
+                background = layers;
+            }
+        }
+        view.setBackground(background);
+AERIUM_CVS_JAVA
+)
+AERIUM_CVS_BODY="$AERIUM_CVS_BODY" perl -0777 -pi -e '
+    s{(    public static void applyBackgroundStyle\(View view, ContainerStyle style\) \{\n        if \(style == ContainerStyle\.EMPTY\) \{\n            view\.setBackground\(null\);\n            return;\n        \}\n)        view\.setBackground\(\n                createInteractiveRoundedDrawable\(\n                        view\.getContext\(\),\n                        style\.getTopRadius\(\),\n                        style\.getBottomRadius\(\),\n                        style\.getBackgroundColor\(\)\)\);\n}{$1$ENV{AERIUM_CVS_BODY}\n}
+        or die "[aerium] FATAL: ContainmentViewStyler.applyBackgroundStyle() changed\n";
+    s{(import android\.graphics\.drawable\.GradientDrawable;\n)}{$1import android.graphics.drawable.LayerDrawable;\n}
+        or die "[aerium] FATAL: ContainmentViewStyler imports moved\n";
+    s{(import android\.graphics\.drawable\.RippleDrawable;\n)}{$1import android.util.TypedValue;\nimport android.view.Gravity;\n}
+        or die "[aerium] FATAL: ContainmentViewStyler imports moved\n";
+' $AERIUM_CVS || return 1
+
+AERIUM_SETTINGS_RES=components/browser_ui/settings/android/java/res
+cat > $AERIUM_SETTINGS_RES/drawable/aerium_preference_icon_chip.xml <<'AERIUM_PREF_CHIP_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="11dp" />
+    <solid android:color="?attr/aeriumSf2" />
+</shape>
+AERIUM_PREF_CHIP_XML
+cat > $AERIUM_SETTINGS_RES/layout/aerium_preference.xml <<'AERIUM_PREF_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:minHeight="56dp"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingStart="14dp"
+    android:paddingEnd="14dp"
+    android:background="?android:attr/selectableItemBackground"
+    android:clipToPadding="false"
+    android:baselineAligned="false">
+
+    <FrameLayout
+        android:id="@+id/icon_frame"
+        android:layout_width="34dp"
+        android:layout_height="34dp"
+        android:layout_marginEnd="14dp"
+        android:background="@drawable/aerium_preference_icon_chip">
+
+        <ImageView
+            android:id="@android:id/icon"
+            android:layout_width="19dp"
+            android:layout_height="19dp"
+            android:layout_gravity="center"
+            android:scaleType="fitCenter"
+            android:importantForAccessibility="no" />
+    </FrameLayout>
+
+    <RelativeLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:paddingTop="9dp"
+        android:paddingBottom="9dp">
+
+        <TextView
+            android:id="@android:id/title"
+            style="@style/PreferenceTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textAlignment="viewStart" />
+
+        <TextView
+            android:id="@android:id/summary"
+            style="@style/PreferenceSummary"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_below="@android:id/title"
+            android:layout_alignStart="@android:id/title"
+            android:layout_marginTop="2dp"
+            android:maxLines="10"
+            android:textAlignment="viewStart"
+            android:textSize="13sp" />
+    </RelativeLayout>
+
+    <LinearLayout
+        android:id="@android:id/widget_frame"
+        android:layout_width="wrap_content"
+        android:layout_height="match_parent"
+        android:layout_marginStart="14dp"
+        android:gravity="end|center_vertical"
+        android:orientation="vertical" />
+</LinearLayout>
+AERIUM_PREF_XML
+cat > $AERIUM_SETTINGS_RES/layout/aerium_preference_category.xml <<'AERIUM_PREF_CATEGORY_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingStart="4dp"
+    android:paddingEnd="4dp"
+    android:paddingTop="4dp">
+
+    <TextView
+        android:id="@android:id/title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textAlignment="viewStart"
+        android:textAppearance="@style/TextAppearance.AeriumSectionLabel" />
+
+    <TextView
+        android:id="@android:id/summary"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:textAlignment="viewStart"
+        android:textAppearance="@style/TextAppearance.TextMedium.Secondary"
+        android:textSize="13sp" />
+</LinearLayout>
+AERIUM_PREF_CATEGORY_XML
+sed_i 's|^    "java/res/drawable/enterprise_icon.xml",$|    "java/res/drawable/aerium_preference_icon_chip.xml",\n&|' \
+    components/browser_ui/settings/android/BUILD.gn
+sed_i 's|^    "java/res/layout/button_preference_button.xml",$|    "java/res/layout/aerium_preference.xml",\n    "java/res/layout/aerium_preference_category.xml",\n&|' \
+    components/browser_ui/settings/android/BUILD.gn
+
+AERIUM_SETTINGS_STYLES=$AERIUM_SETTINGS_RES/values/styles.xml
+perl -0777 -pi -e '
+    s{(    <style name="PreferenceTheme">\n)}{$1        <item name="preferenceCategoryStyle">\@style/AeriumPreferenceCategory</item>\n}
+        or die "[aerium] FATAL: PreferenceTheme moved\n";
+    for my $s ("PreferenceItem\" parent=\"Preference.Material", "CheckBoxPreference\" parent=\"Preference.CheckBoxPreference.Material", "SwitchPreference\" parent=\"Preference.SwitchPreferenceCompat.Material") {
+        s{(    <style name="\Q$s\E">\n)}{$1        <item name="android:layout">\@layout/aerium_preference</item>\n}
+            or die "[aerium] FATAL: preference style $s moved\n";
+    }
+    s{(    <style name="SettingsFragmentList">\n        <item name="android:paddingStart">0dp</item>\n        <item name="android:paddingEnd">0dp</item>\n)}{$1        <item name="android:paddingTop">16dp</item>\n        <item name="android:paddingBottom">8dp</item>\n        <item name="android:clipToPadding">false</item>\n}
+        or die "[aerium] FATAL: SettingsFragmentList moved\n";
+' $AERIUM_SETTINGS_STYLES || return 1
+sed_i 's|^</resources>$|    <style name="AeriumPreferenceCategory" parent="Preference.Category.Material">\n        <item name="android:layout">@layout/aerium_preference_category</item>\n        <item name="allowDividerAbove">false</item>\n        <item name="allowDividerBelow">false</item>\n        <item name="iconSpaceReserved">false</item>\n    </style>\n\n    <style name="TextAppearance.AeriumSectionLabel" parent="TextAppearance.TextSmall">\n        <item name="android:textSize">13sp</item>\n        <item name="android:fontFamily">@font/aerium_sans_semibold</item>\n        <item name="android:textFontWeight">600</item>\n        <item name="android:letterSpacing">0.06</item>\n        <item name="android:textAllCaps">true</item>\n        <item name="android:textColor">?attr/colorOnSurfaceVariant</item>\n    </style>\n&|' \
+    $AERIUM_SETTINGS_STYLES
+
+AERIUM_STYLES_RES=components/browser_ui/styles/android/java/res
+cat > $AERIUM_STYLES_RES/color/aerium_switch_thumb.xml <<'AERIUM_SWITCH_THUMB_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_enabled="false" android:state_checked="true"
+        android:color="?attr/colorOnPrimary" android:alpha="0.38" />
+    <item android:state_enabled="false"
+        android:color="?attr/colorOnSurfaceVariant" android:alpha="0.38" />
+    <item android:state_checked="true" android:color="?attr/colorOnPrimary" />
+    <item android:color="?attr/colorOnSurfaceVariant" />
+</selector>
+AERIUM_SWITCH_THUMB_XML
+cat > $AERIUM_STYLES_RES/color/aerium_switch_track.xml <<'AERIUM_SWITCH_TRACK_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_enabled="false" android:state_checked="true"
+        android:color="?attr/colorPrimary" android:alpha="0.38" />
+    <item android:state_enabled="false"
+        android:color="?attr/colorSurfaceContainerHighest" android:alpha="0.38" />
+    <item android:state_checked="true" android:color="?attr/colorPrimary" />
+    <item android:color="?attr/colorSurfaceContainerHighest" />
+</selector>
+AERIUM_SWITCH_TRACK_XML
+cat > $AERIUM_STYLES_RES/color/aerium_switch_track_decoration.xml <<'AERIUM_SWITCH_DECORATION_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_checked="true" android:color="@android:color/transparent" />
+    <item android:state_enabled="false"
+        android:color="?attr/colorOutlineVariant" android:alpha="0.38" />
+    <item android:color="?attr/colorOutlineVariant" />
+</selector>
+AERIUM_SWITCH_DECORATION_XML
+cat > $AERIUM_STYLES_RES/drawable/aerium_switch_thumb_icon.xml <<'AERIUM_SWITCH_ICON_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <size android:width="16dp" android:height="16dp" />
+    <solid android:color="@android:color/transparent" />
+</shape>
+AERIUM_SWITCH_ICON_XML
+cat > $AERIUM_STYLES_RES/drawable/aerium_switch_track_decoration.xml <<'AERIUM_SWITCH_TRACK_DECORATION_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <size android:width="52dp" android:height="32dp" />
+    <corners android:radius="16dp" />
+    <solid android:color="@android:color/transparent" />
+    <stroke android:width="1.07dp" android:color="@android:color/white" />
+</shape>
+AERIUM_SWITCH_TRACK_DECORATION_XML
+cat > $AERIUM_STYLES_RES/color/aerium_choice_ring.xml <<'AERIUM_CHOICE_RING_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_enabled="false" android:state_checked="true"
+        android:color="?attr/colorPrimary" android:alpha="0.38" />
+    <item android:state_enabled="false"
+        android:color="?attr/colorOutlineVariant" android:alpha="0.38" />
+    <item android:state_checked="true" android:color="?attr/colorPrimary" />
+    <item android:color="?attr/colorOutlineVariant" />
+</selector>
+AERIUM_CHOICE_RING_XML
+cat > $AERIUM_STYLES_RES/color/aerium_choice_fill.xml <<'AERIUM_CHOICE_FILL_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_enabled="false" android:state_checked="true"
+        android:color="?attr/colorPrimary" android:alpha="0.38" />
+    <item android:state_checked="true" android:color="?attr/colorPrimary" />
+    <item android:color="@android:color/transparent" />
+</selector>
+AERIUM_CHOICE_FILL_XML
+cat > $AERIUM_STYLES_RES/color/aerium_choice_tick.xml <<'AERIUM_CHOICE_TICK_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_checked="true" android:color="?attr/colorOnPrimary" />
+    <item android:color="@android:color/transparent" />
+</selector>
+AERIUM_CHOICE_TICK_XML
+cat > $AERIUM_STYLES_RES/drawable/aerium_radio_button.xml <<'AERIUM_RADIO_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:width="22dp" android:height="22dp">
+        <shape android:shape="oval">
+            <solid android:color="@android:color/transparent" />
+            <stroke android:width="2dp" android:color="@color/aerium_choice_ring" />
+        </shape>
+    </item>
+    <item android:width="12dp" android:height="12dp" android:gravity="center">
+        <shape android:shape="oval">
+            <solid android:color="@color/aerium_choice_fill" />
+        </shape>
+    </item>
+</layer-list>
+AERIUM_RADIO_XML
+cat > $AERIUM_STYLES_RES/drawable/aerium_checkbox_tick.xml <<'AERIUM_CHECKBOX_TICK_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="14dp"
+    android:height="14dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="@color/aerium_choice_tick"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M5,12.5L9.5,17L19,7.5" />
+</vector>
+AERIUM_CHECKBOX_TICK_XML
+cat > $AERIUM_STYLES_RES/drawable/aerium_checkbox_button.xml <<'AERIUM_CHECKBOX_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:width="24dp" android:height="24dp">
+        <shape android:shape="rectangle">
+            <corners android:radius="8dp" />
+            <solid android:color="@color/aerium_choice_fill" />
+            <stroke android:width="2dp" android:color="@color/aerium_choice_ring" />
+        </shape>
+    </item>
+    <item android:width="14dp" android:height="14dp" android:gravity="center"
+        android:drawable="@drawable/aerium_checkbox_tick" />
+</layer-list>
+AERIUM_CHECKBOX_XML
+sed_i 's|^    "java/res/color/bottom_sheet_bg_color.xml",$|    "java/res/color/aerium_choice_fill.xml",\n    "java/res/color/aerium_choice_ring.xml",\n    "java/res/color/aerium_choice_tick.xml",\n    "java/res/color/aerium_switch_thumb.xml",\n    "java/res/color/aerium_switch_track.xml",\n    "java/res/color/aerium_switch_track_decoration.xml",\n&|' \
+    components/browser_ui/styles/android/BUILD.gn
+sed_i 's|^    "java/res/drawable/checkmark_blue.xml",$|    "java/res/drawable/aerium_checkbox_button.xml",\n    "java/res/drawable/aerium_checkbox_tick.xml",\n    "java/res/drawable/aerium_radio_button.xml",\n    "java/res/drawable/aerium_switch_thumb_icon.xml",\n    "java/res/drawable/aerium_switch_track_decoration.xml",\n&|' \
+    components/browser_ui/styles/android/BUILD.gn
+
+perl -0777 -pi -e '
+    s{(    <style name="Widget.BrowserUI.CheckBox" parent="Widget.Material3.CompoundButton.CheckBox">\n)        <item name="buttonTint">\@color/selection_control_button_tint_list</item>\n}{$1        <item name="android:button">\@drawable/aerium_checkbox_button</item>\n        <item name="buttonCompat">\@drawable/aerium_checkbox_button</item>\n        <item name="buttonIcon">\@null</item>\n        <item name="buttonTint">\@null</item>\n        <item name="buttonIconTint">\@null</item>\n        <item name="useMaterialThemeColors">false</item>\n}
+        or die "[aerium] FATAL: Widget.BrowserUI.CheckBox moved\n";
+    s{(    <style name="Widget.BrowserUI.RadioButton" parent="Widget.Material3.CompoundButton.RadioButton">\n)        <item name="buttonTint">\@color/selection_control_button_tint_list</item>\n}{$1        <item name="android:button">\@drawable/aerium_radio_button</item>\n        <item name="buttonCompat">\@drawable/aerium_radio_button</item>\n        <item name="buttonTint">\@null</item>\n        <item name="useMaterialThemeColors">false</item>\n}
+        or die "[aerium] FATAL: Widget.BrowserUI.RadioButton moved\n";
+    s{(    <style name="Widget.BrowserUI.Switch" parent="Widget.Material3.CompoundButton.MaterialSwitch">\n)        <item name="android:scaleX">\@fraction/material_switch_scale_fraction</item>\n        <item name="android:scaleY">\@fraction/material_switch_scale_fraction</item>\n        <item name="android:minHeight">\@dimen/switch_pre_scale_min_height</item>\n}{$1        <item name="android:scaleX">0.923</item>\n        <item name="android:scaleY">0.9375</item>\n        <item name="android:minHeight">32dp</item>\n        <item name="thumbIcon">\@drawable/aerium_switch_thumb_icon</item>\n        <item name="thumbIconTint">\@android:color/transparent</item>\n        <item name="thumbTint">\@color/aerium_switch_thumb</item>\n        <item name="trackTint">\@color/aerium_switch_track</item>\n        <item name="trackDecoration">\@drawable/aerium_switch_track_decoration</item>\n        <item name="trackDecorationTint">\@color/aerium_switch_track_decoration</item>\n}
+        or die "[aerium] FATAL: Widget.BrowserUI.Switch moved\n";
+' $AERIUM_STYLES_RES/values/styles.xml || return 1
+sed_i 's|^    android:background="@null"/>$|    android:layout_marginEnd="-2dp"\n    android:background="@null"/>|' \
+    components/browser_ui/widget/android/java/res/layout/preference_switch.xml
+
+cat > chrome/android/java/res/drawable/aerium_settings_back.xml <<'AERIUM_SETTINGS_BACK_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="22dp"
+    android:height="22dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:autoMirrored="true">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M15,5L8,12L15,19" />
+</vector>
+AERIUM_SETTINGS_BACK_XML
+sed_i 's|^  "java/res/drawable/acute_24dp.xml",$|  "java/res/drawable/aerium_settings_back.xml",\n&|' \
+    chrome/android/chrome_java_resources.gni
+perl -0777 -pi -e '
+    s{(    <style name="Base.Theme.Chromium.Settings" parent="Theme.Chromium">\n        <item name="appBarLayoutStyle">\@style/Widget.MaterialComponents.AppBarLayout.Surface</item>\n        <item name="toolbarStyle">)\@style/SettingsToolbarStyle(</item>\n)}{$1\@style/AeriumSettingsToolbar$2        <item name="homeAsUpIndicator">\@drawable/aerium_settings_back</item>\n        <item name="toolbarNavigationButtonStyle">\@style/AeriumSettingsNavButton</item>\n}
+        or die "[aerium] FATAL: Base.Theme.Chromium.Settings moved\n";
+' chrome/android/java/res/values/styles.xml || return 1
+sed_i 's|^</resources>$|    <style name="AeriumSettingsToolbar" parent="SettingsToolbarStyle">\n        <item name="android:paddingStart">16dp</item>\n        <item name="android:paddingTop">12dp</item>\n        <item name="contentInsetStart">0dp</item>\n        <item name="contentInsetStartWithNavigation">0dp</item>\n        <item name="titleMarginStart">4dp</item>\n        <item name="titleTextAppearance">@style/TextAppearance.AeriumSettingsTitle</item>\n        <item name="titleTextColor">?attr/colorOnSurface</item>\n    </style>\n\n    <style name="AeriumSettingsNavButton" parent="Widget.AppCompat.Toolbar.Button.Navigation">\n        <item name="android:minWidth">44dp</item>\n        <item name="android:minHeight">44dp</item>\n        <item name="android:padding">11dp</item>\n        <item name="android:scaleType">center</item>\n        <item name="android:background">?attr/selectableItemBackgroundBorderless</item>\n    </style>\n\n    <style name="TextAppearance.AeriumSettingsTitle" parent="TextAppearance.Headline.Primary">\n        <item name="android:textSize">24sp</item>\n        <item name="android:fontFamily">@font/aerium_sans_semibold</item>\n        <item name="android:textFontWeight">600</item>\n        <item name="android:letterSpacing">-0.01</item>\n        <item name="android:textColor">?attr/colorOnSurface</item>\n    </style>\n&|' \
+    chrome/android/java/res/values/styles.xml
+perl -0777 -pi -e '
+    s{(        app:liftOnScroll=")true(">)}{$1false$2}
+        or die "[aerium] FATAL: the settings app bar no longer lifts on scroll\n";
+    s{(            <com\.google\.android\.material\.appbar\.MaterialToolbar\n                android:id="\@\+id/action_bar"\n                android:layout_width="match_parent"\n                android:layout_height=")\?attr/actionBarSize("/>)}{${1}56dp$2}
+        or die "[aerium] FATAL: the settings toolbar moved\n";
+' chrome/android/java/res/layout/settings_activity.xml || return 1
+
+echo "[aerium] canvas palette, font and settings look applied"
 
 python3 "$SCRIPT_DIR/l10n/inject.py" || return 1
