@@ -5642,6 +5642,7 @@ cat > chrome/browser/aerium/aerium_update_checker.h <<'AERIUM_UPDATE_CHECKER_H'
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/no_destructor.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
@@ -5653,6 +5654,7 @@ cat > chrome/browser/aerium/aerium_update_checker.h <<'AERIUM_UPDATE_CHECKER_H'
 #include "chrome/browser/profiles/profile_keyed_service_factory.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
 #include "base/version_info/version_info.h"
 #include "content/public/browser/browser_context.h"
@@ -5704,6 +5706,8 @@ inline constexpr char kLastCheckTime[] = "aerium.update.last_check_time";
 // check that finds nothing clears a result that has been superseded.
 inline constexpr char kLatestVersion[] = "aerium.update.latest_version";
 inline constexpr char kLatestUrl[] = "aerium.update.latest_url";
+inline constexpr char kCheckRequested[] = "aerium.update.check_requested";
+inline constexpr char kLastCheckDone[] = "aerium.update.last_check_done";
 
 inline constexpr base::TimeDelta kCheckInterval = base::Hours(24);
 
@@ -5775,6 +5779,8 @@ class AeriumUpdateChecker : public KeyedService {
  private:
   void ScheduleNextCheck();
   void Check();
+  void Fetch();
+  void CheckNow();
   void OnResponse(std::unique_ptr<std::string> body);
   void OnParsed(base::expected<base::Value, std::string> result);
   void Finish(const std::string& version, const std::string& url);
@@ -5782,17 +5788,23 @@ class AeriumUpdateChecker : public KeyedService {
   const raw_ptr<Profile> profile_;
   std::unique_ptr<network::SimpleURLLoader> loader_;
   base::OneShotTimer timer_;
+  PrefChangeRegistrar registrar_;
   base::WeakPtrFactory<AeriumUpdateChecker> weak_factory_{this};
 };
 
 inline AeriumUpdateChecker::AeriumUpdateChecker(Profile* profile)
     : profile_(profile) {
   ScheduleNextCheck();
+  registrar_.Init(profile_->GetPrefs());
+  registrar_.Add(kCheckRequested,
+                 base::BindRepeating(&AeriumUpdateChecker::CheckNow,
+                                     base::Unretained(this)));
 }
 
 inline AeriumUpdateChecker::~AeriumUpdateChecker() = default;
 
 inline void AeriumUpdateChecker::Shutdown() {
+  registrar_.RemoveAll();
   timer_.Stop();
   loader_.reset();
   weak_factory_.InvalidateWeakPtrs();
@@ -5825,7 +5837,18 @@ inline void AeriumUpdateChecker::Check() {
                                 weak_factory_.GetWeakPtr()));
     return;
   }
+  Fetch();
+}
 
+inline void AeriumUpdateChecker::CheckNow() {
+  if (loader_) {
+    return;
+  }
+  timer_.Stop();
+  Fetch();
+}
+
+inline void AeriumUpdateChecker::Fetch() {
   constexpr net::NetworkTrafficAnnotationTag kAnnotation =
       net::DefineNetworkTrafficAnnotation("aerium_update_check", R"(
         semantics {
@@ -5946,6 +5969,9 @@ inline void AeriumUpdateChecker::Finish(const std::string& version,
   PrefService* const prefs = profile_->GetPrefs();
   prefs->SetString(kLatestVersion, version);
   prefs->SetString(kLatestUrl, url);
+  prefs->SetString(kLastCheckDone,
+                   base::NumberToString(
+                       base::Time::Now().InMillisecondsFSinceUnixEpoch()));
   prefs->SetInt64(
       kLastCheckTime,
       base::Time::Now().ToDeltaSinceWindowsEpoch().InMicroseconds());
@@ -6012,6 +6038,8 @@ inline void AeriumUpdateCheckerFactory::RegisterProfilePrefs(
   registry->RegisterInt64Pref(kLastCheckTime, 0);
   registry->RegisterStringPref(kLatestVersion, std::string());
   registry->RegisterStringPref(kLatestUrl, std::string());
+  registry->RegisterStringPref(kCheckRequested, std::string());
+  registry->RegisterStringPref(kLastCheckDone, std::string());
 }
 
 }  // namespace aerium_update
@@ -14228,6 +14256,238 @@ perl -0777 -pi -e '
 echo "[aerium] canvas palette, font and settings look applied"
 
 AERIUM_CANVAS_DRAWABLES=chrome/android/java/res/drawable
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_update_daily.xml <<'AERIUM_IC_UPDATE_DAILY_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="19dp"
+    android:height="19dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M19.5 12a7.5 7.5 0 1 1-2.2-5.3" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M20 4v4h-4" />
+</vector>
+AERIUM_IC_UPDATE_DAILY_XML
+
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_obtainium.xml <<'AERIUM_IC_OBTAINIUM_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="19dp"
+    android:height="19dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M12 4v11" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M7 10l5 5 5-5" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M5 20h14" />
+</vector>
+AERIUM_IC_OBTAINIUM_XML
+
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_build_changes.xml <<'AERIUM_IC_BUILD_CHANGES_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="19dp"
+    android:height="19dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M8 8l-4 4 4 4" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M16 8l4 4-4 4" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M13.5 5l-3 14" />
+</vector>
+AERIUM_IC_BUILD_CHANGES_XML
+
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_project.xml <<'AERIUM_IC_PROJECT_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="19dp"
+    android:height="19dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M3.5,12a8.5,8.5 0,1 0,17,0a8.5,8.5 0,1 0,-17,0Z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M3.5 12h17" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M12 3.5a13 13 0 0 1 0 17a13 13 0 0 1 0-17" />
+</vector>
+AERIUM_IC_PROJECT_XML
+
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_share_aerium.xml <<'AERIUM_IC_SHARE_AERIUM_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="19dp"
+    android:height="19dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M12 4v11" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M8 8l4-4 4 4" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M5 13v6h14v-6" />
+</vector>
+AERIUM_IC_SHARE_AERIUM_XML
+
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_support.xml <<'AERIUM_IC_SUPPORT_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="19dp"
+    android:height="19dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M12 20s-7.5-4.6-7.5-10A4.3 4.3 0 0 1 12 7.3 4.3 4.3 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10z" />
+</vector>
+AERIUM_IC_SUPPORT_XML
+
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_legal.xml <<'AERIUM_IC_LEGAL_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="19dp"
+    android:height="19dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M6 3h9l3 3v15H6z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M9 10h6M9 14h6M9 18h4" />
+</vector>
+AERIUM_IC_LEGAL_XML
+
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_up_to_date.xml <<'AERIUM_IC_UP_TO_DATE_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="16dp"
+    android:height="16dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/aeriumAcc"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M12 3l7 3v5c0 5-3.5 8.5-7 10-3.5-1.5-7-5-7-10V6z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/aeriumAcc"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M9 12l2 2 4-4" />
+</vector>
+AERIUM_IC_UP_TO_DATE_XML
+
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_about_logo.xml <<'AERIUM_ABOUT_LOGO_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="64dp"
+    android:height="64dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <path
+        android:fillColor="#1B2C5E"
+        android:pathData="M330 384.17 149.1 488.61A256 256 0 0 1 108 47.12L108 256A148 148 0 0 0 330 384.17Z" />
+    <path
+        android:fillColor="#2A4485"
+        android:pathData="M108 256 108 47.12A256 256 0 0 1 510.9 232.27L330 127.83A148 148 0 0 0 108 256Z" />
+    <path
+        android:fillColor="#111C42"
+        android:pathData="M330 127.83 510.9 232.27A256 256 0 0 1 149.1 488.61L330 384.17A148 148 0 0 0 330 127.83Z" />
+</vector>
+AERIUM_ABOUT_LOGO_XML
+
 cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_secure_dns.xml <<'AERIUM_IC_SECURE_DNS_XML'
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
@@ -15499,7 +15759,7 @@ cat > $AERIUM_CANVAS_DRAWABLES/aerium_settings_find.xml <<'AERIUM_SETTINGS_FIND_
 </vector>
 AERIUM_SETTINGS_FIND_XML
 
-sed_i 's|^  "java/res/drawable/acute_24dp.xml",$|  "java/res/drawable/aerium_ic_about.xml",\n  "java/res/drawable/aerium_ic_accessibility.xml",\n  "java/res/drawable/aerium_ic_aerogel.xml",\n  "java/res/drawable/aerium_ic_aerogel_lock.xml",\n  "java/res/drawable/aerium_ic_appearance.xml",\n  "java/res/drawable/aerium_ic_backup.xml",\n  "java/res/drawable/aerium_ic_clear_browsing.xml",\n  "java/res/drawable/aerium_ic_clear_site.xml",\n  "java/res/drawable/aerium_ic_close_tabs.xml",\n  "java/res/drawable/aerium_ic_cookies.xml",\n  "java/res/drawable/aerium_ic_default_browser.xml",\n  "java/res/drawable/aerium_ic_delete_on_exit.xml",\n  "java/res/drawable/aerium_ic_developer.xml",\n  "java/res/drawable/aerium_ic_do_not_track.xml",\n  "java/res/drawable/aerium_ic_downloads.xml",\n  "java/res/drawable/aerium_ic_extensions.xml",\n  "java/res/drawable/aerium_ic_fingerprint.xml",\n  "java/res/drawable/aerium_ic_gpc.xml",\n  "java/res/drawable/aerium_ic_guard.xml",\n  "java/res/drawable/aerium_ic_guard_import.xml",\n  "java/res/drawable/aerium_ic_guard_paste.xml",\n  "java/res/drawable/aerium_ic_guard_performance.xml",\n  "java/res/drawable/aerium_ic_guard_privacy.xml",\n  "java/res/drawable/aerium_ic_guard_profile.xml",\n  "java/res/drawable/aerium_ic_guard_recommended.xml",\n  "java/res/drawable/aerium_ic_guard_save.xml",\n  "java/res/drawable/aerium_ic_guard_security.xml",\n  "java/res/drawable/aerium_ic_guard_status.xml",\n  "java/res/drawable/aerium_ic_https_first.xml",\n  "java/res/drawable/aerium_ic_languages.xml",\n  "java/res/drawable/aerium_ic_media.xml",\n  "java/res/drawable/aerium_ic_notifications.xml",\n  "java/res/drawable/aerium_ic_open_in_apps.xml",\n  "java/res/drawable/aerium_ic_privacy.xml",\n  "java/res/drawable/aerium_ic_referrer.xml",\n  "java/res/drawable/aerium_ic_safe_browsing.xml",\n  "java/res/drawable/aerium_ic_search.xml",\n  "java/res/drawable/aerium_ic_secure_dns.xml",\n  "java/res/drawable/aerium_ic_site_rules.xml",\n  "java/res/drawable/aerium_ic_sites.xml",\n  "java/res/drawable/aerium_ic_tabs.xml",\n  "java/res/drawable/aerium_ic_toolbar.xml",\n  "java/res/drawable/aerium_ic_web_apps.xml",\n  "java/res/drawable/aerium_ic_webrtc.xml",\n  "java/res/drawable/aerium_ic_what_to_delete.xml",\n  "java/res/drawable/aerium_settings_find.xml",\n&|' \
+sed_i 's|^  "java/res/drawable/acute_24dp.xml",$|  "java/res/drawable/aerium_about_logo.xml",\n  "java/res/drawable/aerium_ic_about.xml",\n  "java/res/drawable/aerium_ic_accessibility.xml",\n  "java/res/drawable/aerium_ic_aerogel.xml",\n  "java/res/drawable/aerium_ic_aerogel_lock.xml",\n  "java/res/drawable/aerium_ic_appearance.xml",\n  "java/res/drawable/aerium_ic_backup.xml",\n  "java/res/drawable/aerium_ic_build_changes.xml",\n  "java/res/drawable/aerium_ic_clear_browsing.xml",\n  "java/res/drawable/aerium_ic_clear_site.xml",\n  "java/res/drawable/aerium_ic_close_tabs.xml",\n  "java/res/drawable/aerium_ic_cookies.xml",\n  "java/res/drawable/aerium_ic_default_browser.xml",\n  "java/res/drawable/aerium_ic_delete_on_exit.xml",\n  "java/res/drawable/aerium_ic_developer.xml",\n  "java/res/drawable/aerium_ic_do_not_track.xml",\n  "java/res/drawable/aerium_ic_downloads.xml",\n  "java/res/drawable/aerium_ic_extensions.xml",\n  "java/res/drawable/aerium_ic_fingerprint.xml",\n  "java/res/drawable/aerium_ic_gpc.xml",\n  "java/res/drawable/aerium_ic_guard.xml",\n  "java/res/drawable/aerium_ic_guard_import.xml",\n  "java/res/drawable/aerium_ic_guard_paste.xml",\n  "java/res/drawable/aerium_ic_guard_performance.xml",\n  "java/res/drawable/aerium_ic_guard_privacy.xml",\n  "java/res/drawable/aerium_ic_guard_profile.xml",\n  "java/res/drawable/aerium_ic_guard_recommended.xml",\n  "java/res/drawable/aerium_ic_guard_save.xml",\n  "java/res/drawable/aerium_ic_guard_security.xml",\n  "java/res/drawable/aerium_ic_guard_status.xml",\n  "java/res/drawable/aerium_ic_https_first.xml",\n  "java/res/drawable/aerium_ic_languages.xml",\n  "java/res/drawable/aerium_ic_legal.xml",\n  "java/res/drawable/aerium_ic_media.xml",\n  "java/res/drawable/aerium_ic_notifications.xml",\n  "java/res/drawable/aerium_ic_obtainium.xml",\n  "java/res/drawable/aerium_ic_open_in_apps.xml",\n  "java/res/drawable/aerium_ic_privacy.xml",\n  "java/res/drawable/aerium_ic_project.xml",\n  "java/res/drawable/aerium_ic_referrer.xml",\n  "java/res/drawable/aerium_ic_safe_browsing.xml",\n  "java/res/drawable/aerium_ic_search.xml",\n  "java/res/drawable/aerium_ic_secure_dns.xml",\n  "java/res/drawable/aerium_ic_share_aerium.xml",\n  "java/res/drawable/aerium_ic_site_rules.xml",\n  "java/res/drawable/aerium_ic_sites.xml",\n  "java/res/drawable/aerium_ic_support.xml",\n  "java/res/drawable/aerium_ic_tabs.xml",\n  "java/res/drawable/aerium_ic_toolbar.xml",\n  "java/res/drawable/aerium_ic_up_to_date.xml",\n  "java/res/drawable/aerium_ic_update_daily.xml",\n  "java/res/drawable/aerium_ic_web_apps.xml",\n  "java/res/drawable/aerium_ic_webrtc.xml",\n  "java/res/drawable/aerium_ic_what_to_delete.xml",\n  "java/res/drawable/aerium_settings_find.xml",\n&|' \
     chrome/android/chrome_java_resources.gni
 
 cat > $AERIUM_SETTINGS_RES/drawable/aerium_row_chevron.xml <<'AERIUM_ROW_CHEVRON_XML'
@@ -16512,6 +16772,429 @@ AERIUM_PRIVACY_JAVA="$AERIUM_PRIVACY_JAVA" perl -0777 -pi -e '
     s{(    /\*\* Shows the advanced-protection-section if needed\. \*/\n)}{$ENV{AERIUM_PRIVACY_JAVA}$1}
         or die "[aerium] FATAL: PrivacySettings.maybeShowAdvancedProtectionSection() moved\n";
 ' chrome/android/java/src/org/chromium/chrome/browser/privacy/settings/PrivacySettings.java || return 1
+AERIUM_ABOUT_XML=chrome/android/java/res/xml/about_chrome_preferences.xml
+_aerium_about_keys=$(grep -o 'android:key="[^"]*"' $AERIUM_ABOUT_XML | sort | tr '\n' ' ')
+if [ "$_aerium_about_keys" != 'android:key="aerium_patches" android:key="aerium_project" android:key="aerium_share" android:key="aerium_update_available" android:key="aerium_update_check" android:key="application_version" android:key="legal_information" android:key="os_version" android:key="support_aerium" ' ]; then
+    echo "[aerium] FATAL: about_chrome_preferences.xml has a different set of rows than the canvas layout expects: $_aerium_about_keys" >&2
+    return 1
+fi
+cat > $AERIUM_ABOUT_XML <<'AERIUM_ABOUT_PREFERENCES_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+Copyright 2014 The Chromium Authors
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file.
+-->
+
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <org.chromium.chrome.browser.about_settings.AeriumAboutHeroPreference
+        android:key="aerium_about_hero"
+        android:order="0" />
+
+    <PreferenceCategory
+        android:key="aerium_about_updates"
+        android:order="10"
+        android:title="@string/aerium_about_updates" />
+    <org.chromium.components.browser_ui.settings.ChromeSwitchPreference
+        android:key="aerium_update_check"
+        android:order="11"
+        android:icon="@drawable/aerium_ic_update_daily"
+        android:title="@string/aerium_check_every_day"
+        android:persistent="false" />
+    <org.chromium.components.browser_ui.settings.AeriumRowPreference
+        android:key="aerium_obtainium"
+        android:order="12"
+        android:icon="@drawable/aerium_ic_obtainium"
+        android:title="@string/aerium_update_obtainium" />
+
+    <org.chromium.components.browser_ui.settings.ChromeBasePreference
+        android:key="aerium_about_links"
+        android:order="20"
+        android:layout="@layout/aerium_group_break"
+        android:persistent="false"
+        android:selectable="false"
+        app:backgroundStyle="none" />
+    <org.chromium.components.browser_ui.settings.AeriumRowPreference
+        android:key="aerium_patches"
+        android:order="21"
+        android:icon="@drawable/aerium_ic_build_changes"
+        android:title="@string/aerium_patches_title" />
+    <org.chromium.components.browser_ui.settings.AeriumRowPreference
+        android:key="aerium_project"
+        android:order="22"
+        android:icon="@drawable/aerium_ic_project"
+        android:title="@string/aerium_project_website" />
+    <org.chromium.components.browser_ui.settings.AeriumRowPreference
+        android:key="aerium_share"
+        android:order="23"
+        android:icon="@drawable/aerium_ic_share_aerium"
+        android:title="@string/aerium_share_row_title" />
+    <org.chromium.components.browser_ui.settings.AeriumRowPreference
+        android:key="support_aerium"
+        android:order="24"
+        android:icon="@drawable/aerium_ic_support"
+        android:title="@string/support_aerium_title" />
+
+    <org.chromium.components.browser_ui.settings.ChromeBasePreference
+        android:key="aerium_about_legal"
+        android:order="30"
+        android:layout="@layout/aerium_group_break"
+        android:persistent="false"
+        android:selectable="false"
+        app:backgroundStyle="none" />
+    <org.chromium.components.browser_ui.settings.AeriumRowPreference
+        android:fragment="org.chromium.chrome.browser.about_settings.LegalInformationSettings"
+        android:key="legal_information"
+        android:order="31"
+        android:icon="@drawable/aerium_ic_legal"
+        android:title="@string/aerium_legal" />
+
+    <org.chromium.components.browser_ui.settings.ChromeBasePreference
+        android:key="aerium_about_more"
+        android:order="40"
+        android:layout="@layout/aerium_group_break"
+        android:persistent="false"
+        android:selectable="false"
+        app:backgroundStyle="none" />
+    <org.chromium.chrome.browser.about_settings.LongClickCopySummaryPreference
+        android:key="application_version"
+        android:order="41"
+        android:title="@string/application_version_title" />
+    <org.chromium.chrome.browser.about_settings.AboutChromePreferenceOSVersion
+        android:key="os_version"
+        android:order="42"
+        android:title="@string/os_version_title" />
+    <Preference
+        android:key="aerium_update_available"
+        android:order="43"
+        android:title="@string/aerium_update_available_title"
+        android:persistent="false" />
+</PreferenceScreen>
+AERIUM_ABOUT_PREFERENCES_XML
+
+cat > chrome/android/java/res/drawable/aerium_about_chip.xml <<'AERIUM_ABOUT_CHIP_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="18dp" />
+    <solid android:color="?attr/aeriumAccSoft" />
+</shape>
+AERIUM_ABOUT_CHIP_XML
+cat > chrome/android/java/res/drawable/aerium_about_button.xml <<'AERIUM_ABOUT_BUTTON_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="?attr/colorControlHighlight">
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="18dp" />
+            <solid android:color="@android:color/transparent" />
+            <stroke android:width="1dp" android:color="?attr/aeriumLine" />
+        </shape>
+    </item>
+</ripple>
+AERIUM_ABOUT_BUTTON_XML
+cat > chrome/android/java/res/layout/aerium_about_hero.xml <<'AERIUM_ABOUT_HERO_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="16dp"
+    android:gravity="center_horizontal"
+    android:orientation="vertical"
+    android:paddingTop="8dp"
+    android:paddingBottom="4dp">
+
+    <ImageView
+        android:layout_width="64dp"
+        android:layout_height="64dp"
+        android:importantForAccessibility="no"
+        android:src="@drawable/aerium_about_logo" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:fontFamily="@font/aerium_sans_semibold"
+        android:text="@string/aerium_about_name"
+        android:textColor="?attr/colorOnSurface"
+        android:textFontWeight="600"
+        android:textSize="24sp" />
+
+    <TextView
+        android:id="@+id/aerium_about_version"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        android:textIsSelectable="true"
+        android:textSize="14sp" />
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingTop="6dp">
+
+        <TextView
+            android:id="@+id/aerium_about_status"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:layout_marginEnd="10dp"
+            android:background="@drawable/aerium_about_chip"
+            android:drawablePadding="6dp"
+            android:fontFamily="@font/aerium_sans_semibold"
+            android:gravity="center_vertical"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:textColor="?attr/aeriumAcc"
+            android:textFontWeight="600"
+            android:textSize="14sp"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/aerium_about_check"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:background="@drawable/aerium_about_button"
+            android:focusable="true"
+            android:clickable="true"
+            android:fontFamily="@font/aerium_sans_semibold"
+            android:gravity="center"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:text="@string/aerium_check_now"
+            android:textColor="?attr/colorOnSurface"
+            android:textFontWeight="600"
+            android:textSize="14sp" />
+    </LinearLayout>
+</LinearLayout>
+AERIUM_ABOUT_HERO_XML
+cat > chrome/android/java/src/org/chromium/chrome/browser/about_settings/AeriumAboutHeroPreference.java <<'AERIUM_ABOUT_HERO_JAVA'
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+package org.chromium.chrome.browser.about_settings;
+
+import android.content.Context;
+import android.util.AttributeSet;
+import android.view.View;
+import android.widget.TextView;
+
+import androidx.preference.PreferenceViewHolder;
+
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
+import org.chromium.chrome.R;
+import org.chromium.components.browser_ui.settings.ChromeBasePreference;
+
+@NullMarked
+public class AeriumAboutHeroPreference extends ChromeBasePreference {
+    public static final int STATUS_NONE = 0;
+    public static final int STATUS_CHECKING = 1;
+    public static final int STATUS_UP_TO_DATE = 2;
+    public static final int STATUS_UPDATE = 3;
+
+    private @Nullable String mVersion;
+    private int mStatus = STATUS_NONE;
+    private @Nullable Runnable mOnCheck;
+    private @Nullable Runnable mOnStatus;
+
+    public AeriumAboutHeroPreference(Context context) {
+        this(context, null);
+    }
+
+    public AeriumAboutHeroPreference(Context context, @Nullable AttributeSet attrs) {
+        super(context, attrs);
+        setLayoutResource(R.layout.aerium_about_hero);
+        setSelectable(false);
+        setPersistent(false);
+    }
+
+    @Override
+    public @BackgroundStyle int getCustomBackgroundStyle() {
+        return BackgroundStyle.NONE;
+    }
+
+    public void setVersion(String version) {
+        mVersion = version;
+        notifyChanged();
+    }
+
+    public void setStatus(int status) {
+        if (mStatus == status) return;
+        mStatus = status;
+        notifyChanged();
+    }
+
+    public void setOnCheck(Runnable onCheck) {
+        mOnCheck = onCheck;
+    }
+
+    public void setOnStatus(Runnable onStatus) {
+        mOnStatus = onStatus;
+    }
+
+    @Override
+    public void onBindViewHolder(PreferenceViewHolder holder) {
+        super.onBindViewHolder(holder);
+        View version = holder.findViewById(R.id.aerium_about_version);
+        if (version instanceof TextView text) text.setText(mVersion);
+        View status = holder.findViewById(R.id.aerium_about_status);
+        if (status instanceof TextView chip) {
+            chip.setVisibility(mStatus == STATUS_NONE ? View.GONE : View.VISIBLE);
+            chip.setText(
+                    mStatus == STATUS_CHECKING
+                            ? R.string.aerium_checking
+                            : mStatus == STATUS_UPDATE
+                                    ? R.string.aerium_update_available_title
+                                    : R.string.aerium_up_to_date);
+            chip.setCompoundDrawablesRelativeWithIntrinsicBounds(
+                    mStatus == STATUS_UP_TO_DATE ? R.drawable.aerium_ic_up_to_date : 0, 0, 0, 0);
+            chip.setClickable(mStatus == STATUS_UPDATE);
+            chip.setOnClickListener(
+                    mStatus == STATUS_UPDATE
+                            ? view -> {
+                                Runnable onStatus = mOnStatus;
+                                if (onStatus != null) onStatus.run();
+                            }
+                            : null);
+        }
+        View check = holder.findViewById(R.id.aerium_about_check);
+        if (check != null) {
+            check.setEnabled(mStatus != STATUS_CHECKING);
+            check.setAlpha(mStatus == STATUS_CHECKING ? 0.5f : 1f);
+            check.setOnClickListener(
+                    view -> {
+                        Runnable onCheck = mOnCheck;
+                        if (onCheck != null) onCheck.run();
+                    });
+        }
+    }
+}
+AERIUM_ABOUT_HERO_JAVA
+sed_i 's|^  "java/src/org/chromium/chrome/browser/browsing_data/BrowsingDataCounterBridge.java",$|  "java/src/org/chromium/chrome/browser/about_settings/AeriumAboutHeroPreference.java",\n&|' \
+    chrome/android/chrome_java_sources.gni
+sed_i 's|^  "java/res/drawable/acute_24dp.xml",$|  "java/res/drawable/aerium_about_button.xml",\n  "java/res/drawable/aerium_about_chip.xml",\n&|' \
+    chrome/android/chrome_java_resources.gni
+sed_i 's|^  "java/res/layout/account_chooser_dialog_item.xml",$|  "java/res/layout/aerium_about_hero.xml",\n&|' \
+    chrome/android/chrome_java_resources.gni
+
+AERIUM_ABOUT_JAVA=$(cat <<'AERIUM_ABOUT_ROWS_JAVA'
+        aeriumSetUpRows();
+    }
+
+    private static final String AERIUM_CHECK_REQUESTED = "aerium.update.check_requested";
+    private static final String AERIUM_LAST_CHECK_DONE = "aerium.update.last_check_done";
+    private static final String AERIUM_OBTAINIUM_LINK =
+            "obtainium://add/https://github.com/aerium-browser/aerium-browser-android";
+    private static final String AERIUM_OBTAINIUM_SITE = "https://obtainium.imranr.dev";
+
+    private @Nullable org.chromium.components.prefs.PrefChangeRegistrar mAeriumRegistrar;
+    private boolean mAeriumChecking;
+
+    private void aeriumSetUpRows() {
+        PrefService prefs = UserPrefs.get(getProfile());
+        AeriumAboutHeroPreference hero = findPreference("aerium_about_hero");
+        if (hero != null) {
+            hero.setVersion(org.chromium.base.version_info.VersionInfo.getProductVersion());
+            hero.setOnCheck(
+                    () -> {
+                        mAeriumChecking = true;
+                        aeriumRefreshHero();
+                        prefs.setString(
+                                AERIUM_CHECK_REQUESTED, String.valueOf(System.currentTimeMillis()));
+                    });
+            hero.setOnStatus(
+                    () -> {
+                        String url = prefs.getString(PREF_UPDATE_LATEST_URL);
+                        if (!url.isEmpty()) CustomTabActivity.showInfoPage(getActivity(), url);
+                    });
+        }
+        mAeriumRegistrar = new org.chromium.components.prefs.PrefChangeRegistrar(prefs);
+        mAeriumRegistrar.addObserver(
+                AERIUM_LAST_CHECK_DONE,
+                () -> {
+                    mAeriumChecking = false;
+                    aeriumRefreshHero();
+                });
+        mAeriumRegistrar.addObserver(PREF_UPDATE_LATEST_VERSION, this::aeriumRefreshHero);
+        aeriumRefreshHero();
+
+        Preference updateAvailable = findPreference(PREF_AERIUM_UPDATE_AVAILABLE);
+        if (updateAvailable != null) updateAvailable.setVisible(false);
+        Preference legal = findPreference(PREF_LEGAL_INFORMATION);
+        if (legal != null) legal.setSummary((CharSequence) null);
+        String[] links = {PREF_AERIUM_PATCHES, PREF_AERIUM_PROJECT, PREF_AERIUM_SHARE};
+        for (String key : links) {
+            Preference row = findPreference(key);
+            if (row != null) row.setSummary((CharSequence) null);
+            if (row instanceof ChromeBasePreference base) base.setAeriumChevron(true);
+        }
+        Preference support = findPreference("support_aerium");
+        if (support instanceof ChromeBasePreference base) base.setAeriumChevron(true);
+        if (support != null) {
+            support.setOnPreferenceClickListener(
+                    preference -> {
+                        CustomTabActivity.showInfoPage(
+                                getActivity(), getString(R.string.support_aerium_url));
+                        return true;
+                    });
+        }
+        Preference obtainium = findPreference("aerium_obtainium");
+        if (obtainium instanceof ChromeBasePreference base) base.setAeriumChevron(true);
+        if (obtainium != null) {
+            obtainium.setOnPreferenceClickListener(
+                    preference -> {
+                        Intent add =
+                                new Intent(Intent.ACTION_VIEW, Uri.parse(AERIUM_OBTAINIUM_LINK));
+                        try {
+                            startActivity(add);
+                        } catch (ActivityNotFoundException e) {
+                            CustomTabActivity.showInfoPage(getActivity(), AERIUM_OBTAINIUM_SITE);
+                        }
+                        return true;
+                    });
+        }
+    }
+
+    private void aeriumRefreshHero() {
+        AeriumAboutHeroPreference hero = findPreference("aerium_about_hero");
+        if (hero == null) return;
+        PrefService prefs = UserPrefs.get(getProfile());
+        if (mAeriumChecking) {
+            hero.setStatus(AeriumAboutHeroPreference.STATUS_CHECKING);
+        } else if (!prefs.getString(PREF_UPDATE_LATEST_VERSION).isEmpty()
+                && !prefs.getString(PREF_UPDATE_LATEST_URL).isEmpty()) {
+            hero.setStatus(AeriumAboutHeroPreference.STATUS_UPDATE);
+        } else if (!prefs.getString(AERIUM_LAST_CHECK_DONE).isEmpty()) {
+            hero.setStatus(AeriumAboutHeroPreference.STATUS_UP_TO_DATE);
+        } else {
+            hero.setStatus(AeriumAboutHeroPreference.STATUS_NONE);
+        }
+    }
+
+    @Override
+    public void onDestroy() {
+        if (mAeriumRegistrar != null) {
+            mAeriumRegistrar.destroy();
+            mAeriumRegistrar = null;
+        }
+        super.onDestroy();
+    }
+AERIUM_ABOUT_ROWS_JAVA
+)
+AERIUM_ABOUT_JAVA="$AERIUM_ABOUT_JAVA" perl -0777 -pi -e '
+    s{(                        \} catch \(ActivityNotFoundException e\) \{\n                            // No app on the device can handle a plain-text share\. Nothing to\n                            // fall back to - the row simply does nothing this time\.\n                        \}\n                        return true;\n                    \}\);\n        \}\n)    \}\n}{$1$ENV{AERIUM_ABOUT_JAVA}\n}
+        or die "[aerium] FATAL: AboutChromeSettings.onCreatePreferences() no longer ends with the share row\n";
+    s{(import android\.content\.Intent;\n)}{$1import android.net.Uri;\n}
+        or die "[aerium] FATAL: AboutChromeSettings imports moved\n";
+    s{(import org\.chromium\.components\.browser_ui\.settings\.ChromeSwitchPreference;\n)}{import org.chromium.components.browser_ui.settings.ChromeBasePreference;\n$1}
+        or die "[aerium] FATAL: AboutChromeSettings imports moved\n";
+' chrome/android/java/src/org/chromium/chrome/browser/about_settings/AboutChromeSettings.java || return 1
 AERIUM_CANVAS_GRD=$(cat <<'AERIUM_CANVAS_GRD_XML'
       <message name="IDS_AERIUM_SETTINGS_FIND" desc="Placeholder in the search box at the top of Settings.">
         Find a setting
@@ -16626,6 +17309,33 @@ AERIUM_CANVAS_GRD=$(cat <<'AERIUM_CANVAS_GRD_XML'
       </message>
       <message name="IDS_AERIUM_EXIT_APPS" desc="Short name of hosted app data, shown in the list of data deleted on exit.">
         App data
+      </message>
+      <message name="IDS_AERIUM_UP_TO_DATE" desc="Chip on the About Aerium screen when no newer release exists.">
+        Up to date
+      </message>
+      <message name="IDS_AERIUM_CHECK_NOW" desc="Button on the About Aerium screen that checks for a newer release right away.">
+        Check now
+      </message>
+      <message name="IDS_AERIUM_CHECKING" desc="Chip on the About Aerium screen while the check for a newer release runs.">
+        Checking
+      </message>
+      <message name="IDS_AERIUM_CHECK_EVERY_DAY" desc="Switch on the About Aerium screen that checks for a newer release once a day.">
+        Check every day
+      </message>
+      <message name="IDS_AERIUM_UPDATE_OBTAINIUM" desc="Row on the About Aerium screen that adds Aerium to the Obtainium app, which keeps apps from GitHub up to date.">
+        Update with Obtainium
+      </message>
+      <message name="IDS_AERIUM_PROJECT_WEBSITE" desc="Row on the About Aerium screen that opens the project website.">
+        Project website
+      </message>
+      <message name="IDS_AERIUM_LEGAL" desc="Row on the About Aerium screen that opens licences and legal notices.">
+        Legal
+      </message>
+      <message name="IDS_AERIUM_ABOUT_UPDATES" desc="Section heading on the About Aerium screen.">
+        Updates
+      </message>
+      <message name="IDS_AERIUM_ABOUT_NAME" desc="Product name shown under the logo on the About Aerium screen. Do not translate.">
+        Aerium
       </message>
 AERIUM_CANVAS_GRD_XML
 )
