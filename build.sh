@@ -410,50 +410,12 @@ fi
 
 python3 "$SCRIPT_DIR/sb-link-guards.py"
 
-# --- Resume sync for the first-run page: theme.sh only runs during source
-# setup, so a tree saved by an earlier stage keeps whatever version of the
-# page it was built with. Re-emit the header from theme.sh whenever the tree's
-# copy differs, which keeps a resumed tree matching a freshly synced one.
-#
-# This started as a fix for one bug: the page's data source declared three
-# virtual methods with non-empty bodies inside the class body. The
-# chromium-style plugin rejects that ("virtual methods with non-empty bodies
-# shouldn't be declared inline") and it stopped build-1 of runs 32633921251
-# and 32716211686 on chrome_web_ui_configs.o, the only translation unit that
-# includes this header. theme.sh now writes those definitions below the class,
-# which is what the plugin asks for - it gates the diagnostic on
-# CXXMethodDecl::hasInlineBody(), false once the definition is out-of-line.
-#
-# Comparing against theme.sh rather than grepping for that one bug means
-# ordinary edits to the page - wording, links - also reach a resumed tree, so
-# a text change costs one translation unit instead of a full re-sync. Copying
-# from theme.sh rather than editing in place keeps exactly one copy of the
-# page. On a fresh tree the two are identical and nothing happens.
-AFR=chrome/browser/ui/webui/aerium_first_run.h
-if [ -f "$AFR" ]; then
-    AFR_FRESH=$(mktemp)
-    awk '/^cat > chrome\/browser\/ui\/webui\/aerium_first_run.h <<.AERIUM_FIRST_RUN_H.$/{f=1;next} /^AERIUM_FIRST_RUN_H$/{f=0} f' \
-        "$SCRIPT_DIR/theme.sh" > "$AFR_FRESH"
-    if ! grep -q '^inline std::string AeriumFirstRunDataSource::GetSource' "$AFR_FRESH"; then
-        echo "[aerium] FATAL: could not extract the first-run page from theme.sh." >&2
-        echo "[aerium] The heredoc markers in theme.sh must have moved." >&2
-        rm -f "$AFR_FRESH"
-        exit 1
-    fi
-    if grep -q 'IDS_AERIUM_FIRST_RUN_TITLE' "$AFR_FRESH" \
-       && ! grep -q 'IDS_AERIUM_FIRST_RUN_TITLE' chrome/app/generated_resources.grd; then
-        echo "[aerium] first-run page left as is: this tree predates its translatable strings"
-    elif cmp -s "$AFR_FRESH" "$AFR"; then
-        echo "[aerium] first-run page in the tree already matches theme.sh"
-    else
-        cp "$AFR_FRESH" "$AFR"
-        echo "[aerium] resume sync: refreshed $AFR from theme.sh"
-    fi
-    rm -f "$AFR_FRESH"
-fi
-
-# --- chrome://aerium, the same way. The page header comes from theme.sh, so a
-# resumed tree gets the same treatment as the first-run page above.
+# --- Resume sync for chrome://aerium: theme.sh only runs during source setup,
+# so a resumed tree keeps whatever page it was built with. Re-emit the header
+# from theme.sh whenever the tree's copy differs, which keeps a resumed tree
+# matching a freshly synced one. Copying from theme.sh rather than editing in
+# place keeps exactly one copy of the page. On a fresh tree the two are
+# identical and nothing happens.
 APH=chrome/browser/ui/webui/aerium_patches.h
 if [ -f "$APH" ]; then
     APH_FRESH=$(mktemp)
