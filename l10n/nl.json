@@ -157,6 +157,8 @@
   "IDS_AERIUM_OPEN_APP_LINKS_TITLE": "Links in apps laten openen",
   "IDS_AERIUM_PATCHES_SUMMARY": "Elke patch die bovenop het oorspronkelijke Chromium is toegepast",
   "IDS_AERIUM_PATCHES_TITLE": "Wat deze build verandert",
+  "IDS_AERIUM_PREFS_EXTENSIONS_COUNT": "{COUNT} geïnstalleerd",
+  "IDS_AERIUM_PREFS_EXTENSIONS_SUMMARY": "Extensies toevoegen, verwijderen en instellen",
   "IDS_AERIUM_PREFS_SECTION_ABOUT": "Over",
   "IDS_AERIUM_PREFS_SECTION_APPEARANCE": "Weergave en taal",
   "IDS_AERIUM_PREFS_SECTION_DOWNLOADS": "Downloads en media",

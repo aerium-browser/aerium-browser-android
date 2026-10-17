@@ -12127,14 +12127,19 @@ cat > $AERIUM_TB_SRC/settings/AeriumExtensionBackup.java <<'AERIUM_EXTENSION_BAC
 package org.chromium.chrome.browser.settings;
 
 import android.content.Context;
+import android.content.Intent;
+import android.net.Uri;
+import android.provider.Browser;
 
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import org.chromium.base.ContextUtils;
+import org.chromium.base.IntentUtils;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
+import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.components.prefs.PrefService;
 
 import java.io.ByteArrayOutputStream;
@@ -12263,6 +12268,46 @@ public final class AeriumExtensionBackup {
         return name;
     }
 
+    private static boolean isUserInstalled(JSONObject entry) {
+        int location = entry.optInt("location", 0);
+        if (location != LOCATION_INTERNAL && location != LOCATION_UNPACKED) return false;
+        if ((entry.optInt("creation_flags", 0) & WAS_INSTALLED_BY_DEFAULT) != 0) return false;
+        return !entry.optBoolean("was_installed_by_default", false)
+                && !entry.optBoolean("was_installed_by_oem", false);
+    }
+
+    public static int countInstalled(@Nullable PrefService prefs) {
+        if (prefs == null) return 0;
+        String json = prefs.getJson("extensions.settings");
+        if (json == null || json.isEmpty()) return 0;
+        try {
+            JSONObject all = new JSONObject(json);
+            int count = 0;
+            Iterator<String> ids = all.keys();
+            while (ids.hasNext()) {
+                String id = ids.next();
+                JSONObject entry = all.optJSONObject(id);
+                if (entry != null && isId(id) && isUserInstalled(entry)) count++;
+            }
+            return count;
+        } catch (JSONException e) {
+            return 0;
+        }
+    }
+
+    public static void openExtensionsPage(Context context) {
+        Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse("chrome://extensions"));
+        intent.setClass(context, ChromeLauncherActivity.class);
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        intent.putExtra(Browser.EXTRA_CREATE_NEW_TAB, true);
+        intent.putExtra(Browser.EXTRA_APPLICATION_ID, context.getPackageName());
+        IntentUtils.addTrustedIntentExtras(intent);
+        try {
+            context.startActivity(intent);
+        } catch (RuntimeException e) {
+        }
+    }
+
     public static JSONArray collect(@Nullable PrefService prefs) throws JSONException {
         JSONArray result = new JSONArray();
         if (prefs == null) return result;
@@ -12278,13 +12323,9 @@ public final class AeriumExtensionBackup {
         while (ids.hasNext()) {
             String id = ids.next();
             JSONObject entry = all.optJSONObject(id);
-            if (entry == null || !isId(id)) continue;
+            if (entry == null || !isId(id) || !isUserInstalled(entry)) continue;
             int location = entry.optInt("location", 0);
-            if (location != LOCATION_INTERNAL && location != LOCATION_UNPACKED) continue;
             int flags = entry.optInt("creation_flags", 0);
-            if ((flags & WAS_INSTALLED_BY_DEFAULT) != 0) continue;
-            if (entry.optBoolean("was_installed_by_default", false)) continue;
-            if (entry.optBoolean("was_installed_by_oem", false)) continue;
             File dir = installDir(entry);
             JSONObject manifest = entry.optJSONObject("manifest");
             if (manifest == null && dir != null) manifest = readJson(new File(dir, "manifest.json"));
@@ -12521,6 +12562,13 @@ sed_i 's|^#include "base/android/jni_string.h"$|&\n#include "base/json/json_writ
     $PSC
 sed_i 's|^int32_t PrefServiceAndroid::GetPrefType($|std::string PrefServiceAndroid::GetJson(\n    JNIEnv* env,\n    const JavaRef<jstring>\& j_preference) {\n  const PrefService::Preference* preference = pref_service_->FindPreference(\n      base::android::ConvertJavaStringToUTF8(env, j_preference));\n  if (!preference \|\| !preference->GetValue()) {\n    return std::string();\n  }\n  return base::WriteJson(*preference->GetValue()).value_or(std::string());\n}\n\n&|' \
     $PSC
+
+sed_i 's|^</PreferenceScreen>$|    <org.chromium.components.browser_ui.settings.ChromeBasePreference\n        android:key="aerium_extensions"\n        android:order="46"\n        android:title="@string/menu_extensions"\n        android:summary="@string/aerium_prefs_extensions_summary" />\n&|' \
+    $AERIUM_TB_RES/xml/main_preferences.xml
+sed_i 's|^    private void updateAddressBarPreference() {$|    private void aeriumUpdateRows() {\n        Preference extensions = findPreference("aerium_extensions");\n        if (extensions != null) {\n            int count = AeriumExtensionBackup.countInstalled(UserPrefs.get(getProfile()));\n            extensions.setSummary(\n                    count > 0\n                            ? getString(R.string.aerium_prefs_extensions_count, count)\n                            : getString(R.string.aerium_prefs_extensions_summary));\n            extensions.setOnPreferenceClickListener(\n                    preference -> {\n                        AeriumExtensionBackup.openExtensionsPage(getContext());\n                        return true;\n                    });\n        }\n        Preference guard = findPreference("aerium_guard");\n        if (guard != null) {\n            var prefs = UserPrefs.get(getProfile());\n            String active =\n                    prefs.getPrefType("aerium_guard.active_preset") >= 0\n                            ? prefs.getString("aerium_guard.active_preset")\n                            : "";\n            if ("recommended".equals(active)) {\n                guard.setSummary(R.string.aerium_guard_active_recommended);\n            } else if ("privacy".equals(active)) {\n                guard.setSummary(R.string.aerium_guard_active_privacy);\n            } else if ("performance".equals(active)) {\n                guard.setSummary(R.string.aerium_guard_active_performance);\n            } else if ("security".equals(active)) {\n                guard.setSummary(R.string.aerium_guard_active_security);\n            } else if ("custom".equals(active)) {\n                guard.setSummary(R.string.aerium_guard_active_custom);\n            }\n        }\n    }\n\n&\n        aeriumUpdateRows();|' \
+    $AERIUM_TB_SRC/settings/MainSettings.java
+sed_i 's|      <message name="IDS_AERIUM_MEDIA_TITLE" desc=|      <message name="IDS_AERIUM_PREFS_EXTENSIONS_SUMMARY" desc="Summary under the Extensions row in Settings, shown when no extension is installed.">\n        Add, remove and set up extensions\n      </message>\n      <message name="IDS_AERIUM_PREFS_EXTENSIONS_COUNT" desc="Summary under the Extensions row in Settings. COUNT is the number of installed extensions, always 1 or more.">\n        <ph name="COUNT">%1$d<ex>3</ex></ph> installed\n      </message>\n&|' \
+    chrome/browser/ui/android/strings/android_chrome_strings.grd
 
 echo "[aerium] toolbar layouts and menu items applied"
 
