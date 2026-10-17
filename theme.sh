@@ -8538,9 +8538,6 @@ sed_i 's|^  "java/res/xml/appearance_preferences.xml",$|  "java/res/xml/aerium_b
     chrome/android/chrome_java_resources.gni
 
 cat > chrome/android/java/src/org/chromium/chrome/browser/settings/AeriumBackupFragment.java <<'AERIUM_BACKUP_JAVA'
-// Copyright 2026 The Chromium Authors
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
 
 package org.chromium.chrome.browser.settings;
 
@@ -8770,15 +8767,7 @@ public class AeriumBackupFragment extends ChromeBaseSettingsFragment {
     private static final String UBO_STORE_ID = "cjpalhdlnbpafiamejdnhcphjbkeiagm";
     private static final String ADGUARD_ID = "bgnkhhnnamicmpeenaelnjfhikgbkllg";
     private static final String FLOCCUS_ID = "fnaicdffflnofjppbagibeoednhnbjhg";
-    private static final String DECENTRALEYES_ID = "ldpochfccmkkmhdbclfhpagapcfdljkj";
-    private static final String CONSENT_ID = "mdjildafknihdffpkfmmpnpoiajfjnjd";
     private static final String TABLISS_ID = "dlaogejjiafeobgofajdlkkhjlignalk";
-    private static final String SPONSORBLOCK_ID = "mnjggcdmjocbbbhaepdhchncahnbgone";
-
-    private static final int[] TILE_COLORS = {
-        0xFF1B2C5E, 0xFF0F766E, 0xFF9333EA, 0xFFB45309,
-        0xFFBE123C, 0xFF4338CA, 0xFF15803D, 0xFF3F3F46,
-    };
 
     @Override
     public void onCreatePreferences(@Nullable Bundle savedInstanceState, @Nullable String rootKey) {
@@ -8942,8 +8931,9 @@ public class AeriumBackupFragment extends ChromeBaseSettingsFragment {
             View row = inflater.inflate(R.layout.aerium_backup_extension_row, list, false);
             View mark = row.findViewById(R.id.aerium_backup_ext_mark);
             if (mark instanceof TextView tile) {
-                tile.setText(markFor(id, name));
-                tile.setBackgroundTintList(ColorStateList.valueOf(colorFor(id, name)));
+                tile.setText(AeriumExtensionBackup.markFor(id, name));
+                tile.setBackgroundTintList(
+                        ColorStateList.valueOf(AeriumExtensionBackup.colorFor(id, name)));
             }
             View title = row.findViewById(R.id.aerium_backup_ext_name);
             if (title instanceof TextView text) text.setText(name);
@@ -8957,70 +8947,6 @@ public class AeriumBackupFragment extends ChromeBaseSettingsFragment {
         if (empty != null) empty.setVisibility(shown > 0 ? View.GONE : View.VISIBLE);
         View footer = root.findViewById(R.id.aerium_backup_extension_note);
         if (footer != null) footer.setVisibility(shown > 0 ? View.VISIBLE : View.GONE);
-    }
-
-    private static String markFor(String id, String name) {
-        switch (id) {
-            case UBOL_ID:
-            case UBO_STORE_ID:
-            case AeriumExtensionBackup.UBO_GITHUB_ID:
-                return "uB";
-            case ADGUARD_ID:
-                return "AG";
-            case FLOCCUS_ID:
-                return "fl";
-            case DECENTRALEYES_ID:
-                return "De";
-            case CONSENT_ID:
-                return "CM";
-            case TABLISS_ID:
-                return "Tb";
-            case SPONSORBLOCK_ID:
-                return "SB";
-            default:
-                break;
-        }
-        List<String> words = new java.util.ArrayList<>();
-        for (String word : name.trim().split("[^\\p{L}\\p{N}]+")) {
-            if (!word.isEmpty()) words.add(word);
-        }
-        if (words.isEmpty()) return "?";
-        if (words.size() >= 2) {
-            return (words.get(0).substring(0, 1) + words.get(1).substring(0, 1))
-                    .toUpperCase(Locale.getDefault());
-        }
-        String word = words.get(0);
-        StringBuilder capitals = new StringBuilder();
-        for (int i = 0; i < word.length() && capitals.length() < 2; i++) {
-            char c = word.charAt(i);
-            if (Character.isUpperCase(c)) capitals.append(c);
-        }
-        if (capitals.length() == 2) return capitals.toString();
-        return word.length() >= 2 ? word.substring(0, 2) : word;
-    }
-
-    private static int colorFor(String id, String name) {
-        switch (id) {
-            case UBOL_ID:
-                return 0xFF800000;
-            case UBO_STORE_ID:
-            case AeriumExtensionBackup.UBO_GITHUB_ID:
-                return 0xFF5A0000;
-            case ADGUARD_ID:
-                return 0xFF3E8E57;
-            case FLOCCUS_ID:
-                return 0xFF2563EB;
-            case DECENTRALEYES_ID:
-                return 0xFF14532D;
-            case CONSENT_ID:
-                return 0xFF334155;
-            case TABLISS_ID:
-                return 0xFF6D28D9;
-            case SPONSORBLOCK_ID:
-                return 0xFFC2410C;
-            default:
-                return TILE_COLORS[Math.floorMod(name.hashCode(), TILE_COLORS.length)];
-        }
     }
 
     private static int noteFor(String id) {
@@ -13430,6 +13356,82 @@ public final class AeriumExtensionBackup {
         }
     }
 
+    private static boolean isEnabled(JSONObject entry) {
+        JSONArray reasons = entry.optJSONArray("disable_reasons");
+        if (reasons != null) return reasons.length() == 0;
+        if (entry.optInt("disable_reasons", 0) != 0) return false;
+        return entry.optInt("state", 1) != 0;
+    }
+
+    public static String markFor(String id, String name) {
+        switch (id) {
+            case "ddkjiahejlhfcafbddmgiahcphecmpfh":
+            case "cjpalhdlnbpafiamejdnhcphjbkeiagm":
+            case UBO_GITHUB_ID:
+                return "uB";
+            case "bgnkhhnnamicmpeenaelnjfhikgbkllg":
+                return "AG";
+            case "fnaicdffflnofjppbagibeoednhnbjhg":
+                return "fl";
+            case "ldpochfccmkkmhdbclfhpagapcfdljkj":
+                return "De";
+            case "mdjildafknihdffpkfmmpnpoiajfjnjd":
+                return "CM";
+            case "dlaogejjiafeobgofajdlkkhjlignalk":
+                return "Tb";
+            case "mnjggcdmjocbbbhaepdhchncahnbgone":
+                return "SB";
+            default:
+                break;
+        }
+        List<String> words = new ArrayList<>();
+        for (String word : name.trim().split("[^\\p{L}\\p{N}]+")) {
+            if (!word.isEmpty()) words.add(word);
+        }
+        if (words.isEmpty()) return "?";
+        if (words.size() >= 2) {
+            return (words.get(0).substring(0, 1) + words.get(1).substring(0, 1))
+                    .toUpperCase(Locale.getDefault());
+        }
+        String word = words.get(0);
+        StringBuilder capitals = new StringBuilder();
+        for (int i = 0; i < word.length() && capitals.length() < 2; i++) {
+            char c = word.charAt(i);
+            if (Character.isUpperCase(c)) capitals.append(c);
+        }
+        if (capitals.length() == 2) return capitals.toString();
+        return word.length() >= 2 ? word.substring(0, 2) : word;
+    }
+
+    private static final int[] TILE_COLORS = {
+        0xFF1B2C5E, 0xFF0F766E, 0xFF9333EA, 0xFFB45309,
+        0xFFBE123C, 0xFF4338CA, 0xFF15803D, 0xFF3F3F46,
+    };
+
+    public static int colorFor(String id, String name) {
+        switch (id) {
+            case "ddkjiahejlhfcafbddmgiahcphecmpfh":
+                return 0xFF800000;
+            case "cjpalhdlnbpafiamejdnhcphjbkeiagm":
+            case UBO_GITHUB_ID:
+                return 0xFF5A0000;
+            case "bgnkhhnnamicmpeenaelnjfhikgbkllg":
+                return 0xFF3E8E57;
+            case "fnaicdffflnofjppbagibeoednhnbjhg":
+                return 0xFF2563EB;
+            case "ldpochfccmkkmhdbclfhpagapcfdljkj":
+                return 0xFF14532D;
+            case "mdjildafknihdffpkfmmpnpoiajfjnjd":
+                return 0xFF334155;
+            case "dlaogejjiafeobgofajdlkkhjlignalk":
+                return 0xFF6D28D9;
+            case "mnjggcdmjocbbbhaepdhchncahnbgone":
+                return 0xFFC2410C;
+            default:
+                return TILE_COLORS[Math.floorMod(name.hashCode(), TILE_COLORS.length)];
+        }
+    }
+
     public static JSONArray collect(@Nullable PrefService prefs) throws JSONException {
         JSONArray result = new JSONArray();
         if (prefs == null) return result;
@@ -13473,6 +13475,8 @@ public final class AeriumExtensionBackup {
             item.put("name", name);
             item.put("version", manifest.optString("version", ""));
             item.put("aerogel", entry.optBoolean("incognito", false));
+            item.put("enabled", isEnabled(entry));
+            item.put("update_url", manifest.optString("update_url", ""));
             if (source.equals(SOURCE_FILE)) {
                 item.put("key", key);
                 item.put("dir", dir == null ? "" : dir.getAbsolutePath());
@@ -13758,7 +13762,7 @@ sed_i 's|^int32_t PrefServiceAndroid::GetPrefType($|std::string PrefServiceAndro
 
 sed_i 's|^</PreferenceScreen>$|    <org.chromium.components.browser_ui.settings.ChromeBasePreference\n        android:key="aerium_extensions"\n        android:order="46"\n        android:title="@string/menu_extensions"\n        android:summary="@string/aerium_prefs_extensions_summary" />\n&|' \
     $AERIUM_TB_RES/xml/main_preferences.xml
-sed_i 's|^    private void updateAddressBarPreference() {$|    private void aeriumUpdateRows() {\n        Preference extensions = findPreference("aerium_extensions");\n        if (extensions != null) {\n            int count = AeriumExtensionBackup.countInstalled(UserPrefs.get(getProfile()));\n            extensions.setSummary(\n                    count > 0\n                            ? getString(R.string.aerium_prefs_extensions_count, count)\n                            : getString(R.string.aerium_prefs_extensions_summary));\n            extensions.setOnPreferenceClickListener(\n                    preference -> {\n                        AeriumExtensionBackup.openExtensionsPage(getContext());\n                        return true;\n                    });\n        }\n        Preference guard = findPreference("aerium_guard");\n        if (guard != null) {\n            var prefs = UserPrefs.get(getProfile());\n            String active =\n                    prefs.getPrefType("aerium_guard.active_preset") >= 0\n                            ? prefs.getString("aerium_guard.active_preset")\n                            : "";\n            if ("recommended".equals(active)) {\n                guard.setSummary(R.string.aerium_guard_active_recommended);\n            } else if ("privacy".equals(active)) {\n                guard.setSummary(R.string.aerium_guard_active_privacy);\n            } else if ("performance".equals(active)) {\n                guard.setSummary(R.string.aerium_guard_active_performance);\n            } else if ("security".equals(active)) {\n                guard.setSummary(R.string.aerium_guard_active_security);\n            } else if ("custom".equals(active)) {\n                guard.setSummary(R.string.aerium_guard_active_custom);\n            }\n        }\n    }\n\n&\n        aeriumUpdateRows();|' \
+sed_i 's|^    private void updateAddressBarPreference() {$|    private void aeriumUpdateRows() {\n        Preference extensions = findPreference("aerium_extensions");\n        if (extensions != null) {\n            int count = AeriumExtensionBackup.countInstalled(UserPrefs.get(getProfile()));\n            extensions.setSummary(\n                    count > 0\n                            ? getString(R.string.aerium_prefs_extensions_count, count)\n                            : getString(R.string.aerium_prefs_extensions_summary));\n        }\n        Preference guard = findPreference("aerium_guard");\n        if (guard != null) {\n            var prefs = UserPrefs.get(getProfile());\n            String active =\n                    prefs.getPrefType("aerium_guard.active_preset") >= 0\n                            ? prefs.getString("aerium_guard.active_preset")\n                            : "";\n            if ("recommended".equals(active)) {\n                guard.setSummary(R.string.aerium_guard_active_recommended);\n            } else if ("privacy".equals(active)) {\n                guard.setSummary(R.string.aerium_guard_active_privacy);\n            } else if ("performance".equals(active)) {\n                guard.setSummary(R.string.aerium_guard_active_performance);\n            } else if ("security".equals(active)) {\n                guard.setSummary(R.string.aerium_guard_active_security);\n            } else if ("custom".equals(active)) {\n                guard.setSummary(R.string.aerium_guard_active_custom);\n            }\n        }\n    }\n\n&\n        aeriumUpdateRows();|' \
     $AERIUM_TB_SRC/settings/MainSettings.java
 sed_i 's|      <message name="IDS_AERIUM_MEDIA_TITLE" desc=|      <message name="IDS_AERIUM_PREFS_EXTENSIONS_SUMMARY" desc="Summary under the Extensions row in Settings, shown when no extension is installed.">\n        Add, remove and set up extensions\n      </message>\n      <message name="IDS_AERIUM_PREFS_EXTENSIONS_COUNT" desc="Summary under the Extensions row in Settings. COUNT is the number of installed extensions, always 1 or more.">\n        <ph name="COUNT">%1$d<ex>3</ex></ph> installed\n      </message>\n&|' \
     chrome/browser/ui/android/strings/android_chrome_strings.grd
@@ -13810,6 +13814,7 @@ cat > chrome/browser/aerium/aerium_extension_installer.h <<'AERIUM_EXTENSION_INS
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/storage_partition.h"
 #include "extensions/browser/crx_installer.h"
+#include "extensions/browser/disable_reason.h"
 #include "extensions/browser/extension_file_task_runner.h"
 #include "extensions/browser/extension_registrar.h"
 #include "extensions/browser/extension_registrar_factory.h"
@@ -13818,6 +13823,7 @@ cat > chrome/browser/aerium/aerium_extension_installer.h <<'AERIUM_EXTENSION_INS
 #include "extensions/browser/extension_registry_observer.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/install/crx_install_error.h"
+#include "extensions/browser/uninstall_reason.h"
 #include "extensions/browser/zipfile_installer.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/mojom/manifest.mojom-shared.h"
@@ -13837,6 +13843,8 @@ inline constexpr char kUboRepo[] = "gorhill/uBlock";
 inline constexpr char kUboKey[] =
     "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqyTdDTMXfZ/EbpM+rAHvNb/+CFb/9mTu9eB9hgr67RvqL4A8jh5JGlhepDKeKGbFfrFc9gT3sd3OgZEzhFU+eTGxGBeVaverTJBKkMRW414lirw/hDg5uWbDDkGJfoG8B3y0GhhCsopJqajO/yL4olt1/5/dVKuYZvunenkKWEGRgPyDAJX9auMuydjJ5G4lKZa8P03PeZxYEvlr/c6RDviiFwshmazHDJJP9XrLX4uqy6a0Tx4lXUvYVGvSt7nKgMHsoy68eJps5lANpGpEIAOyJDTKCyjPzLmghvWJTqcxyCqijIgZAz58gQZWYDy9lM7zbjySiwkj7PDarYzQ2QIDAQAB";
 inline constexpr char kLocalRoot[] = "aerium_restore_extensions";
+inline constexpr char kImportRoot[] = "aerium_import_extensions";
+inline constexpr char kCommandPref[] = "aerium.extension_command";
 
 inline void PinUnpackedId(const base::FilePath& dir) {
   const base::FilePath manifest = dir.AppendASCII("manifest.json");
@@ -13891,6 +13899,8 @@ class AeriumExtensionInstaller : public KeyedService,
   void OnCrxDownloaded(base::FilePath path);
   void OnCrxInstalled(const std::optional<extensions::CrxInstallError>& error);
   void StartLocal();
+  void StartFile();
+  void OnCommand();
   void StartGithub();
   void OnReleaseFetched(std::optional<std::string> body);
   void OnZipDownloaded(base::FilePath path);
@@ -13925,6 +13935,9 @@ inline AeriumExtensionInstaller::AeriumExtensionInstaller(Profile* profile)
   registrar_.Init(profile_->GetPrefs());
   registrar_.Add(kQueuePref,
                  base::BindRepeating(&AeriumExtensionInstaller::OnQueueChanged,
+                                     base::Unretained(this)));
+  registrar_.Add(kCommandPref,
+                 base::BindRepeating(&AeriumExtensionInstaller::OnCommand,
                                      base::Unretained(this)));
   extensions::ExtensionSystem::Get(profile_)->ready().Post(
       FROM_HERE, base::BindOnce(&AeriumExtensionInstaller::OnReady,
@@ -13988,7 +14001,44 @@ AeriumExtensionInstaller::MakeLoader(const GURL& url, bool json) {
 
 inline void AeriumExtensionInstaller::OnReady() {
   ready_ = true;
+  OnCommand();
   Next();
+}
+
+inline void AeriumExtensionInstaller::OnCommand() {
+  PrefService* prefs = profile_->GetPrefs();
+  const std::string command = prefs->GetString(kCommandPref);
+  if (command.empty() || !ready_) {
+    return;
+  }
+  prefs->SetString(kCommandPref, std::string());
+  std::optional<base::Value> parsed =
+      base::JSONReader::Read(command, base::JSON_PARSE_RFC);
+  if (!parsed || !parsed->is_dict()) {
+    return;
+  }
+  const std::string* id = parsed->GetDict().FindString("id");
+  const std::string* op = parsed->GetDict().FindString("op");
+  if (!id || !op || !crx_file::id_util::IdIsValid(*id) ||
+      !extensions::ExtensionRegistry::Get(profile_)->GetInstalledExtension(
+          *id)) {
+    return;
+  }
+  extensions::ExtensionRegistrar* registrar =
+      extensions::ExtensionRegistrar::Get(profile_);
+  if (*op == "enable") {
+    registrar->EnableExtension(*id);
+  } else if (*op == "disable") {
+    registrar->DisableExtension(
+        *id, {extensions::disable_reason::DISABLE_USER_ACTION});
+  } else if (*op == "aerogel_on" || *op == "aerogel_off") {
+    extensions::util::SetIsIncognitoEnabled(*id, profile_.get(),
+                                            *op == "aerogel_on");
+  } else if (*op == "remove") {
+    std::u16string error;
+    registrar->UninstallExtension(
+        *id, extensions::UNINSTALL_REASON_USER_INITIATED, &error);
+  }
 }
 
 inline void AeriumExtensionInstaller::OnQueueChanged() {
@@ -14086,6 +14136,9 @@ inline void AeriumExtensionInstaller::Next() {
              !current_.key.empty() &&
              current_.path.find(kLocalRoot) != std::string::npos) {
     StartLocal();
+  } else if ((current_.source == "crx" || current_.source == "zip") &&
+             current_.path.find(kImportRoot) != std::string::npos) {
+    StartFile();
   } else {
     base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&AeriumExtensionInstaller::ItemDone,
@@ -14178,6 +14231,24 @@ inline void AeriumExtensionInstaller::StartLocal() {
   installer->InstallUnpackedCrx(current_.id, current_.key, dir);
 }
 
+inline void AeriumExtensionInstaller::StartFile() {
+  const base::FilePath path = base::FilePath::FromUTF8Unsafe(current_.path);
+  if (current_.source == "zip") {
+    OnZipDownloaded(path);
+    return;
+  }
+  scoped_refptr<extensions::CrxInstaller> installer =
+      extensions::CrxInstaller::CreateSilent(profile_);
+  installer->set_delete_source(true);
+  installer->set_allow_silent_install(true);
+  installer->set_off_store_install_allow_reason(
+      extensions::CrxInstaller::OffStoreInstallAllowedFromSettingsPage);
+  installer->set_error_on_unsupported_requirements(true);
+  installer->AddInstallerCallback(base::BindOnce(
+      &AeriumExtensionInstaller::OnCrxInstalled, weak_factory_.GetWeakPtr()));
+  installer->InstallCrx(path);
+}
+
 inline void AeriumExtensionInstaller::StartGithub() {
   loader_ = MakeLoader(
       GURL(std::string("https://api.github.com/repos/") + kUboRepo +
@@ -14265,6 +14336,10 @@ inline void AeriumExtensionInstaller::OnZipUnpacked(
       registry_observation_.Reset();
       ItemDone(false);
     }
+    return;
+  }
+  if (current_.source != "github") {
+    std::move(register_cb).Run(zip_file, unzip_dir, error);
     return;
   }
   base::ThreadPool::PostTaskAndReply(
@@ -14370,6 +14445,7 @@ inline bool AeriumExtensionInstallerFactory::ServiceIsCreatedWithBrowserContext(
 inline void AeriumExtensionInstallerFactory::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterStringPref(kQueuePref, std::string());
+  registry->RegisterStringPref(kCommandPref, std::string());
 }
 
 }  // namespace aerium_install
@@ -14995,6 +15071,118 @@ perl -0777 -pi -e '
 echo "[aerium] canvas palette, font and settings look applied"
 
 AERIUM_CANVAS_DRAWABLES=chrome/android/java/res/drawable
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_ext_store_button.xml <<'AERIUM_IC_EXT_STORE_BUTTON_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/aeriumOnAcc"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M4 9l1.5-5h13L20 9" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/aeriumOnAcc"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M4 9h16v2a3 3 0 0 1-5.3 2 3 3 0 0 1-5.4 0A3 3 0 0 1 4 11z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/aeriumOnAcc"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M6 13v7h12v-7" />
+</vector>
+AERIUM_IC_EXT_STORE_BUTTON_XML
+
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_ext_file.xml <<'AERIUM_IC_EXT_FILE_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M14 3v5h5" />
+</vector>
+AERIUM_IC_EXT_FILE_XML
+
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_ext_store.xml <<'AERIUM_IC_EXT_STORE_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="19dp"
+    android:height="19dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M4 9l1.5-5h13L20 9" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M4 9h16v2a3 3 0 0 1-5.3 2 3 3 0 0 1-5.4 0A3 3 0 0 1 4 11z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M6 13v7h12v-7" />
+</vector>
+AERIUM_IC_EXT_STORE_XML
+
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_ext_aerogel.xml <<'AERIUM_IC_EXT_AEROGEL_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="18dp"
+    android:height="18dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/aeriumHaze"
+        android:strokeWidth="1.9"
+        android:strokeLineCap="butt"
+        android:strokeLineJoin="round"
+        android:pathData="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z" />
+    <path
+        android:fillColor="?attr/aeriumHaze"
+        android:pathData="M8.4,10a1.1,1.1 0,1 0,2.2,0a1.1,1.1 0,1 0,-2.2,0Z" />
+    <path
+        android:fillColor="?attr/aeriumHaze"
+        android:pathData="M13.4,11.5a1.1,1.1 0,1 0,2.2,0a1.1,1.1 0,1 0,-2.2,0Z" />
+    <path
+        android:fillColor="?attr/aeriumHaze"
+        android:pathData="M9.9,15a1.1,1.1 0,1 0,2.2,0a1.1,1.1 0,1 0,-2.2,0Z" />
+</vector>
+AERIUM_IC_EXT_AEROGEL_XML
+
 cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_backup_up.xml <<'AERIUM_IC_BACKUP_UP_XML'
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
@@ -16735,7 +16923,7 @@ cat > $AERIUM_CANVAS_DRAWABLES/aerium_settings_find.xml <<'AERIUM_SETTINGS_FIND_
 </vector>
 AERIUM_SETTINGS_FIND_XML
 
-sed_i 's|^  "java/res/drawable/acute_24dp.xml",$|  "java/res/drawable/aerium_about_logo.xml",\n  "java/res/drawable/aerium_ic_about.xml",\n  "java/res/drawable/aerium_ic_accessibility.xml",\n  "java/res/drawable/aerium_ic_aerogel.xml",\n  "java/res/drawable/aerium_ic_aerogel_lock.xml",\n  "java/res/drawable/aerium_ic_appearance.xml",\n  "java/res/drawable/aerium_ic_backup.xml",\n  "java/res/drawable/aerium_ic_backup_bookmarks.xml",\n  "java/res/drawable/aerium_ic_backup_extensions.xml",\n  "java/res/drawable/aerium_ic_backup_lock.xml",\n  "java/res/drawable/aerium_ic_backup_reinstall.xml",\n  "java/res/drawable/aerium_ic_backup_restore.xml",\n  "java/res/drawable/aerium_ic_backup_settings.xml",\n  "java/res/drawable/aerium_ic_backup_sites.xml",\n  "java/res/drawable/aerium_ic_backup_tabs.xml",\n  "java/res/drawable/aerium_ic_backup_up.xml",\n  "java/res/drawable/aerium_ic_build_changes.xml",\n  "java/res/drawable/aerium_ic_clear_browsing.xml",\n  "java/res/drawable/aerium_ic_clear_site.xml",\n  "java/res/drawable/aerium_ic_close_tabs.xml",\n  "java/res/drawable/aerium_ic_cookies.xml",\n  "java/res/drawable/aerium_ic_default_browser.xml",\n  "java/res/drawable/aerium_ic_delete_on_exit.xml",\n  "java/res/drawable/aerium_ic_developer.xml",\n  "java/res/drawable/aerium_ic_do_not_track.xml",\n  "java/res/drawable/aerium_ic_downloads.xml",\n  "java/res/drawable/aerium_ic_extensions.xml",\n  "java/res/drawable/aerium_ic_fingerprint.xml",\n  "java/res/drawable/aerium_ic_gpc.xml",\n  "java/res/drawable/aerium_ic_guard.xml",\n  "java/res/drawable/aerium_ic_guard_import.xml",\n  "java/res/drawable/aerium_ic_guard_paste.xml",\n  "java/res/drawable/aerium_ic_guard_performance.xml",\n  "java/res/drawable/aerium_ic_guard_privacy.xml",\n  "java/res/drawable/aerium_ic_guard_profile.xml",\n  "java/res/drawable/aerium_ic_guard_recommended.xml",\n  "java/res/drawable/aerium_ic_guard_save.xml",\n  "java/res/drawable/aerium_ic_guard_security.xml",\n  "java/res/drawable/aerium_ic_guard_status.xml",\n  "java/res/drawable/aerium_ic_https_first.xml",\n  "java/res/drawable/aerium_ic_languages.xml",\n  "java/res/drawable/aerium_ic_legal.xml",\n  "java/res/drawable/aerium_ic_media.xml",\n  "java/res/drawable/aerium_ic_notifications.xml",\n  "java/res/drawable/aerium_ic_obtainium.xml",\n  "java/res/drawable/aerium_ic_open_in_apps.xml",\n  "java/res/drawable/aerium_ic_privacy.xml",\n  "java/res/drawable/aerium_ic_project.xml",\n  "java/res/drawable/aerium_ic_referrer.xml",\n  "java/res/drawable/aerium_ic_safe_browsing.xml",\n  "java/res/drawable/aerium_ic_search.xml",\n  "java/res/drawable/aerium_ic_secure_dns.xml",\n  "java/res/drawable/aerium_ic_share_aerium.xml",\n  "java/res/drawable/aerium_ic_site_rules.xml",\n  "java/res/drawable/aerium_ic_sites.xml",\n  "java/res/drawable/aerium_ic_support.xml",\n  "java/res/drawable/aerium_ic_tabs.xml",\n  "java/res/drawable/aerium_ic_toolbar.xml",\n  "java/res/drawable/aerium_ic_up_to_date.xml",\n  "java/res/drawable/aerium_ic_update_daily.xml",\n  "java/res/drawable/aerium_ic_web_apps.xml",\n  "java/res/drawable/aerium_ic_webrtc.xml",\n  "java/res/drawable/aerium_ic_what_to_delete.xml",\n  "java/res/drawable/aerium_settings_find.xml",\n&|' \
+sed_i 's|^  "java/res/drawable/acute_24dp.xml",$|  "java/res/drawable/aerium_about_logo.xml",\n  "java/res/drawable/aerium_ic_about.xml",\n  "java/res/drawable/aerium_ic_accessibility.xml",\n  "java/res/drawable/aerium_ic_aerogel.xml",\n  "java/res/drawable/aerium_ic_aerogel_lock.xml",\n  "java/res/drawable/aerium_ic_appearance.xml",\n  "java/res/drawable/aerium_ic_backup.xml",\n  "java/res/drawable/aerium_ic_backup_bookmarks.xml",\n  "java/res/drawable/aerium_ic_backup_extensions.xml",\n  "java/res/drawable/aerium_ic_backup_lock.xml",\n  "java/res/drawable/aerium_ic_backup_reinstall.xml",\n  "java/res/drawable/aerium_ic_backup_restore.xml",\n  "java/res/drawable/aerium_ic_backup_settings.xml",\n  "java/res/drawable/aerium_ic_backup_sites.xml",\n  "java/res/drawable/aerium_ic_backup_tabs.xml",\n  "java/res/drawable/aerium_ic_backup_up.xml",\n  "java/res/drawable/aerium_ic_build_changes.xml",\n  "java/res/drawable/aerium_ic_clear_browsing.xml",\n  "java/res/drawable/aerium_ic_clear_site.xml",\n  "java/res/drawable/aerium_ic_close_tabs.xml",\n  "java/res/drawable/aerium_ic_cookies.xml",\n  "java/res/drawable/aerium_ic_default_browser.xml",\n  "java/res/drawable/aerium_ic_delete_on_exit.xml",\n  "java/res/drawable/aerium_ic_developer.xml",\n  "java/res/drawable/aerium_ic_do_not_track.xml",\n  "java/res/drawable/aerium_ic_downloads.xml",\n  "java/res/drawable/aerium_ic_ext_aerogel.xml",\n  "java/res/drawable/aerium_ic_ext_file.xml",\n  "java/res/drawable/aerium_ic_ext_store.xml",\n  "java/res/drawable/aerium_ic_ext_store_button.xml",\n  "java/res/drawable/aerium_ic_extensions.xml",\n  "java/res/drawable/aerium_ic_fingerprint.xml",\n  "java/res/drawable/aerium_ic_gpc.xml",\n  "java/res/drawable/aerium_ic_guard.xml",\n  "java/res/drawable/aerium_ic_guard_import.xml",\n  "java/res/drawable/aerium_ic_guard_paste.xml",\n  "java/res/drawable/aerium_ic_guard_performance.xml",\n  "java/res/drawable/aerium_ic_guard_privacy.xml",\n  "java/res/drawable/aerium_ic_guard_profile.xml",\n  "java/res/drawable/aerium_ic_guard_recommended.xml",\n  "java/res/drawable/aerium_ic_guard_save.xml",\n  "java/res/drawable/aerium_ic_guard_security.xml",\n  "java/res/drawable/aerium_ic_guard_status.xml",\n  "java/res/drawable/aerium_ic_https_first.xml",\n  "java/res/drawable/aerium_ic_languages.xml",\n  "java/res/drawable/aerium_ic_legal.xml",\n  "java/res/drawable/aerium_ic_media.xml",\n  "java/res/drawable/aerium_ic_notifications.xml",\n  "java/res/drawable/aerium_ic_obtainium.xml",\n  "java/res/drawable/aerium_ic_open_in_apps.xml",\n  "java/res/drawable/aerium_ic_privacy.xml",\n  "java/res/drawable/aerium_ic_project.xml",\n  "java/res/drawable/aerium_ic_referrer.xml",\n  "java/res/drawable/aerium_ic_safe_browsing.xml",\n  "java/res/drawable/aerium_ic_search.xml",\n  "java/res/drawable/aerium_ic_secure_dns.xml",\n  "java/res/drawable/aerium_ic_share_aerium.xml",\n  "java/res/drawable/aerium_ic_site_rules.xml",\n  "java/res/drawable/aerium_ic_sites.xml",\n  "java/res/drawable/aerium_ic_support.xml",\n  "java/res/drawable/aerium_ic_tabs.xml",\n  "java/res/drawable/aerium_ic_toolbar.xml",\n  "java/res/drawable/aerium_ic_up_to_date.xml",\n  "java/res/drawable/aerium_ic_update_daily.xml",\n  "java/res/drawable/aerium_ic_web_apps.xml",\n  "java/res/drawable/aerium_ic_webrtc.xml",\n  "java/res/drawable/aerium_ic_what_to_delete.xml",\n  "java/res/drawable/aerium_settings_find.xml",\n&|' \
     chrome/android/chrome_java_resources.gni
 
 cat > $AERIUM_SETTINGS_RES/drawable/aerium_row_chevron.xml <<'AERIUM_ROW_CHEVRON_XML'
@@ -16954,6 +17142,7 @@ found in the LICENSE file.
         app:backgroundStyle="none" />
 
     <org.chromium.components.browser_ui.settings.AeriumRowPreference
+        android:fragment="org.chromium.chrome.browser.settings.AeriumExtensionsFragment"
         android:key="aerium_extensions"
         android:order="21"
         android:icon="@drawable/aerium_ic_extensions"
@@ -18789,6 +18978,1001 @@ sed_i 's|^  "java/res/drawable/acute_24dp.xml",$|  "java/res/drawable/aerium_bac
     chrome/android/chrome_java_resources.gni
 sed_i 's|^  "java/res/layout/account_chooser_dialog_item.xml",$|  "java/res/layout/aerium_backup_extension_row.xml",\n  "java/res/layout/aerium_backup_panel.xml",\n&|' \
     chrome/android/chrome_java_resources.gni
+cat > chrome/android/java/res/color/aerium_haze_switch_thumb.xml <<'AERIUM_HAZE_SWITCH_THUMB_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_enabled="false" android:state_checked="true"
+        android:color="?attr/aeriumOnHaze" android:alpha="0.38" />
+    <item android:state_enabled="false"
+        android:color="?attr/colorOnSurfaceVariant" android:alpha="0.38" />
+    <item android:state_checked="true" android:color="?attr/aeriumOnHaze" />
+    <item android:color="?attr/colorOnSurfaceVariant" />
+</selector>
+AERIUM_HAZE_SWITCH_THUMB_XML
+cat > chrome/android/java/res/color/aerium_haze_switch_track.xml <<'AERIUM_HAZE_SWITCH_TRACK_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_enabled="false" android:state_checked="true"
+        android:color="?attr/aeriumHaze" android:alpha="0.38" />
+    <item android:state_enabled="false"
+        android:color="?attr/colorSurfaceContainerHighest" android:alpha="0.38" />
+    <item android:state_checked="true" android:color="?attr/aeriumHaze" />
+    <item android:color="?attr/colorSurfaceContainerHighest" />
+</selector>
+AERIUM_HAZE_SWITCH_TRACK_XML
+cat > chrome/android/java/res/drawable/aerium_extension_tile.xml <<'AERIUM_EXTENSION_TILE_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="13dp" />
+    <solid android:color="@android:color/white" />
+</shape>
+AERIUM_EXTENSION_TILE_XML
+cat > chrome/android/java/res/drawable/aerium_ext_pill_primary.xml <<'AERIUM_EXT_PILL_PRIMARY_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="?attr/colorControlHighlight">
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="26dp" />
+            <solid android:color="?attr/aeriumAcc" />
+        </shape>
+    </item>
+</ripple>
+AERIUM_EXT_PILL_PRIMARY_XML
+cat > chrome/android/java/res/drawable/aerium_ext_pill_outline.xml <<'AERIUM_EXT_PILL_OUTLINE_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="?attr/colorControlHighlight">
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="26dp" />
+            <solid android:color="@android:color/transparent" />
+            <stroke android:width="1dp" android:color="?attr/aeriumLine" />
+        </shape>
+    </item>
+</ripple>
+AERIUM_EXT_PILL_OUTLINE_XML
+cat > chrome/android/java/res/layout/aerium_extensions_buttons.xml <<'AERIUM_EXTENSIONS_BUTTONS_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="16dp"
+    android:orientation="horizontal"
+    android:paddingStart="16dp"
+    android:paddingEnd="16dp">
+
+    <TextView
+        android:id="@+id/aerium_ext_web_store"
+        android:layout_width="0dp"
+        android:layout_height="52dp"
+        android:layout_marginEnd="5dp"
+        android:layout_weight="1"
+        android:background="@drawable/aerium_ext_pill_primary"
+        android:clickable="true"
+        android:drawablePadding="8dp"
+        android:drawableStart="@drawable/aerium_ic_ext_store_button"
+        android:ellipsize="end"
+        android:focusable="true"
+        android:fontFamily="@font/aerium_sans_semibold"
+        android:gravity="center"
+        android:paddingStart="14dp"
+        android:paddingEnd="14dp"
+        android:singleLine="true"
+        android:text="@string/aerium_ext_web_store"
+        android:textColor="?attr/aeriumOnAcc"
+        android:textFontWeight="600"
+        android:textSize="15sp" />
+
+    <TextView
+        android:id="@+id/aerium_ext_from_file"
+        android:layout_width="0dp"
+        android:layout_height="52dp"
+        android:layout_marginStart="5dp"
+        android:layout_weight="1"
+        android:background="@drawable/aerium_ext_pill_outline"
+        android:clickable="true"
+        android:drawablePadding="8dp"
+        android:drawableStart="@drawable/aerium_ic_ext_file"
+        android:ellipsize="end"
+        android:focusable="true"
+        android:fontFamily="@font/aerium_sans_semibold"
+        android:gravity="center"
+        android:paddingStart="14dp"
+        android:paddingEnd="14dp"
+        android:singleLine="true"
+        android:text="@string/aerium_ext_from_file"
+        android:textColor="?attr/colorOnSurface"
+        android:textFontWeight="600"
+        android:textSize="15sp" />
+</LinearLayout>
+AERIUM_EXTENSIONS_BUTTONS_XML
+cat > chrome/android/java/res/layout/aerium_extension_row.xml <<'AERIUM_EXTENSION_ROW_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:id="@+id/aerium_ext_main"
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:background="?attr/selectableItemBackground"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="14dp"
+        android:paddingEnd="14dp">
+
+        <TextView
+            android:id="@+id/aerium_ext_mark"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@drawable/aerium_extension_tile"
+            android:gravity="center"
+            android:importantForAccessibility="no"
+            android:includeFontPadding="false"
+            android:singleLine="true"
+            android:textColor="@android:color/white"
+            android:textFontWeight="700"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="14dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/aerium_ext_name"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:fontFamily="@font/aerium_sans_semibold"
+                android:singleLine="true"
+                android:textColor="?attr/colorOnSurface"
+                android:textFontWeight="600"
+                android:textSize="16sp" />
+
+            <TextView
+                android:id="@+id/aerium_ext_sub"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:ellipsize="end"
+                android:singleLine="true"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/aerium_ext_switch"
+            style="@style/Widget.BrowserUI.Switch"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="14dp"
+            android:layout_marginEnd="-2dp"
+            android:background="@null" />
+
+        <TextView
+            android:id="@+id/aerium_ext_add"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:layout_marginStart="14dp"
+            android:background="@drawable/aerium_about_button"
+            android:clickable="true"
+            android:focusable="true"
+            android:fontFamily="@font/aerium_sans_semibold"
+            android:gravity="center"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:singleLine="true"
+            android:text="@string/aerium_ext_add"
+            android:textColor="?attr/colorOnSurface"
+            android:textFontWeight="600"
+            android:textSize="14sp"
+            android:visibility="gone" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/aerium_ext_aerogel_row"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:background="?attr/selectableItemBackground"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="68dp"
+        android:paddingEnd="14dp">
+
+        <ImageView
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:importantForAccessibility="no"
+            android:src="@drawable/aerium_ic_ext_aerogel" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:importantForAccessibility="no"
+            android:singleLine="true"
+            android:text="@string/aerium_ext_also_aerogel"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:textSize="14sp" />
+
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/aerium_ext_aerogel_switch"
+            style="@style/Widget.BrowserUI.Switch"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:layout_marginEnd="-2dp"
+            android:background="@null"
+            android:contentDescription="@string/aerium_ext_also_aerogel"
+            app:thumbTint="@color/aerium_haze_switch_thumb"
+            app:trackTint="@color/aerium_haze_switch_track" />
+    </LinearLayout>
+</LinearLayout>
+AERIUM_EXTENSION_ROW_XML
+cat > chrome/android/java/res/xml/aerium_extensions_preferences.xml <<'AERIUM_EXTENSIONS_PREFERENCES_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright 2026 The Chromium Authors
+     Use of this source code is governed by a BSD-style license that can be
+     found in the LICENSE file. -->
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <org.chromium.chrome.browser.settings.AeriumBoundPreference
+        android:key="aerium_ext_buttons"
+        android:layout="@layout/aerium_extensions_buttons"
+        android:order="0"
+        android:persistent="false"
+        android:selectable="false"
+        android:title="@string/aerium_ext_web_store" />
+    <PreferenceCategory
+        android:key="aerium_ext_installed"
+        android:order="10"
+        android:title="@string/aerium_ext_installed" />
+    <PreferenceCategory
+        android:key="aerium_ext_suggested"
+        android:order="20"
+        android:title="@string/aerium_ext_suggested" />
+    <org.chromium.components.browser_ui.settings.ChromeBasePreference
+        android:key="aerium_ext_more"
+        android:layout="@layout/aerium_group_break"
+        android:order="30"
+        android:persistent="false"
+        android:selectable="false"
+        app:backgroundStyle="none" />
+    <org.chromium.components.browser_ui.settings.AeriumRowPreference
+        android:key="aerium_ext_stores"
+        android:icon="@drawable/aerium_ic_ext_store"
+        android:order="31"
+        android:persistent="false"
+        android:title="@string/aerium_ext_other_stores" />
+</PreferenceScreen>
+AERIUM_EXTENSIONS_PREFERENCES_XML
+cat > chrome/android/java/src/org/chromium/chrome/browser/settings/AeriumBoundPreference.java <<'AERIUM_BOUND_PREFERENCE_JAVA'
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+package org.chromium.chrome.browser.settings;
+
+import android.content.Context;
+import android.util.AttributeSet;
+import android.view.View;
+
+import androidx.preference.PreferenceViewHolder;
+
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
+import org.chromium.components.browser_ui.settings.ChromeBasePreference;
+
+@NullMarked
+public class AeriumBoundPreference extends ChromeBasePreference {
+    public interface Binder {
+        void bind(View root);
+    }
+
+    private @Nullable Binder mBinder;
+
+    public AeriumBoundPreference(Context context) {
+        this(context, null);
+    }
+
+    public AeriumBoundPreference(Context context, @Nullable AttributeSet attrs) {
+        super(context, attrs);
+        setSelectable(false);
+        setPersistent(false);
+    }
+
+    @Override
+    public @BackgroundStyle int getCustomBackgroundStyle() {
+        return BackgroundStyle.NONE;
+    }
+
+    public void setBinder(Binder binder) {
+        mBinder = binder;
+        notifyChanged();
+    }
+
+    @Override
+    public void onBindViewHolder(PreferenceViewHolder holder) {
+        super.onBindViewHolder(holder);
+        holder.setDividerAllowedAbove(false);
+        holder.setDividerAllowedBelow(false);
+        Binder binder = mBinder;
+        if (binder != null) binder.bind(holder.itemView);
+    }
+}
+AERIUM_BOUND_PREFERENCE_JAVA
+cat > chrome/android/java/src/org/chromium/chrome/browser/settings/AeriumExtensionPreference.java <<'AERIUM_EXTENSION_PREFERENCE_JAVA'
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+package org.chromium.chrome.browser.settings;
+
+import android.content.Context;
+import android.content.res.ColorStateList;
+import android.view.View;
+import android.widget.CompoundButton;
+import android.widget.TextView;
+
+import androidx.preference.PreferenceViewHolder;
+
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
+import org.chromium.chrome.R;
+import org.chromium.components.browser_ui.settings.ChromeBasePreference;
+
+@NullMarked
+public class AeriumExtensionPreference extends ChromeBasePreference {
+    public interface Listener {
+        void onOpen(AeriumExtensionPreference preference);
+
+        void onEnabledChanged(AeriumExtensionPreference preference, boolean enabled);
+
+        void onAerogelChanged(AeriumExtensionPreference preference, boolean allowed);
+
+        void onAdd(AeriumExtensionPreference preference);
+    }
+
+    private final String mExtensionId;
+    private final boolean mSuggestion;
+    private String mMark = "";
+    private int mColor;
+    private boolean mEnabled;
+    private boolean mAerogel;
+    private boolean mAdding;
+    private @Nullable Listener mListener;
+
+    public AeriumExtensionPreference(Context context, String extensionId, boolean suggestion) {
+        super(context, null);
+        mExtensionId = extensionId;
+        mSuggestion = suggestion;
+        setLayoutResource(R.layout.aerium_extension_row);
+        setPersistent(false);
+        setSelectable(false);
+    }
+
+    public String getExtensionId() {
+        return mExtensionId;
+    }
+
+    public void setLook(String mark, int color) {
+        mMark = mark;
+        mColor = color;
+        notifyChanged();
+    }
+
+    public void setState(boolean enabled, boolean aerogel) {
+        mEnabled = enabled;
+        mAerogel = aerogel;
+        notifyChanged();
+    }
+
+    public void setAdding(boolean adding) {
+        if (mAdding == adding) return;
+        mAdding = adding;
+        notifyChanged();
+    }
+
+    public void setListener(Listener listener) {
+        mListener = listener;
+    }
+
+    @Override
+    public void onBindViewHolder(PreferenceViewHolder holder) {
+        super.onBindViewHolder(holder);
+        View mark = holder.findViewById(R.id.aerium_ext_mark);
+        if (mark instanceof TextView tile) {
+            tile.setText(mMark);
+            tile.setBackgroundTintList(ColorStateList.valueOf(mColor));
+        }
+        View name = holder.findViewById(R.id.aerium_ext_name);
+        if (name instanceof TextView text) text.setText(getTitle());
+        View sub = holder.findViewById(R.id.aerium_ext_sub);
+        if (sub instanceof TextView text) {
+            CharSequence summary = getSummary();
+            text.setText(summary);
+            text.setVisibility(summary == null ? View.GONE : View.VISIBLE);
+        }
+
+        View main = holder.findViewById(R.id.aerium_ext_main);
+        if (main != null) {
+            main.setClickable(!mSuggestion);
+            main.setFocusable(!mSuggestion);
+            main.setOnClickListener(
+                    mSuggestion
+                            ? null
+                            : view -> {
+                                Listener listener = mListener;
+                                if (listener != null) listener.onOpen(this);
+                            });
+        }
+
+        View toggle = holder.findViewById(R.id.aerium_ext_switch);
+        if (toggle instanceof CompoundButton button) {
+            button.setVisibility(mSuggestion ? View.GONE : View.VISIBLE);
+            button.setOnCheckedChangeListener(null);
+            button.setChecked(mEnabled);
+            button.setContentDescription(
+                    getContext().getString(R.string.aerium_ext_turn_on, getTitle()));
+            button.setOnCheckedChangeListener(
+                    (view, checked) -> {
+                        if (checked == mEnabled) return;
+                        mEnabled = checked;
+                        Listener listener = mListener;
+                        if (listener != null) listener.onEnabledChanged(this, checked);
+                    });
+        }
+
+        View add = holder.findViewById(R.id.aerium_ext_add);
+        if (add instanceof TextView button) {
+            button.setVisibility(mSuggestion ? View.VISIBLE : View.GONE);
+            button.setText(mAdding ? R.string.aerium_ext_adding : R.string.aerium_ext_add);
+            button.setEnabled(!mAdding);
+            button.setAlpha(mAdding ? 0.6f : 1f);
+            button.setOnClickListener(
+                    view -> {
+                        Listener listener = mListener;
+                        if (listener != null && !mAdding) listener.onAdd(this);
+                    });
+        }
+
+        View aerogelRow = holder.findViewById(R.id.aerium_ext_aerogel_row);
+        View aerogelToggle = holder.findViewById(R.id.aerium_ext_aerogel_switch);
+        if (aerogelRow != null) aerogelRow.setVisibility(mSuggestion ? View.GONE : View.VISIBLE);
+        if (aerogelToggle instanceof CompoundButton button) {
+            button.setOnCheckedChangeListener(null);
+            button.setChecked(mAerogel);
+            button.setOnCheckedChangeListener(
+                    (view, checked) -> {
+                        if (checked == mAerogel) return;
+                        mAerogel = checked;
+                        Listener listener = mListener;
+                        if (listener != null) listener.onAerogelChanged(this, checked);
+                    });
+            if (aerogelRow != null) aerogelRow.setOnClickListener(view -> button.toggle());
+        }
+    }
+}
+AERIUM_EXTENSION_PREFERENCE_JAVA
+sed_i 's|^  "java/src/org/chromium/chrome/browser/browsing_data/BrowsingDataCounterBridge.java",$|  "java/src/org/chromium/chrome/browser/settings/AeriumBoundPreference.java",\n  "java/src/org/chromium/chrome/browser/settings/AeriumExtensionPreference.java",\n  "java/src/org/chromium/chrome/browser/settings/AeriumExtensionsFragment.java",\n&|' \
+    chrome/android/chrome_java_sources.gni
+sed_i 's|^  "java/res/color/distilled_page_pref_background_color.xml",$|  "java/res/color/aerium_haze_switch_thumb.xml",\n  "java/res/color/aerium_haze_switch_track.xml",\n&|' \
+    chrome/android/chrome_java_resources.gni
+sed_i 's|^  "java/res/drawable/acute_24dp.xml",$|  "java/res/drawable/aerium_ext_pill_outline.xml",\n  "java/res/drawable/aerium_ext_pill_primary.xml",\n  "java/res/drawable/aerium_extension_tile.xml",\n&|' \
+    chrome/android/chrome_java_resources.gni
+sed_i 's|^  "java/res/layout/account_chooser_dialog_item.xml",$|  "java/res/layout/aerium_extension_row.xml",\n  "java/res/layout/aerium_extensions_buttons.xml",\n&|' \
+    chrome/android/chrome_java_resources.gni
+sed_i 's|^  "java/res/xml/about_chrome_preferences.xml",$|  "java/res/xml/aerium_extensions_preferences.xml",\n&|' \
+    chrome/android/chrome_java_resources.gni
+cat > chrome/android/java/src/org/chromium/chrome/browser/settings/AeriumExtensionsFragment.java <<'AERIUM_EXTENSIONS_FRAGMENT_JAVA'
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+package org.chromium.chrome.browser.settings;
+
+import android.app.Activity;
+import android.content.Context;
+import android.content.Intent;
+import android.content.SharedPreferences;
+import android.net.Uri;
+import android.os.Bundle;
+import android.provider.Browser;
+import android.view.View;
+import android.widget.Toast;
+
+import androidx.appcompat.app.AlertDialog;
+import androidx.preference.Preference;
+import androidx.preference.PreferenceCategory;
+
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import org.chromium.base.ContextUtils;
+import org.chromium.base.IntentUtils;
+import org.chromium.base.supplier.MonotonicObservableSupplier;
+import org.chromium.base.supplier.ObservableSuppliers;
+import org.chromium.base.supplier.SettableMonotonicObservableSupplier;
+import org.chromium.base.task.PostTask;
+import org.chromium.base.task.TaskTraits;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
+import org.chromium.chrome.R;
+import org.chromium.chrome.browser.document.ChromeLauncherActivity;
+import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.settings.search.ChromeBaseSearchIndexProvider;
+import org.chromium.components.browser_ui.settings.AeriumRowPreference;
+import org.chromium.components.browser_ui.settings.SettingsFragment;
+import org.chromium.components.browser_ui.settings.SettingsUtils;
+import org.chromium.components.prefs.PrefService;
+import org.chromium.components.user_prefs.UserPrefs;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.util.HashSet;
+import java.util.Set;
+
+@NullMarked
+public class AeriumExtensionsFragment extends ChromeBaseSettingsFragment
+        implements AeriumExtensionPreference.Listener {
+    private static final String PREF_BUTTONS = "aerium_ext_buttons";
+    private static final String PREF_INSTALLED = "aerium_ext_installed";
+    private static final String PREF_SUGGESTED = "aerium_ext_suggested";
+    private static final String PREF_STORES = "aerium_ext_stores";
+
+    private static final String COMMAND_PREF = "aerium.extension_command";
+    private static final String IMPORT_DIR = "aerium_import_extensions";
+    private static final long MAX_FILE_BYTES = 64L * 1024 * 1024;
+    private static final int REQUEST_FILE = 4214;
+
+    private static final String WEB_STORE_URL = "https://chromewebstore.google.com/";
+    private static final String EDGE_STORE_URL =
+            "https://microsoftedge.microsoft.com/addons/Microsoft-Edge-Extensions-Home";
+    private static final String OPERA_STORE_URL = "https://addons.opera.com/extensions/";
+    private static final String EXTENSION_PAGE_URL = "chrome://extensions/?id=";
+
+    private static final String UBO_STORE_ID = "cjpalhdlnbpafiamejdnhcphjbkeiagm";
+
+    private static final class Suggestion {
+        final String id;
+        final String source;
+        final String name;
+        final int description;
+        final boolean blocker;
+
+        Suggestion(String id, String source, String name, int description, boolean blocker) {
+            this.id = id;
+            this.source = source;
+            this.name = name;
+            this.description = description;
+            this.blocker = blocker;
+        }
+    }
+
+    private static final Suggestion[] SUGGESTIONS = {
+        new Suggestion(
+                "ddkjiahejlhfcafbddmgiahcphecmpfh",
+                AeriumExtensionBackup.SOURCE_STORE,
+                "uBlock Origin Lite",
+                R.string.aerium_onb_ext_ubol,
+                true),
+        new Suggestion(
+                AeriumExtensionBackup.UBO_GITHUB_ID,
+                AeriumExtensionBackup.SOURCE_GITHUB,
+                "uBlock Origin",
+                R.string.aerium_onb_ext_ubo,
+                true),
+        new Suggestion(
+                "bgnkhhnnamicmpeenaelnjfhikgbkllg",
+                AeriumExtensionBackup.SOURCE_STORE,
+                "AdGuard",
+                R.string.aerium_onb_ext_adguard,
+                true),
+        new Suggestion(
+                "fnaicdffflnofjppbagibeoednhnbjhg",
+                AeriumExtensionBackup.SOURCE_STORE,
+                "floccus",
+                R.string.aerium_onb_ext_floccus,
+                false),
+        new Suggestion(
+                "ldpochfccmkkmhdbclfhpagapcfdljkj",
+                AeriumExtensionBackup.SOURCE_STORE,
+                "Decentraleyes",
+                R.string.aerium_onb_ext_decentraleyes,
+                false),
+        new Suggestion(
+                "mdjildafknihdffpkfmmpnpoiajfjnjd",
+                AeriumExtensionBackup.SOURCE_STORE,
+                "Consent-O-Matic",
+                R.string.aerium_onb_ext_consent,
+                false),
+        new Suggestion(
+                "dlaogejjiafeobgofajdlkkhjlignalk",
+                AeriumExtensionBackup.SOURCE_STORE,
+                "TablissNG",
+                R.string.aerium_onb_ext_tabliss,
+                false),
+        new Suggestion(
+                "mnjggcdmjocbbbhaepdhchncahnbgone",
+                AeriumExtensionBackup.SOURCE_STORE,
+                "SponsorBlock",
+                R.string.aerium_onb_ext_sponsorblock,
+                false),
+    };
+
+    private final SettableMonotonicObservableSupplier<String> mPageTitle =
+            ObservableSuppliers.createMonotonic();
+    private final Set<String> mAdding = new HashSet<>();
+    private boolean mWaitingForFile;
+    private final SharedPreferences.OnSharedPreferenceChangeListener mProgressListener =
+            (prefs, key) -> {
+                if (!AeriumExtensionInstalls.PROGRESS_KEY.equals(key)) return;
+                int[] state = AeriumExtensionInstalls.readProgress();
+                if (state[3] == 0) return;
+                if (mWaitingForFile && state[1] > 0) showToast(R.string.aerium_ext_file_failed);
+                mWaitingForFile = false;
+                mAdding.clear();
+                rebuild();
+            };
+
+    @Override
+    public void onCreatePreferences(@Nullable Bundle savedInstanceState, @Nullable String rootKey) {
+        SettingsUtils.addPreferencesFromResource(this, R.xml.aerium_extensions_preferences);
+        mPageTitle.set(getString(R.string.menu_extensions));
+
+        Preference buttons = findPreference(PREF_BUTTONS);
+        if (buttons instanceof AeriumBoundPreference bound) bound.setBinder(this::bindButtons);
+
+        Preference stores = findPreference(PREF_STORES);
+        if (stores instanceof AeriumRowPreference row) {
+            row.setValue(getString(R.string.aerium_ext_other_stores_value));
+            row.setAeriumChevron(true);
+            row.setOnPreferenceClickListener(
+                    preference -> {
+                        showStores();
+                        return true;
+                    });
+        }
+
+        ContextUtils.getAppSharedPreferences()
+                .registerOnSharedPreferenceChangeListener(mProgressListener);
+        rebuild();
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        rebuild();
+    }
+
+    @Override
+    public void onDestroy() {
+        ContextUtils.getAppSharedPreferences()
+                .unregisterOnSharedPreferenceChangeListener(mProgressListener);
+        super.onDestroy();
+    }
+
+    private Context getStyledContext() {
+        return getPreferenceManager().getContext();
+    }
+
+    private @Nullable PrefService getProfilePrefs() {
+        Profile profile = getProfile();
+        return profile == null ? null : UserPrefs.get(profile);
+    }
+
+    private void bindButtons(View root) {
+        View store = root.findViewById(R.id.aerium_ext_web_store);
+        if (store != null) store.setOnClickListener(view -> openUrl(WEB_STORE_URL));
+        View file = root.findViewById(R.id.aerium_ext_from_file);
+        if (file != null) file.setOnClickListener(view -> pickFile());
+    }
+
+    private void rebuild() {
+        Preference installedPref = findPreference(PREF_INSTALLED);
+        Preference suggestedPref = findPreference(PREF_SUGGESTED);
+        if (!(installedPref instanceof PreferenceCategory installed)
+                || !(suggestedPref instanceof PreferenceCategory suggested)) {
+            return;
+        }
+        Context context = getStyledContext();
+        installed.removeAll();
+        suggested.removeAll();
+
+        JSONArray items;
+        try {
+            items = AeriumExtensionBackup.collect(getProfilePrefs());
+        } catch (JSONException e) {
+            items = new JSONArray();
+        }
+        Set<String> ids = new HashSet<>();
+        for (int i = 0; i < items.length(); i++) {
+            JSONObject item = items.optJSONObject(i);
+            if (item == null) continue;
+            String id = item.optString("id", "");
+            String name = item.optString("name", "");
+            if (name.isEmpty()) name = id;
+            ids.add(id);
+            AeriumExtensionPreference row = new AeriumExtensionPreference(context, id, false);
+            row.setKey("aerium_ext_" + id);
+            row.setTitle(name);
+            row.setSummary(sourceLine(item));
+            row.setLook(
+                    AeriumExtensionBackup.markFor(id, name),
+                    AeriumExtensionBackup.colorFor(id, name));
+            row.setState(item.optBoolean("enabled", true), item.optBoolean("aerogel", false));
+            row.setListener(this);
+            installed.addPreference(row);
+        }
+        if (installed.getPreferenceCount() == 0) {
+            AeriumRowPreference empty = new AeriumRowPreference(context);
+            empty.setKey("aerium_ext_none");
+            empty.setTitle(R.string.aerium_ext_none);
+            empty.setSelectable(false);
+            installed.addPreference(empty);
+        }
+
+        boolean hasBlocker = ids.contains(UBO_STORE_ID);
+        for (Suggestion suggestion : SUGGESTIONS) {
+            if (suggestion.blocker && ids.contains(suggestion.id)) hasBlocker = true;
+        }
+        for (Suggestion suggestion : SUGGESTIONS) {
+            if (ids.contains(suggestion.id)) continue;
+            if (suggestion.blocker && hasBlocker && !mAdding.contains(suggestion.id)) continue;
+            AeriumExtensionPreference row =
+                    new AeriumExtensionPreference(context, suggestion.id, true);
+            row.setKey("aerium_ext_add_" + suggestion.id);
+            row.setTitle(suggestion.name);
+            row.setSummary(suggestion.description);
+            row.setLook(
+                    AeriumExtensionBackup.markFor(suggestion.id, suggestion.name),
+                    AeriumExtensionBackup.colorFor(suggestion.id, suggestion.name));
+            row.setAdding(mAdding.contains(suggestion.id));
+            row.setListener(this);
+            suggested.addPreference(row);
+        }
+        suggested.setVisible(suggested.getPreferenceCount() > 0);
+    }
+
+    private String sourceLine(JSONObject item) {
+        String source = item.optString("source", "");
+        if (AeriumExtensionBackup.SOURCE_STORE.equals(source)) {
+            return getString(R.string.aerium_ext_from_store);
+        }
+        if (AeriumExtensionBackup.SOURCE_GITHUB.equals(source)) {
+            return getString(R.string.aerium_ext_from_github);
+        }
+        if (item.optString("update_url", "").contains("edge.microsoft.com")) {
+            return getString(R.string.aerium_ext_from_edge);
+        }
+        return getString(R.string.aerium_ext_from_a_file);
+    }
+
+    private void command(String id, String op) {
+        PrefService prefs = getProfilePrefs();
+        if (prefs == null || prefs.getPrefType(COMMAND_PREF) < 0) return;
+        JSONObject command = new JSONObject();
+        try {
+            command.put("id", id);
+            command.put("op", op);
+            command.put("at", System.currentTimeMillis());
+        } catch (JSONException e) {
+            return;
+        }
+        prefs.setString(COMMAND_PREF, command.toString());
+    }
+
+    @Override
+    public void onOpen(AeriumExtensionPreference preference) {
+        openUrl(EXTENSION_PAGE_URL + preference.getExtensionId());
+    }
+
+    @Override
+    public void onEnabledChanged(AeriumExtensionPreference preference, boolean enabled) {
+        command(preference.getExtensionId(), enabled ? "enable" : "disable");
+    }
+
+    @Override
+    public void onAerogelChanged(AeriumExtensionPreference preference, boolean allowed) {
+        command(preference.getExtensionId(), allowed ? "aerogel_on" : "aerogel_off");
+    }
+
+    @Override
+    public void onAdd(AeriumExtensionPreference preference) {
+        String id = preference.getExtensionId();
+        Suggestion picked = null;
+        for (Suggestion suggestion : SUGGESTIONS) {
+            if (suggestion.id.equals(id)) picked = suggestion;
+        }
+        if (picked == null) return;
+        JSONArray queue = new JSONArray();
+        try {
+            JSONObject entry = new JSONObject();
+            if (AeriumExtensionBackup.SOURCE_GITHUB.equals(picked.source)) {
+                entry.put("id", AeriumExtensionBackup.UBO_GITHUB_REPO);
+                entry.put("source", "github");
+            } else {
+                entry.put("id", picked.id);
+                entry.put("source", "cws");
+            }
+            queue.put(entry);
+        } catch (JSONException e) {
+            return;
+        }
+        AeriumExtensionInstalls.enqueue(getProfilePrefs(), queue);
+        mAdding.add(id);
+        preference.setAdding(true);
+    }
+
+    private void showStores() {
+        Context context = getStyledContext();
+        CharSequence[] names = {
+            getString(R.string.aerium_ext_edge_store), getString(R.string.aerium_ext_opera_store),
+        };
+        new AlertDialog.Builder(context, R.style.ThemeOverlay_BrowserUI_AlertDialog)
+                .setTitle(R.string.aerium_ext_other_stores)
+                .setItems(
+                        names,
+                        (dialog, which) -> openUrl(which == 0 ? EDGE_STORE_URL : OPERA_STORE_URL))
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
+
+    private void openUrl(String url) {
+        Context context = getContext();
+        Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+        intent.setClass(context, ChromeLauncherActivity.class);
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        intent.putExtra(Browser.EXTRA_CREATE_NEW_TAB, true);
+        intent.putExtra(Browser.EXTRA_APPLICATION_ID, context.getPackageName());
+        IntentUtils.addTrustedIntentExtras(intent);
+        try {
+            context.startActivity(intent);
+        } catch (RuntimeException e) {
+        }
+    }
+
+    private void pickFile() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("*/*");
+        try {
+            startActivityForResult(intent, REQUEST_FILE);
+        } catch (RuntimeException e) {
+        }
+    }
+
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != REQUEST_FILE || resultCode != Activity.RESULT_OK || data == null) {
+            return;
+        }
+        Uri uri = data.getData();
+        if (uri != null) importFile(uri);
+    }
+
+    private void importFile(Uri uri) {
+        Context context = getContext();
+        long stamp = System.currentTimeMillis();
+        PostTask.postTask(
+                TaskTraits.USER_VISIBLE_MAY_BLOCK,
+                () -> {
+                    File dir = new File(context.getDir("chrome", Context.MODE_PRIVATE), IMPORT_DIR);
+                    File target = null;
+                    String kind = null;
+                    try (InputStream in = context.getContentResolver().openInputStream(uri)) {
+                        if (in == null) throw new IOException("no input stream for " + uri);
+                        if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("no dir");
+                        File partial = new File(dir, stamp + ".part");
+                        long total = 0;
+                        byte[] head = new byte[4];
+                        int headLength = 0;
+                        try (OutputStream out = new FileOutputStream(partial)) {
+                            byte[] buffer = new byte[64 * 1024];
+                            int read;
+                            while ((read = in.read(buffer)) != -1) {
+                                for (int i = 0; i < read && headLength < head.length; i++) {
+                                    head[headLength++] = buffer[i];
+                                }
+                                total += read;
+                                if (total > MAX_FILE_BYTES) throw new IOException("too large");
+                                out.write(buffer, 0, read);
+                            }
+                        }
+                        if (headLength == 4 && head[0] == 'C' && head[1] == 'r' && head[2] == '2'
+                                && head[3] == '4') {
+                            kind = "crx";
+                        } else if (headLength == 4 && head[0] == 'P' && head[1] == 'K'
+                                && head[2] == 3 && head[3] == 4) {
+                            kind = "zip";
+                        }
+                        if (kind == null) {
+                            partial.delete();
+                        } else {
+                            target = new File(dir, stamp + "." + kind);
+                            if (!partial.renameTo(target)) {
+                                partial.delete();
+                                target = null;
+                            }
+                        }
+                    } catch (IOException e) {
+                        AeriumExtensionBackup.deleteTree(new File(dir, stamp + ".part"));
+                        target = null;
+                    }
+                    File file = target;
+                    String type = kind;
+                    PostTask.postTask(
+                            TaskTraits.UI_DEFAULT,
+                            () -> {
+                                if (file == null || type == null) {
+                                    showToast(R.string.aerium_ext_file_failed);
+                                    return;
+                                }
+                                queueFile(file, type, stamp);
+                            });
+                });
+    }
+
+    private void queueFile(File file, String kind, long stamp) {
+        JSONArray queue = new JSONArray();
+        try {
+            JSONObject entry = new JSONObject();
+            entry.put("id", "file-" + stamp);
+            entry.put("source", kind);
+            entry.put("path", file.getAbsolutePath());
+            queue.put(entry);
+        } catch (JSONException e) {
+            return;
+        }
+        if (!AeriumExtensionInstalls.enqueue(getProfilePrefs(), queue)) {
+            file.delete();
+            showToast(R.string.aerium_ext_file_failed);
+            return;
+        }
+        mWaitingForFile = true;
+        showToast(R.string.aerium_ext_adding_file);
+    }
+
+    private void showToast(int resId) {
+        Toast.makeText(getContext(), resId, Toast.LENGTH_LONG).show();
+    }
+
+    @Override
+    public MonotonicObservableSupplier<String> getPageTitle() {
+        return mPageTitle;
+    }
+
+    @Override
+    public @SettingsFragment.AnimationType int getAnimationType() {
+        return SettingsFragment.AnimationType.PROPERTY;
+    }
+
+    public static final ChromeBaseSearchIndexProvider SEARCH_INDEX_DATA_PROVIDER =
+            new ChromeBaseSearchIndexProvider(
+                    AeriumExtensionsFragment.class.getName(),
+                    R.xml.aerium_extensions_preferences);
+}
+AERIUM_EXTENSIONS_FRAGMENT_JAVA
+sed_i 's|^import org.chromium.chrome.browser.settings.AeriumBackupFragment;$|&\nimport org.chromium.chrome.browser.settings.AeriumExtensionsFragment;|' \
+    chrome/android/java/src/org/chromium/chrome/browser/settings/search/SearchIndexProviderRegistry.java
+sed_i 's|^                    AeriumBackupFragment.SEARCH_INDEX_DATA_PROVIDER,$|&\n                    AeriumExtensionsFragment.SEARCH_INDEX_DATA_PROVIDER,|' \
+    chrome/android/java/src/org/chromium/chrome/browser/settings/search/SearchIndexProviderRegistry.java
 AERIUM_CANVAS_GRD=$(cat <<'AERIUM_CANVAS_GRD_XML'
       <message name="IDS_AERIUM_SETTINGS_FIND" desc="Placeholder in the search box at the top of Settings.">
         Find a setting
@@ -19005,6 +20189,63 @@ AERIUM_CANVAS_GRD=$(cat <<'AERIUM_CANVAS_GRD_XML'
       </message>
       <message name="IDS_AERIUM_BACKUP_PASS_WRONG" desc="Message when a locked backup file cannot be opened with the passphrase given.">
         Wrong passphrase
+      </message>
+      <message name="IDS_AERIUM_EXT_WEB_STORE" desc="Button on the Extensions screen that opens the Chrome Web Store.">
+        Web Store
+      </message>
+      <message name="IDS_AERIUM_EXT_FROM_FILE" desc="Button on the Extensions screen that adds an extension from a .crx or .zip file.">
+        From file
+      </message>
+      <message name="IDS_AERIUM_EXT_INSTALLED" desc="Section heading above the installed extensions.">
+        Installed
+      </message>
+      <message name="IDS_AERIUM_EXT_SUGGESTED" desc="Section heading above extensions Aerium suggests. All of them are open source.">
+        Suggested · open source
+      </message>
+      <message name="IDS_AERIUM_EXT_ALSO_AEROGEL" desc="Switch under an extension that lets it run in Aerogel tabs, the private browsing mode.">
+        Also in Aerogel tabs
+      </message>
+      <message name="IDS_AERIUM_EXT_FROM_STORE" desc="Line under an extension that came from the Chrome Web Store.">
+        Updates from Web Store
+      </message>
+      <message name="IDS_AERIUM_EXT_FROM_GITHUB" desc="Line under an extension that updates from its GitHub releases.">
+        Updates from GitHub
+      </message>
+      <message name="IDS_AERIUM_EXT_FROM_EDGE" desc="Line under an extension that came from the Microsoft Edge Add-ons store.">
+        Updates from Edge Add-ons
+      </message>
+      <message name="IDS_AERIUM_EXT_FROM_A_FILE" desc="Line under an extension that was added from a file.">
+        Added from a file
+      </message>
+      <message name="IDS_AERIUM_EXT_ADD" desc="Button next to a suggested extension that installs it.">
+        Add
+      </message>
+      <message name="IDS_AERIUM_EXT_ADDING" desc="Shown on the button of a suggested extension while it installs.">
+        Adding
+      </message>
+      <message name="IDS_AERIUM_EXT_ADDING_FILE" desc="Message shown after a file was picked, while the extension installs.">
+        Adding the extension
+      </message>
+      <message name="IDS_AERIUM_EXT_FILE_FAILED" desc="Message when a picked file is not an extension or fails to install.">
+        Could not add that extension
+      </message>
+      <message name="IDS_AERIUM_EXT_NONE" desc="Shown in the Installed list when no extension is installed.">
+        No extensions yet
+      </message>
+      <message name="IDS_AERIUM_EXT_OTHER_STORES" desc="Row on the Extensions screen that opens other extension stores.">
+        Other stores
+      </message>
+      <message name="IDS_AERIUM_EXT_OTHER_STORES_VALUE" desc="Value next to Other stores, naming the stores. Keep the names as they are.">
+        Edge, Opera
+      </message>
+      <message name="IDS_AERIUM_EXT_EDGE_STORE" desc="Name of the Microsoft extension store, shown in the list of other stores.">
+        Microsoft Edge Add-ons
+      </message>
+      <message name="IDS_AERIUM_EXT_OPERA_STORE" desc="Name of the Opera extension store, shown in the list of other stores.">
+        Opera add-ons
+      </message>
+      <message name="IDS_AERIUM_EXT_TURN_ON" desc="Spoken label of the switch that turns an extension on or off.">
+        Turn on <ph name="NAME">%1$s<ex>Travel</ex></ph>
       </message>
 AERIUM_CANVAS_GRD_XML
 )
