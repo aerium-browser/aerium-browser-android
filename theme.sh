@@ -264,52 +264,109 @@ sed_i 's|^    ChromeAutofillClient::CreateForWebContents(web_contents);$|&\n#if 
 # Java with treat_warnings_as_errors while errorprone maps UnusedMethod to a
 # warning, so dead private methods fail the build. Returning false keeps every
 # call site in place and simply never reaches them.
-# --- chrome://aerium-first-run - the onboarding page, shown once on the very
-# first launch.
-#
-# The desktop repos get this from ungoogled-chromium's ungoogled_first_run.h,
-# which Aerium then extends. Android has no ungoogled layer and no
-# StartupBrowserCreator, so neither the page nor the AddFirstRunTabs() call
-# that opens it exists here - both halves are built rather than ported.
-#
-# The page is header-only, the same shape as the desktop chrome://aerium page:
-# a DefaultWebUIConfig plus an inline URLDataSource needs no BUILD.gn entry, no
-# .cc and no TypeScript, which keeps a page of static text out of the resource
-# pipeline entirely.
-
 cat > chrome/browser/ui/webui/aerium_first_run.h <<'AERIUM_FIRST_RUN_H'
 #ifndef CHROME_BROWSER_UI_WEBUI_AERIUM_FIRST_RUN_H_
 #define CHROME_BROWSER_UI_WEBUI_AERIUM_FIRST_RUN_H_
 
+#include <memory>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
+#include <vector>
 
+#include "base/android/shared_preferences/shared_preferences_manager.h"
+#include "base/files/file_path.h"
+#include "base/files/file_util.h"
+#include "base/functional/bind.h"
 #include "base/i18n/rtl.h"
+#include "base/json/json_reader.h"
+#include "base/json/json_writer.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted_memory.h"
+#include "base/memory/weak_ptr.h"
+#include "base/scoped_observation.h"
 #include "base/strings/escape.h"
 #include "base/strings/string_util.h"
+#include "base/strings/utf_string_conversions.h"
+#include "base/task/sequenced_task_runner.h"
+#include "base/task/thread_pool.h"
+#include "base/time/time.h"
+#include "base/timer/timer.h"
+#include "base/values.h"
+#include "base/version_info/version_info.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/extensions/chrome_zipfile_installer.h"
+#include "chrome/browser/extensions/extension_install_prompt.h"
+#include "chrome/browser/extensions/extension_util.h"
+#include "chrome/browser/net/secure_dns_config.h"
+#include "chrome/browser/net/secure_dns_util.h"
+#include "chrome/browser/preferences/android/chrome_shared_preferences.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/search_engines/template_url_service_factory.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/browsing_data/core/pref_names.h"
+#include "components/country_codes/country_codes.h"
+#include "components/crx_file/id_util.h"
+#include "components/prefs/pref_service.h"
+#include "components/search_engines/template_url.h"
+#include "components/search_engines/template_url_service.h"
+#include "content/public/browser/storage_partition.h"
 #include "content/public/browser/url_data_source.h"
+#include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_controller.h"
 #include "content/public/browser/webui_config.h"
+#include "extensions/browser/crx_installer.h"
+#include "extensions/browser/extension_file_task_runner.h"
+#include "extensions/browser/extension_registrar.h"
+#include "extensions/browser/extension_registry.h"
+#include "extensions/browser/extension_registry_observer.h"
+#include "extensions/browser/install/crx_install_error.h"
+#include "extensions/browser/install_prompt_data.h"
+#include "extensions/browser/zipfile_installer.h"
+#include "extensions/common/extension.h"
+#include "extensions/common/mojom/manifest.mojom-shared.h"
+#include "net/base/load_flags.h"
+#include "net/dns/public/dns_over_https_config.h"
+#include "net/dns/public/doh_provider_entry.h"
+#include "net/http/http_request_headers.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
+#include "services/network/public/cpp/resource_request.h"
+#include "services/network/public/cpp/simple_url_loader.h"
+#include "services/network/public/mojom/content_security_policy.mojom.h"
+#include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "url/gurl.h"
+
+inline constexpr char kAeriumOnboardingRequestKey[] =
+    "Chrome.Aerium.OnboardingRequest";
+
+inline void AeriumOnboardingRequest(const std::string& value) {
+  base::android::SharedPreferencesManager prefs =
+      android::shared_preferences::GetChromeSharedPreferences();
+  prefs.WriteString(kAeriumOnboardingRequestKey, value);
+}
 
 class AeriumFirstRunDataSource : public content::URLDataSource {
  public:
-  AeriumFirstRunDataSource() = default;
+  explicit AeriumFirstRunDataSource(Profile* profile) : profile_(profile) {}
   AeriumFirstRunDataSource(const AeriumFirstRunDataSource&) = delete;
   AeriumFirstRunDataSource& operator=(const AeriumFirstRunDataSource&) = delete;
   ~AeriumFirstRunDataSource() override = default;
 
   std::string GetSource() override;
   std::string GetMimeType(const GURL& url) override;
+  std::string GetContentSecurityPolicy(
+      network::mojom::CSPDirectiveName directive) override;
 
   void StartDataRequest(const GURL& url,
                         const content::WebContents::Getter& wc_getter,
                         GotDataCallback callback) override;
+
+ private:
+  raw_ptr<Profile> profile_;
 };
 
 inline std::string AeriumFirstRunDataSource::GetSource() {
@@ -320,214 +377,577 @@ inline std::string AeriumFirstRunDataSource::GetMimeType(const GURL& url) {
   return "text/html";
 }
 
+inline std::string AeriumFirstRunDataSource::GetContentSecurityPolicy(
+    network::mojom::CSPDirectiveName directive) {
+  if (directive == network::mojom::CSPDirectiveName::ScriptSrc) {
+    return "script-src 'self' 'unsafe-inline';";
+  }
+  return content::URLDataSource::GetContentSecurityPolicy(directive);
+}
+
 inline void AeriumFirstRunDataSource::StartDataRequest(
     const GURL& url,
     const content::WebContents::Getter& wc_getter,
     content::URLDataSource::GotDataCallback callback) {
   std::string html = R"AERIUMHTML(<!doctype html>
-<html lang="{{LANG}}" dir="{{DIR}}">
+<html lang="{{LANG}}" dir="{{DIR}}" data-theme="auto">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
 <title>{{TITLE}}</title>
 <style>
-  :root {
-    color-scheme: light dark;
-    --bg: #ffffff; --surface: #f1f2f4; --text: #111827; --secondary: #5b6474;
-    --divider: #d5d9e0; --navy: #1b2c5e; --on-navy: #ffffff; --on-navy-dim: #c9d3e8;
-    --tonal: #e8eef7; --on-tonal: #1b2c5e;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #0e1116; --surface: #171a20; --text: #eef1f6; --secondary: #a3abba;
-      --divider: #2a303b; --navy: #22386f; --tonal: #16202f; --on-tonal: #c9d3e8;
-    }
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0; background: var(--bg); color: var(--text);
-    font: 15px/1.5 system-ui, sans-serif; -webkit-text-size-adjust: 100%;
-  }
-  main { max-width: 640px; margin: 0 auto; padding: 16px 16px 40px; }
-  .hero {
-    background: var(--navy); color: var(--on-navy); border-radius: 28px;
-    padding: 32px 24px; margin-bottom: 8px;
-  }
-  .logo { width: 56px; height: 56px; display: block; margin-bottom: 20px; }
-  h1 { font-size: 32px; line-height: 1.1; font-weight: 700; letter-spacing: -.03em; margin: 0; }
-  .tagline { color: var(--on-navy-dim); font-size: 17px; margin: 10px 0 0; }
-  h2 {
-    font-size: 22px; line-height: 1.2; font-weight: 700; letter-spacing: -.02em;
-    margin: 32px 4px 12px;
-  }
-  .card { background: var(--surface); border-radius: 20px; overflow: hidden; }
-  .row { display: flex; align-items: center; gap: 16px; padding: 14px 18px; min-height: 64px; }
-  .row + .row { border-top: 1px solid var(--divider); }
-  .row-text { flex: 1; min-width: 0; }
-  .label { font-size: 16px; font-weight: 600; }
-  .sub { color: var(--secondary); font-size: 14px; }
-  .button {
-    flex: none; display: inline-flex; align-items: center; justify-content: center;
-    min-height: 40px; padding: 0 18px; border-radius: 20px; text-decoration: none;
-    font-weight: 600; background: var(--tonal); color: var(--on-tonal);
-  }
-  .button.action { background: var(--navy); color: var(--on-navy); }
-  .card p { margin: 0; padding: 18px 18px 14px; color: var(--secondary); }
-  .actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 18px 18px; }
-  footer { color: var(--secondary); font-size: 13px; margin: 32px 4px 0; }
-  footer a { color: inherit; }
+:root{--bg:#F4F5F7;--sf:#FFFFFF;--sf2:#ECEEF2;--line:#DDE0E6;--ink:#0F1626;--ink2:#5A6373;--acc:#1B2C5E;--on-acc:#FFFFFF;--acc-soft:#E2E7F3;--haze:#5464E6;--haze-soft:#E7E9FC;--on-haze:#FFFFFF}
+@media (prefers-color-scheme:dark){html[data-theme=auto]{--bg:#000000;--sf:#0B0D11;--sf2:#15181F;--line:#20242E;--ink:#F2F4F8;--ink2:#97A0B0;--acc:#9CB2F0;--on-acc:#05080F;--acc-soft:#141B2D;--haze:#9AA5FF;--haze-soft:#161838;--on-haze:#070A20}}
+html[data-theme=dark]{--bg:#111419;--sf:#1A1E26;--sf2:#242934;--line:#2E3442;--ink:#EEF1F6;--ink2:#A0A8B8;--acc:#9CB2F0;--on-acc:#0D1424;--acc-soft:#232C45;--haze:#9AA5FF;--haze-soft:#23264A;--on-haze:#0D1030;color-scheme:dark}
+html[data-theme=black]{--bg:#000000;--sf:#0B0D11;--sf2:#15181F;--line:#20242E;--ink:#F2F4F8;--ink2:#97A0B0;--acc:#9CB2F0;--on-acc:#05080F;--acc-soft:#141B2D;--haze:#9AA5FF;--haze-soft:#161838;--on-haze:#070A20;color-scheme:dark}
+html[data-theme=light]{color-scheme:light}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 system-ui,sans-serif;-webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none;padding:0;text-align:start}
+svg{flex-shrink:0}
+.step{display:none;min-height:100vh;min-height:100dvh;max-width:560px;margin:0 auto;padding:calc(env(safe-area-inset-top) + 16px) 20px 0;flex-direction:column;gap:22px}
+.step.on{display:flex;animation:in .22s ease-out}
+@keyframes in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.step.on{animation:none}}
+.top{display:flex;align-items:center;justify-content:space-between;min-height:44px}
+.icon-btn{width:44px;height:44px;border-radius:22px;display:flex;align-items:center;justify-content:center}
+[dir=rtl] .flip{transform:scaleX(-1)}
+.text-btn{min-height:44px;padding:0 12px;border-radius:22px;font-size:15px;font-weight:500;color:var(--ink2)}
+.dots{display:flex;gap:6px}
+.dots span{width:6px;height:6px;border-radius:3px;background:var(--line)}
+.dots span.done{background:var(--acc)}
+.dots span.now{width:22px;background:var(--acc)}
+.head{display:flex;flex-direction:column;gap:8px;padding:0 4px}
+.eyebrow{font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--acc)}
+h1{margin:0;font-size:30px;line-height:1.1;font-weight:600;letter-spacing:-.015em}
+.sub{margin:0;font-size:15px;color:var(--ink2)}
+.label{font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink2);padding:0 4px}
+.grow{flex-grow:1}
+.foot{position:sticky;bottom:0;display:flex;flex-direction:column;gap:12px;padding:16px 0 calc(env(safe-area-inset-bottom) + 24px);background:linear-gradient(to bottom,transparent,var(--bg) 16px)}
+.primary{min-height:56px;border-radius:28px;background:var(--acc);color:var(--on-acc);display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:600;padding:0 24px;text-align:center}
+.primary[aria-disabled=true]{opacity:.5;cursor:default}
+.secondary{min-height:52px;border-radius:26px;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;gap:10px;font-size:16px;font-weight:500;padding:0 20px;text-align:center}
+.hero{flex-grow:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;text-align:center}
+.hero h1{font-size:40px;letter-spacing:-.02em}
+.hero .sub{font-size:17px}
+.welcome-dots{display:flex;justify-content:center;padding-bottom:4px}
+.opts{display:flex;flex-direction:column;gap:10px}
+.opt{display:flex;align-items:center;gap:14px;padding:15px;border-radius:20px;border:1px solid var(--line);background:var(--sf);width:100%}
+.opt[aria-checked=true]{border:2px solid var(--acc);padding:14px;background:var(--acc-soft)}
+.opt .oi{width:44px;height:44px;border-radius:14px;background:var(--sf2);display:flex;align-items:center;justify-content:center}
+.opt[aria-checked=true] .oi{background:var(--acc);color:var(--on-acc)}
+.opt .ot{flex-grow:1;display:flex;flex-direction:column;gap:2px;min-width:0}
+.opt .on{font-size:17px;font-weight:600}
+.opt .od{font-size:14px;color:var(--ink2)}
+.radio{width:22px;height:22px;border-radius:11px;border:2px solid var(--line);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+[aria-checked=true]>.radio,[aria-checked=true] .radio{border-color:var(--acc)}
+[aria-checked=true]>.radio::after,[aria-checked=true] .radio::after{content:"";width:12px;height:12px;border-radius:6px;background:var(--acc)}
+.card{border-radius:20px;background:var(--sf);border:1px solid var(--line);overflow:hidden}
+.row{display:flex;align-items:center;gap:14px;min-height:56px;padding:8px 16px;width:100%;border-bottom:1px solid var(--line)}
+.card>:last-child,.card>:last-child .row{border-bottom:0}
+.row .nm{flex-grow:1;font-size:16px;min-width:0}
+.row .tg{font-size:13px;color:var(--ink2);text-align:end;white-space:nowrap}
+.row[aria-checked=true]{background:var(--acc-soft)}
+.row[aria-checked=true] .nm{font-weight:600}
+.custom{display:none;padding:0 16px 14px;padding-inline-start:52px;background:var(--acc-soft)}
+.custom.show{display:block}
+.custom input{width:100%;min-height:44px;border-radius:14px;border:1px solid var(--line);background:var(--sf);padding:0 14px;font-size:15px}
+.custom input:focus{outline:2px solid var(--acc);outline-offset:0}
+.custom .err{font-size:13px;color:#C2410C;padding-top:6px;display:none}
+.custom.bad .err{display:block}
+.tiles3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.tiles2{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.tile{display:flex;flex-direction:column;gap:10px;align-items:center;padding:10px 10px 12px;border-radius:20px;border:1px solid var(--line);background:var(--sf);font-size:15px;font-weight:500}
+.tile[aria-checked=true]{border:2px solid var(--acc);padding:9px 9px 11px;background:var(--acc-soft);font-weight:600}
+.pv{width:100%;height:108px;border-radius:12px;padding:10px 8px;display:flex;flex-direction:column;gap:6px;border:1px solid}
+.pv i{display:block;border-radius:4px}
+.pv-light{background:#F4F5F7;border-color:#DDE0E6}.pv-light i{background:#DDE0E6}.pv-light i.s{background:#FFFFFF}
+.pv-dark{background:#111419;border-color:#2E3442}.pv-dark i{background:#2E3442}.pv-dark i.s{background:#1A1E26}
+.pv-black{background:#000000;border-color:#20242E}.pv-black i{background:#20242E}.pv-black i.s{background:#0B0D11}
+.phone{width:92px;height:150px;border-radius:16px;border:1.5px solid var(--line);padding:8px;display:flex;flex-direction:column;gap:6px;background:var(--bg)}
+.phone i{display:block;height:5px;border-radius:3px;background:var(--sf2)}
+.phone b{display:flex;align-items:center;height:16px;border-radius:8px;background:var(--sf2);padding:0 6px}
+.phone b::after{content:"";height:4px;width:60%;border-radius:2px;background:var(--line)}
+.tile[aria-checked=true] .phone b{background:var(--acc)}
+.tile[aria-checked=true] .phone b::after{background:var(--on-acc);opacity:.6}
+.cat{display:flex;flex-direction:column;gap:8px}
+.cat-head{display:flex;align-items:baseline;justify-content:space-between;padding:0 4px}
+.cat-head .hint{font-size:13px;color:var(--ink2)}
+.ext{display:flex;align-items:center;gap:12px;min-height:64px;padding:10px 14px;width:100%}
+.ext-wrap{border-bottom:1px solid var(--line)}
+.ext-wrap.sel{background:var(--acc-soft)}
+.tl{width:40px;height:40px;border-radius:13px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;font-weight:700;flex-shrink:0}
+.ext .tx{flex-grow:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.ext .nm{font-size:16px;font-weight:600}
+.ext .ds{font-size:13px;color:var(--ink2)}
+.lic{height:20px;padding:0 6px;border-radius:6px;font-size:10px;font-weight:700;letter-spacing:.05em;display:flex;align-items:center;border:1px solid var(--line);color:var(--ink2);flex-shrink:0}
+.check{width:24px;height:24px;border-radius:8px;border:1.75px solid var(--line);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--on-acc)}
+.check svg{display:none}
+[aria-checked=true] .check{background:var(--acc);border-color:var(--acc)}
+[aria-checked=true] .check svg{display:block}
+.ag{display:none;align-items:center;gap:10px;min-height:44px;padding:0 14px;padding-inline-start:66px;width:100%}
+.ext-wrap.sel .ag{display:flex}
+.ag span{flex-grow:1;font-size:14px;color:var(--ink2)}
+.sw{width:40px;height:24px;border-radius:12px;position:relative;flex-shrink:0;background:var(--sf2);border:1px solid var(--line)}
+.sw::after{content:"";position:absolute;top:2px;inset-inline-start:2px;width:18px;height:18px;border-radius:9px;background:var(--ink2);transition:inset-inline-start .15s}
+.ag[aria-checked=true] .sw{background:var(--haze);border-color:var(--haze)}
+.ag[aria-checked=true] .sw::after{inset-inline-start:18px;background:var(--on-haze)}
+.ready{flex-grow:1;display:flex;flex-direction:column;justify-content:center;gap:24px}
+.ready-head{display:flex;align-items:center;gap:16px}
+.badge{width:60px;height:60px;border-radius:30px;background:var(--acc-soft);color:var(--acc);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.li{display:flex;align-items:center;gap:14px;min-height:54px;padding:8px 16px;border-bottom:1px solid var(--line);color:var(--ink)}
+.li svg{color:var(--acc)}
+.li .lt{flex-grow:1;font-size:16px}
+.li .lk{font-size:14px;color:var(--ink2)}
+.li.progress{flex-wrap:wrap;row-gap:8px}
+.bar{flex-basis:100%;height:4px;border-radius:2px;background:var(--sf2);margin-inline-start:36px;overflow:hidden;display:none}
+.bar i{display:block;height:4px;width:0;border-radius:2px;background:var(--acc);transition:width .3s}
+.li.progress.busy .bar{display:block}
+[hidden]{display:none!important}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+h1:focus{outline:none}
 </style>
-<main>
-  <section class="hero">
-    <svg class="logo" viewBox="0 0 512 512" aria-hidden="true"><path d="M330 384.17 149.1 488.61A256 256 0 0 1 108 47.12L108 256A148 148 0 0 0 330 384.17Z" fill="#1B2C5E"/><path d="M108 256 108 47.12A256 256 0 0 1 510.9 232.27L330 127.83A148 148 0 0 0 108 256Z" fill="#2A4485"/><path d="M330 127.83 510.9 232.27A256 256 0 0 1 149.1 488.61L330 384.17A148 148 0 0 0 330 127.83Z" fill="#111C42"/><circle cx="256" cy="256" r="134" fill="#E9F1FB"/><circle cx="256" cy="256" r="104" fill="#2C6BAE"/><circle cx="238" cy="236" r="82" fill="#4C97CF"/><circle cx="222" cy="218" r="46" fill="#7FC4E4"/></svg>
-    <h1>{{TITLE}}</h1>
-    <p class="tagline">{{TAGLINE}}</p>
-  </section>
+<body>
 
-  <h2>{{EXTENSIONS}}</h2>
-  <div class="card">
-    <div class="row">
-      <div class="row-text">
-        <div class="label">uBlock Origin Lite</div>
-        <div class="sub">{{UBLOCK}}</div>
-      </div>
+<section class="step" id="welcome">
+  <div class="top"><span></span><button class="text-btn" id="skip-all" type="button">{{SKIP}}</button></div>
+  <div class="hero">
+    <svg width="96" height="96" viewBox="0 0 512 512" aria-hidden="true"><path d="M330 384.17 149.1 488.61A256 256 0 0 1 108 47.12L108 256A148 148 0 0 0 330 384.17Z" fill="#1B2C5E"/><path d="M108 256 108 47.12A256 256 0 0 1 510.9 232.27L330 127.83A148 148 0 0 0 108 256Z" fill="#2A4485"/><path d="M330 127.83 510.9 232.27A256 256 0 0 1 149.1 488.61L330 384.17A148 148 0 0 0 330 127.83Z" fill="#111C42"/><circle cx="388" cy="96" r="7" fill="#FFFFFF" opacity=".9"/><circle cx="96" cy="132" r="6" fill="#FFFFFF" opacity=".55"/><circle cx="402" cy="360" r="6" fill="#FFFFFF" opacity=".9"/><circle cx="150" cy="400" r="6" fill="#FFFFFF" opacity=".55"/></svg>
+    <div class="head" style="align-items:center"><h1>Aerium</h1><p class="sub">{{TAGLINE}}</p></div>
+  </div>
+  <div class="foot">
+    <div class="welcome-dots"><div class="dots"></div></div>
+    <button class="primary" type="button" data-go="guard">{{START}}</button>
+    <button class="secondary" id="restore" type="button"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20V9"/><path d="M7 13l5-5 5 5"/><path d="M5 4h14"/></svg>{{RESTORE}}</button>
+  </div>
+</section>
+
+<section class="step" id="guard">
+  <div class="top"><button class="icon-btn back" type="button" aria-label="{{BACK}}"><svg class="flip" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button><div class="dots"></div><span style="width:44px"></span></div>
+  <div class="head"><span class="eyebrow">Aerium Guard</span><h1>{{GUARD_TITLE}}</h1><p class="sub">{{GUARD_SUB}}</p></div>
+  <div class="opts" role="radiogroup" aria-label="Aerium Guard" data-group="guard">
+    <button class="opt" type="button" role="radio" data-value="recommended"><span class="oi"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 5-3.5 8.5-7 10-3.5-1.5-7-5-7-10V6z"/><path d="M9 12l2 2 4-4"/></svg></span><span class="ot"><span class="on">{{MODE_RECOMMENDED}}</span><span class="od">{{MODE_RECOMMENDED_SUB}}</span></span><span class="radio"></span></button>
+    <button class="opt" type="button" role="radio" data-value="privacy"><span class="oi"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13h10l1-13"/></svg></span><span class="ot"><span class="on">{{MODE_PRIVACY}}</span><span class="od">{{MODE_PRIVACY_SUB}}</span></span><span class="radio"></span></button>
+    <button class="opt" type="button" role="radio" data-value="performance"><span class="oi"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 3L5 13h6l-1 8 8-10h-6z"/></svg></span><span class="ot"><span class="on">{{MODE_PERFORMANCE}}</span><span class="od">{{MODE_PERFORMANCE_SUB}}</span></span><span class="radio"></span></button>
+    <button class="opt" type="button" role="radio" data-value="security"><span class="oi"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></span><span class="ot"><span class="on">{{MODE_SECURITY}}</span><span class="od">{{MODE_SECURITY_SUB}}</span></span><span class="radio"></span></button>
+  </div>
+  <div class="grow"></div>
+  <div class="foot"><button class="primary" type="button" data-go="dns">{{CONTINUE}}</button></div>
+</section>
+
+<section class="step" id="dns">
+  <div class="top"><button class="icon-btn back" type="button" aria-label="{{BACK}}"><svg class="flip" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button><div class="dots"></div><span style="width:44px"></span></div>
+  <div class="head"><h1>{{DNS_TITLE}}</h1><p class="sub">{{DNS_SUB}}</p></div>
+  <div class="card" role="radiogroup" aria-label="{{DNS_TITLE}}" id="dns-list">
+    <div id="dns-custom-wrap">
+      <button class="row" type="button" role="radio" data-dns="custom"><span class="radio"></span><span class="nm">{{DNS_CUSTOM}}</span><span class="tg">{{DNS_CUSTOM_TAG}}</span></button>
+      <div class="custom" id="dns-custom"><input id="dns-input" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://dns.example/dns-query" aria-label="{{DNS_CUSTOM}}"><div class="err">{{DNS_CUSTOM_INVALID}}</div></div>
     </div>
-    <div class="row">
-      <div class="row-text">
-        <div class="label">{{MORE_EXTENSIONS}}</div>
-        <div class="sub">{{MORE_EXTENSIONS_SUB}}</div>
-      </div>
-      <a class="button action" href="https://chromewebstore.google.com/">{{BROWSE}}</a>
-    </div>
-    <div class="row">
-      <div class="row-text">
-        <div class="label">{{FROM_FILE}}</div>
-        <div class="sub">{{FROM_FILE_SUB}}</div>
-      </div>
-      <a class="button" href="chrome://aerium-extensions/">{{OPEN}}</a>
+    <button class="row" type="button" role="radio" data-dns="automatic"><span class="radio"></span><span class="nm">{{DNS_AUTO}}</span><span class="tg">{{DNS_AUTO_TAG}}</span></button>
+  </div>
+  <div class="grow"></div>
+  <div class="foot"><button class="primary" type="button" id="dns-next">{{CONTINUE}}</button></div>
+</section>
+
+<section class="step" id="look">
+  <div class="top"><button class="icon-btn back" type="button" aria-label="{{BACK}}"><svg class="flip" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button><div class="dots"></div><span style="width:44px"></span></div>
+  <div class="head"><h1>{{LOOK_TITLE}}</h1></div>
+  <span class="label">{{THEME}}</span>
+  <div class="tiles3" role="radiogroup" aria-label="{{THEME}}" data-group="theme">
+    <button class="tile" type="button" role="radio" data-value="light"><span class="pv pv-light"><i style="height:8px;width:70%"></i><i class="s" style="height:34px"></i><i style="height:6px;width:50%"></i><span class="grow"></span><i class="s" style="height:12px;border-radius:6px"></i></span><span class="tn">{{LIGHT}}</span></button>
+    <button class="tile" type="button" role="radio" data-value="dark"><span class="pv pv-dark"><i style="height:8px;width:70%"></i><i class="s" style="height:34px"></i><i style="height:6px;width:50%"></i><span class="grow"></span><i class="s" style="height:12px;border-radius:6px"></i></span><span class="tn">{{DARK}}</span></button>
+    <button class="tile" type="button" role="radio" data-value="black"><span class="pv pv-black"><i style="height:8px;width:70%"></i><i class="s" style="height:34px"></i><i style="height:6px;width:50%"></i><span class="grow"></span><i class="s" style="height:12px;border-radius:6px"></i></span><span class="tn">{{BLACK}}</span></button>
+  </div>
+  <span class="label">{{BAR}}</span>
+  <div class="tiles2" role="radiogroup" aria-label="{{BAR}}" data-group="bar">
+    <button class="tile" type="button" role="radio" data-value="top"><span class="phone"><b></b><i style="width:80%"></i><i style="width:64%"></i><i style="width:72%"></i></span><span class="tn">{{TOP}}</span></button>
+    <button class="tile" type="button" role="radio" data-value="bottom"><span class="phone"><i style="width:80%"></i><i style="width:64%"></i><i style="width:72%"></i><span class="grow"></span><b></b></span><span class="tn">{{BOTTOM}}</span></button>
+  </div>
+  <div class="grow"></div>
+  <div class="foot"><button class="primary" type="button" data-go="extensions">{{CONTINUE}}</button></div>
+</section>
+
+<section class="step" id="extensions">
+  <div class="top"><button class="icon-btn back" type="button" aria-label="{{BACK}}"><svg class="flip" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button><div class="dots"></div><button class="text-btn" type="button" id="ext-skip">{{SKIP}}</button></div>
+  <div class="head"><h1>{{EXT_TITLE}}</h1><p class="sub">{{EXT_SUB}}</p></div>
+  <div class="cat"><div class="cat-head"><span class="label" style="padding:0">{{CAT_ADS}}</span><span class="hint">{{PICK_ONE}}</span></div>
+    <div class="card" role="radiogroup" aria-label="{{CAT_ADS}}">
+      <div class="ext-wrap" data-ext="ddkjiahejlhfcafbddmgiahcphecmpfh" data-src="cws" data-group="ads"><button class="ext" type="button" role="radio"><span class="tl" style="background:#800000">uB</span><span class="tx"><span class="nm">uBlock Origin Lite</span><span class="ds">{{EXT_UBOL}}</span></span><span class="lic">GPL</span><span class="radio"></span></button><button class="ag" type="button" role="switch"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--haze)" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z"/><circle cx="9.5" cy="10" r="1.1" fill="var(--haze)" stroke="none"/><circle cx="14.5" cy="11.5" r="1.1" fill="var(--haze)" stroke="none"/><circle cx="11" cy="15" r="1.1" fill="var(--haze)" stroke="none"/></svg><span>{{AEROGEL_TOO}}</span><i class="sw"></i></button></div>
+      <div class="ext-wrap" data-ext="gorhill/uBlock" data-src="github" data-group="ads"><button class="ext" type="button" role="radio"><span class="tl" style="background:#5A0000">uB</span><span class="tx"><span class="nm">uBlock Origin</span><span class="ds">{{EXT_UBO}}</span></span><span class="lic">GPL</span><span class="radio"></span></button><button class="ag" type="button" role="switch"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--haze)" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z"/><circle cx="9.5" cy="10" r="1.1" fill="var(--haze)" stroke="none"/><circle cx="14.5" cy="11.5" r="1.1" fill="var(--haze)" stroke="none"/><circle cx="11" cy="15" r="1.1" fill="var(--haze)" stroke="none"/></svg><span>{{AEROGEL_TOO}}</span><i class="sw"></i></button></div>
+      <div class="ext-wrap" data-ext="bgnkhhnnamicmpeenaelnjfhikgbkllg" data-src="cws" data-group="ads"><button class="ext" type="button" role="radio"><span class="tl" style="background:#3E8E57">AG</span><span class="tx"><span class="nm">AdGuard</span><span class="ds">{{EXT_ADGUARD}}</span></span><span class="lic">GPL</span><span class="radio"></span></button><button class="ag" type="button" role="switch"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--haze)" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z"/><circle cx="9.5" cy="10" r="1.1" fill="var(--haze)" stroke="none"/><circle cx="14.5" cy="11.5" r="1.1" fill="var(--haze)" stroke="none"/><circle cx="11" cy="15" r="1.1" fill="var(--haze)" stroke="none"/></svg><span>{{AEROGEL_TOO}}</span><i class="sw"></i></button></div>
     </div>
   </div>
-
-  <h2>{{PRIVATE}}</h2>
-  <div class="card">
-    <div class="row">
-      <div class="row-text">
-        <div class="label">{{NO_TELEMETRY}}</div>
-        <div class="sub">{{NO_TELEMETRY_SUB}}</div>
-      </div>
-    </div>
-    <div class="row">
-      <div class="row-text">
-        <div class="label">Aerium Guard</div>
-        <div class="sub">{{GUARD_SUB}}</div>
-      </div>
-    </div>
-    <div class="row">
-      <div class="row-text">
-        <div class="label">{{APP_LINKS}}</div>
-        <div class="sub">{{APP_LINKS_SUB}}</div>
-      </div>
+  <div class="cat"><div class="cat-head"><span class="label" style="padding:0">{{CAT_SYNC}}</span></div>
+    <div class="card">
+      <div class="ext-wrap" data-ext="fnaicdffflnofjppbagibeoednhnbjhg" data-src="cws"><button class="ext" type="button" role="checkbox"><span class="tl" style="background:#2563EB">fl</span><span class="tx"><span class="nm">floccus</span><span class="ds">{{EXT_FLOCCUS}}</span></span><span class="lic">MPL</span><span class="check"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span></button><button class="ag" type="button" role="switch"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--haze)" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z"/><circle cx="9.5" cy="10" r="1.1" fill="var(--haze)" stroke="none"/><circle cx="14.5" cy="11.5" r="1.1" fill="var(--haze)" stroke="none"/><circle cx="11" cy="15" r="1.1" fill="var(--haze)" stroke="none"/></svg><span>{{AEROGEL_TOO}}</span><i class="sw"></i></button></div>
     </div>
   </div>
-
-  <h2>{{EVERYDAY}}</h2>
-  <div class="card">
-    <div class="row">
-      <div class="row-text">
-        <div class="label">{{DARK}}</div>
-        <div class="sub">{{DARK_SUB}}</div>
-      </div>
-    </div>
-    <div class="row">
-      <div class="row-text">
-        <div class="label">{{WEB_APPS}}</div>
-        <div class="sub">{{WEB_APPS_SUB}}</div>
-      </div>
-    </div>
-    <div class="row">
-      <div class="row-text">
-        <div class="label">{{PASSWORDS}}</div>
-        <div class="sub">{{PASSWORDS_SUB}}</div>
-      </div>
-    </div>
-    <div class="row">
-      <div class="row-text">
-        <div class="label">{{BACKUP}}</div>
-        <div class="sub">{{BACKUP_SUB}}</div>
-      </div>
+  <div class="cat"><div class="cat-head"><span class="label" style="padding:0">{{MODE_PRIVACY}}</span></div>
+    <div class="card">
+      <div class="ext-wrap" data-ext="ldpochfccmkkmhdbclfhpagapcfdljkj" data-src="cws"><button class="ext" type="button" role="checkbox"><span class="tl" style="background:#14532D">De</span><span class="tx"><span class="nm">Decentraleyes</span><span class="ds">{{EXT_DECENTRALEYES}}</span></span><span class="lic">MPL</span><span class="check"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span></button><button class="ag" type="button" role="switch"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--haze)" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z"/><circle cx="9.5" cy="10" r="1.1" fill="var(--haze)" stroke="none"/><circle cx="14.5" cy="11.5" r="1.1" fill="var(--haze)" stroke="none"/><circle cx="11" cy="15" r="1.1" fill="var(--haze)" stroke="none"/></svg><span>{{AEROGEL_TOO}}</span><i class="sw"></i></button></div>
+      <div class="ext-wrap" data-ext="mdjildafknihdffpkfmmpnpoiajfjnjd" data-src="cws"><button class="ext" type="button" role="checkbox"><span class="tl" style="background:#334155">CM</span><span class="tx"><span class="nm">Consent-O-Matic</span><span class="ds">{{EXT_CONSENT}}</span></span><span class="lic">MIT</span><span class="check"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span></button><button class="ag" type="button" role="switch"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--haze)" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z"/><circle cx="9.5" cy="10" r="1.1" fill="var(--haze)" stroke="none"/><circle cx="14.5" cy="11.5" r="1.1" fill="var(--haze)" stroke="none"/><circle cx="11" cy="15" r="1.1" fill="var(--haze)" stroke="none"/></svg><span>{{AEROGEL_TOO}}</span><i class="sw"></i></button></div>
     </div>
   </div>
-
-  <h2>{{UPDATES}}</h2>
-  <div class="card">
-    <div class="row">
-      <div class="row-text">
-        <div class="label">{{DAILY}}</div>
-        <div class="sub">{{DAILY_SUB}}</div>
-      </div>
-    </div>
-    <div class="row">
-      <div class="row-text">
-        <div class="label">Obtainium</div>
-        <div class="sub">{{OBTAINIUM_SUB}}</div>
-      </div>
-      <a class="button" href="https://aerium-browser.github.io/obtainium/">{{ADD}}</a>
+  <div class="cat"><div class="cat-head"><span class="label" style="padding:0">{{CAT_NEWTAB}}</span></div>
+    <div class="card">
+      <div class="ext-wrap" data-ext="dlaogejjiafeobgofajdlkkhjlignalk" data-src="cws"><button class="ext" type="button" role="checkbox"><span class="tl" style="background:#6D28D9">Tb</span><span class="tx"><span class="nm">TablissNG</span><span class="ds">{{EXT_TABLISS}}</span></span><span class="lic">GPL</span><span class="check"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span></button><button class="ag" type="button" role="switch"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--haze)" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z"/><circle cx="9.5" cy="10" r="1.1" fill="var(--haze)" stroke="none"/><circle cx="14.5" cy="11.5" r="1.1" fill="var(--haze)" stroke="none"/><circle cx="11" cy="15" r="1.1" fill="var(--haze)" stroke="none"/></svg><span>{{AEROGEL_TOO}}</span><i class="sw"></i></button></div>
     </div>
   </div>
-
-  <h2>{{SUPPORT}}</h2>
-  <div class="card">
-    <p>{{SUPPORT_TEXT}}</p>
-    <div class="actions">
-      <a class="button action" href="https://aerium-browser.github.io/donate/xmr/">{{DONATE_XMR}}</a>
-      <a class="button" href="https://aerium-browser.github.io/donate/ltc/">{{DONATE_LTC}}</a>
+  <div class="cat"><div class="cat-head"><span class="label" style="padding:0">YouTube</span></div>
+    <div class="card">
+      <div class="ext-wrap" data-ext="mnjggcdmjocbbbhaepdhchncahnbgone" data-src="cws"><button class="ext" type="button" role="checkbox"><span class="tl" style="background:#C2410C">SB</span><span class="tx"><span class="nm">SponsorBlock</span><span class="ds">{{EXT_SPONSORBLOCK}}</span></span><span class="lic">GPL</span><span class="check"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span></button><button class="ag" type="button" role="switch"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--haze)" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z"/><circle cx="9.5" cy="10" r="1.1" fill="var(--haze)" stroke="none"/><circle cx="14.5" cy="11.5" r="1.1" fill="var(--haze)" stroke="none"/><circle cx="11" cy="15" r="1.1" fill="var(--haze)" stroke="none"/></svg><span>{{AEROGEL_TOO}}</span><i class="sw"></i></button></div>
     </div>
   </div>
+  <div class="foot"><button class="primary" type="button" id="install"></button></div>
+</section>
 
-  <footer>{{AEROGEL}} <a href="https://aerium-browser.github.io/">aerium-browser.github.io</a></footer>
-</main>
+<section class="step" id="ready">
+  <div class="top"><button class="icon-btn back" type="button" aria-label="{{BACK}}" id="ready-back"><svg class="flip" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button><div class="dots"></div><span style="width:44px"></span></div>
+  <div class="ready">
+    <div class="ready-head"><span class="badge"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span><h1 style="font-size:32px">{{READY_TITLE}}</h1></div>
+    <div class="card">
+      <div class="li"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 5-3.5 8.5-7 10-3.5-1.5-7-5-7-10V6z"/></svg><span class="lt" id="r-guard"></span><span class="lk">Aerium Guard</span></div>
+      <div class="li"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17"/><path d="M12 3.5a13 13 0 0 1 0 17a13 13 0 0 1 0-17"/></svg><span class="lt" id="r-dns"></span><span class="lk">{{DNS_TITLE}}</span></div>
+      <div class="li"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg><span class="lt" id="r-theme"></span><span class="lk">{{THEME}}</span></div>
+      <div class="li"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="3" width="12" height="18" rx="3"/><path d="M9 17h6"/></svg><span class="lt" id="r-bar"></span><span class="lk">{{BAR}}</span></div>
+      <div class="li" id="r-search-row"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg><span class="lt" id="r-search"></span><span class="lk">{{SEARCH}}</span></div>
+      <div class="li progress" id="r-ext-row"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 4H6a2 2 0 0 0-2 2v4"/><path d="M14 4h4a2 2 0 0 1 2 2v4"/><path d="M10 20H6a2 2 0 0 1-2-2v-4"/><path d="M14 20h4a2 2 0 0 0 2-2v-4"/></svg><span class="lt" id="r-ext" aria-live="polite"></span><span class="lk">{{EXTENSIONS}}</span><span class="bar"><i id="r-bar-fill"></i></span></div>
+      <div class="li"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M20 4v4h-4"/></svg><span class="lt">{{UPDATES_DAILY}}</span><span class="lk">{{UPDATES}}</span></div>
+    </div>
+  </div>
+  <div class="foot">
+    <button class="secondary" type="button" id="make-default">{{MAKE_DEFAULT}}</button>
+    <button class="primary" type="button" id="finish">{{START_BROWSING}}</button>
+  </div>
+</section>
+
+<script id="data" type="application/json">{{DATA}}</script>
+<script>
+(() => {
+  const D = JSON.parse(document.getElementById('data').textContent);
+  const S = D.strings;
+  const STEPS = ['welcome', 'guard', 'dns', 'look', 'extensions', 'ready'];
+  const DNS_ORDER = ['Quad9Secure', 'Mullvad', 'MullvadAdblock', 'NextDns', 'Cloudflare', 'CleanBrowsingFamily', 'OpenDNS'];
+  const DNS_TAGS = {Quad9Secure: S.dnsMalware, Mullvad: S.dnsNoLogs, MullvadAdblock: S.dnsAds, NextDns: S.dnsFilters, Cloudflare: '1.1.1.1', CleanBrowsingFamily: S.dnsFamily, OpenDNS: 'Cisco'};
+  const sysDark = matchMedia('(prefers-color-scheme: dark)').matches;
+  const state = {
+    guard: ['recommended', 'privacy', 'performance', 'security'].includes(D.guard) ? D.guard : 'recommended',
+    dns: 'Quad9Secure', custom: '',
+    theme: sysDark ? 'black' : 'light', themeTouched: false,
+    bar: 'bottom',
+    applied: false, busy: false, total: 0,
+  };
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+  const send = (name, payload) => {
+    if (window.chrome && chrome.send) chrome.send(name, payload === undefined ? [] : [JSON.stringify(payload)]);
+  };
+  const fmt = (t, ...a) => a.reduce((s, v, i) => s.split('$' + (i + 1)).join(String(v)), t);
+
+  function dots() {
+    $$('.step').forEach(sec => {
+      const box = $('.dots', sec);
+      if (!box) return;
+      const idx = STEPS.indexOf(sec.id);
+      box.textContent = '';
+      box.setAttribute('aria-label', fmt(S.step, idx + 1, STEPS.length));
+      box.setAttribute('role', 'img');
+      STEPS.forEach((_, i) => {
+        const d = document.createElement('span');
+        if (i < idx) d.className = 'done';
+        if (i === idx) d.className = 'now';
+        box.appendChild(d);
+      });
+    });
+  }
+
+  function show(id) {
+    if (!STEPS.includes(id)) id = 'welcome';
+    if (state.applied && id !== 'ready') {
+      history.replaceState(null, '', '#ready');
+      id = 'ready';
+    }
+    $$('.step').forEach(s => s.classList.toggle('on', s.id === id));
+    if (id === 'ready') renderReady();
+    if (id === 'extensions') renderInstall();
+    window.scrollTo(0, 0);
+    const h = $('#' + id + ' h1');
+    if (h) { h.tabIndex = -1; h.focus({preventScroll: true}); }
+  }
+  const go = id => { location.hash = id; };
+  window.addEventListener('hashchange', () => show(location.hash.slice(1)));
+
+  function pick(group, value) {
+    $$('[data-group="' + group + '"] [role=radio]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.value === value)));
+  }
+  function bindGroup(group, onPick) {
+    $$('[data-group="' + group + '"] [role=radio]').forEach(b => b.addEventListener('click', () => {
+      pick(group, b.dataset.value);
+      onPick(b.dataset.value);
+    }));
+  }
+  bindGroup('guard', v => { state.guard = v; });
+  bindGroup('theme', v => { state.theme = v; state.themeTouched = true; document.documentElement.dataset.theme = v; });
+  bindGroup('bar', v => { state.bar = v; });
+  pick('guard', state.guard);
+  pick('theme', state.theme);
+  pick('bar', state.bar);
+
+  const list = $('#dns-list');
+  const anchor = $('#dns-custom-wrap');
+  const providers = (D.dns || []).slice().sort((a, b) => {
+    const ia = DNS_ORDER.indexOf(a.id), ib = DNS_ORDER.indexOf(b.id);
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+  });
+  if (!providers.some(p => p.id === state.dns)) state.dns = providers.length ? providers[0].id : 'automatic';
+  providers.forEach(p => {
+    const b = document.createElement('button');
+    b.className = 'row'; b.type = 'button'; b.setAttribute('role', 'radio'); b.dataset.dns = p.id;
+    const r = document.createElement('span'); r.className = 'radio';
+    const n = document.createElement('span'); n.className = 'nm'; n.textContent = p.name.replace(/\s*\([^)]*\)$/, '').replace(/^Mullvad DNS$/, 'Mullvad');
+    const t = document.createElement('span'); t.className = 'tg'; t.textContent = DNS_TAGS[p.id] || '';
+    b.append(r, n, t);
+    list.insertBefore(b, anchor);
+  });
+  const input = $('#dns-input');
+  const customBox = $('#dns-custom');
+  function pickDns(id) {
+    state.dns = id;
+    $$('[data-dns]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.dns === id)));
+    customBox.classList.toggle('show', id === 'custom');
+    customBox.classList.remove('bad');
+    if (id === 'custom') input.focus();
+  }
+  $$('[data-dns]').forEach(b => b.addEventListener('click', () => pickDns(b.dataset.dns)));
+  pickDns(state.dns);
+  input.addEventListener('input', () => { state.custom = input.value.trim(); customBox.classList.remove('bad'); });
+  const validTemplate = v => /^https:\/\/[^\s/?#]+\.[^\s/?#]+(?:\/\S*)?$/i.test(v);
+  $('#dns-next').addEventListener('click', () => {
+    if (state.dns === 'custom' && !validTemplate(state.custom)) { customBox.classList.add('bad'); input.focus(); return; }
+    go('look');
+  });
+
+  const wraps = $$('.ext-wrap');
+  const DEFAULT_EXT = 'ddkjiahejlhfcafbddmgiahcphecmpfh';
+  function setExt(w, on) {
+    w.classList.toggle('sel', on);
+    $('.ext', w).setAttribute('aria-checked', String(on));
+  }
+  wraps.forEach(w => {
+    const main = $('.ext', w);
+    const ag = $('.ag', w);
+    ag.setAttribute('aria-checked', 'false');
+    setExt(w, w.dataset.ext === DEFAULT_EXT);
+    if (w.dataset.ext === DEFAULT_EXT) ag.setAttribute('aria-checked', 'true');
+    main.addEventListener('click', () => {
+      const on = !w.classList.contains('sel');
+      if (w.dataset.group) {
+        wraps.filter(o => o.dataset.group === w.dataset.group).forEach(o => setExt(o, false));
+        setExt(w, on);
+      } else {
+        setExt(w, on);
+      }
+      renderInstall();
+    });
+    ag.addEventListener('click', () => ag.setAttribute('aria-checked', String(ag.getAttribute('aria-checked') !== 'true')));
+  });
+  const chosen = () => wraps.filter(w => w.classList.contains('sel')).map(w => ({
+    id: w.dataset.ext, source: w.dataset.src, name: $('.nm', w).textContent,
+    aerogel: $('.ag', w).getAttribute('aria-checked') === 'true',
+  }));
+  function renderInstall() {
+    const n = chosen().length;
+    $('#install').textContent = n ? fmt(S.install, n) : S.cont;
+  }
+
+  function apply(withExtensions) {
+    if (state.applied) { go('ready'); return; }
+    const exts = withExtensions ? chosen() : [];
+    let dns;
+    if (state.dns === 'automatic') dns = {mode: 'automatic', template: ''};
+    else if (state.dns === 'custom') dns = {mode: 'secure', template: state.custom};
+    else dns = {mode: 'secure', template: (providers.find(p => p.id === state.dns) || {}).template || ''};
+    state.applied = true;
+    state.total = exts.length;
+    state.busy = exts.length > 0;
+    state.done = 0; state.failed = 0;
+    send('aeriumOnboardingApply', {guard: state.guard, dns, extensions: exts.map(e => ({id: e.id, source: e.source, aerogel: e.aerogel}))});
+    go('ready');
+  }
+  $('#install').addEventListener('click', () => apply(true));
+  $('#ext-skip').addEventListener('click', () => apply(false));
+
+  function label(sel) { const el = $(sel); return el ? el.textContent : ''; }
+  function renderReady() {
+    $('#ready-back').style.visibility = state.applied ? 'hidden' : 'visible';
+    $('#r-guard').textContent = label('[data-group="guard"] [aria-checked=true] .on');
+    const dnsBtn = $('[data-dns][aria-checked=true] .nm');
+    $('#r-dns').textContent = state.dns === 'custom' ? (state.custom.replace(/^https:\/\//, '').split('/')[0] || label('[data-dns="custom"] .nm')) : (dnsBtn ? dnsBtn.textContent : '');
+    $('#r-theme').textContent = state.themeTouched ? label('[data-group="theme"] [aria-checked=true] .tn') : S.auto;
+    $('#r-bar').textContent = label('[data-group="bar"] [aria-checked=true] .tn');
+    $('#r-search').textContent = D.search || '';
+    $('#r-search-row').hidden = !D.search;
+    renderProgress();
+  }
+  function renderProgress() {
+    const row = $('#r-ext-row');
+    const txt = $('#r-ext');
+    row.classList.toggle('busy', state.busy);
+    if (!state.applied || state.total === 0) {
+      txt.textContent = S.none;
+    } else if (state.busy) {
+      txt.textContent = fmt(S.installing, Math.min(state.done + 1, state.total), state.total);
+      $('#r-bar-fill').style.width = Math.round(100 * state.done / state.total) + '%';
+    } else {
+      const ok = state.done - state.failed;
+      txt.textContent = state.failed ? fmt(S.someFailed, ok, state.failed) : fmt(S.installed, ok);
+    }
+    const fin = $('#finish');
+    fin.setAttribute('aria-disabled', String(state.busy));
+  }
+  window.aeriumOnboardingProgress = (done, failed, finished) => {
+    state.done = done; state.failed = failed; state.busy = !finished;
+    renderProgress();
+  };
+
+  $('#finish').addEventListener('click', () => {
+    if (state.busy) return;
+    if (!state.applied) apply(false);
+    send('aeriumOnboardingFinish', {theme: state.themeTouched ? state.theme : '', top: state.bar === 'top'});
+  });
+  $('#skip-all').addEventListener('click', () => send('aeriumOnboardingFinish', {theme: '', top: null}));
+  $('#restore').addEventListener('click', () => send('aeriumOnboardingRestore'));
+  $('#make-default').addEventListener('click', () => send('aeriumOnboardingDefault'));
+  $$('[data-go]').forEach(b => b.addEventListener('click', () => go(b.dataset.go)));
+  $$('.back').forEach(b => b.addEventListener('click', () => history.back()));
+
+  dots();
+  renderInstall();
+  show(location.hash.slice(1) || 'welcome');
+})();
+</script>
 )AERIUMHTML";
 
   const std::pair<const char*, int> kStrings[] = {
-      {"{{TITLE}}", IDS_AERIUM_FIRST_RUN_TITLE},
-      {"{{TAGLINE}}", IDS_AERIUM_FIRST_RUN_TAGLINE},
-      {"{{EXTENSIONS}}", IDS_AERIUM_FIRST_RUN_EXTENSIONS},
-      {"{{UBLOCK}}", IDS_AERIUM_FIRST_RUN_UBLOCK},
-      {"{{MORE_EXTENSIONS}}", IDS_AERIUM_FIRST_RUN_MORE_EXTENSIONS},
-      {"{{MORE_EXTENSIONS_SUB}}", IDS_AERIUM_FIRST_RUN_MORE_EXTENSIONS_SUB},
-      {"{{BROWSE}}", IDS_AERIUM_FIRST_RUN_BROWSE},
-      {"{{FROM_FILE}}", IDS_AERIUM_FIRST_RUN_FROM_FILE},
-      {"{{FROM_FILE_SUB}}", IDS_AERIUM_FIRST_RUN_FROM_FILE_SUB},
-      {"{{OPEN}}", IDS_AERIUM_FIRST_RUN_OPEN},
-      {"{{PRIVATE}}", IDS_AERIUM_FIRST_RUN_PRIVATE},
-      {"{{NO_TELEMETRY}}", IDS_AERIUM_FIRST_RUN_NO_TELEMETRY},
-      {"{{NO_TELEMETRY_SUB}}", IDS_AERIUM_FIRST_RUN_NO_TELEMETRY_SUB},
-      {"{{GUARD_SUB}}", IDS_AERIUM_FIRST_RUN_GUARD_SUB},
-      {"{{APP_LINKS}}", IDS_AERIUM_FIRST_RUN_APP_LINKS},
-      {"{{APP_LINKS_SUB}}", IDS_AERIUM_FIRST_RUN_APP_LINKS_SUB},
-      {"{{EVERYDAY}}", IDS_AERIUM_FIRST_RUN_EVERYDAY},
-      {"{{DARK}}", IDS_AERIUM_FIRST_RUN_DARK},
-      {"{{DARK_SUB}}", IDS_AERIUM_FIRST_RUN_DARK_SUB},
-      {"{{WEB_APPS}}", IDS_AERIUM_FIRST_RUN_WEB_APPS},
-      {"{{WEB_APPS_SUB}}", IDS_AERIUM_FIRST_RUN_WEB_APPS_SUB},
-      {"{{PASSWORDS}}", IDS_AERIUM_FIRST_RUN_PASSWORDS},
-      {"{{PASSWORDS_SUB}}", IDS_AERIUM_FIRST_RUN_PASSWORDS_SUB},
-      {"{{BACKUP}}", IDS_AERIUM_FIRST_RUN_BACKUP},
-      {"{{BACKUP_SUB}}", IDS_AERIUM_FIRST_RUN_BACKUP_SUB},
-      {"{{UPDATES}}", IDS_AERIUM_FIRST_RUN_UPDATES},
-      {"{{DAILY}}", IDS_AERIUM_FIRST_RUN_DAILY},
-      {"{{DAILY_SUB}}", IDS_AERIUM_FIRST_RUN_DAILY_SUB},
-      {"{{OBTAINIUM_SUB}}", IDS_AERIUM_FIRST_RUN_OBTAINIUM_SUB},
-      {"{{ADD}}", IDS_AERIUM_FIRST_RUN_ADD},
-      {"{{SUPPORT}}", IDS_AERIUM_FIRST_RUN_SUPPORT},
-      {"{{SUPPORT_TEXT}}", IDS_AERIUM_FIRST_RUN_SUPPORT_TEXT},
-      {"{{DONATE_XMR}}", IDS_AERIUM_FIRST_RUN_DONATE_XMR},
-      {"{{DONATE_LTC}}", IDS_AERIUM_FIRST_RUN_DONATE_LTC},
-      {"{{AEROGEL}}", IDS_AERIUM_FIRST_RUN_AEROGEL},
+      {"{{AEROGEL_TOO}}", IDS_AERIUM_ONB_AEROGEL_TOO},
+      {"{{BACK}}", IDS_AERIUM_ONB_BACK},
+      {"{{BAR}}", IDS_AERIUM_ONB_BAR},
+      {"{{BLACK}}", IDS_AERIUM_ONB_BLACK},
+      {"{{BOTTOM}}", IDS_AERIUM_ONB_BOTTOM},
+      {"{{CAT_ADS}}", IDS_AERIUM_ONB_CAT_ADS},
+      {"{{CAT_NEWTAB}}", IDS_AERIUM_ONB_CAT_NEWTAB},
+      {"{{CAT_SYNC}}", IDS_AERIUM_ONB_CAT_SYNC},
+      {"{{CONTINUE}}", IDS_AERIUM_ONB_CONTINUE},
+      {"{{DARK}}", IDS_AERIUM_ONB_DARK},
+      {"{{DNS_AUTO}}", IDS_AERIUM_ONB_DNS_AUTO},
+      {"{{DNS_AUTO_TAG}}", IDS_AERIUM_ONB_DNS_AUTO_TAG},
+      {"{{DNS_CUSTOM}}", IDS_AERIUM_ONB_DNS_CUSTOM},
+      {"{{DNS_CUSTOM_INVALID}}", IDS_AERIUM_ONB_DNS_CUSTOM_INVALID},
+      {"{{DNS_CUSTOM_TAG}}", IDS_AERIUM_ONB_DNS_CUSTOM_TAG},
+      {"{{DNS_SUB}}", IDS_AERIUM_ONB_DNS_SUB},
+      {"{{DNS_TITLE}}", IDS_AERIUM_ONB_DNS_TITLE},
+      {"{{EXTENSIONS}}", IDS_AERIUM_ONB_EXTENSIONS},
+      {"{{EXT_ADGUARD}}", IDS_AERIUM_ONB_EXT_ADGUARD},
+      {"{{EXT_CONSENT}}", IDS_AERIUM_ONB_EXT_CONSENT},
+      {"{{EXT_DECENTRALEYES}}", IDS_AERIUM_ONB_EXT_DECENTRALEYES},
+      {"{{EXT_FLOCCUS}}", IDS_AERIUM_ONB_EXT_FLOCCUS},
+      {"{{EXT_SPONSORBLOCK}}", IDS_AERIUM_ONB_EXT_SPONSORBLOCK},
+      {"{{EXT_SUB}}", IDS_AERIUM_ONB_EXT_SUB},
+      {"{{EXT_TABLISS}}", IDS_AERIUM_ONB_EXT_TABLISS},
+      {"{{EXT_TITLE}}", IDS_AERIUM_ONB_EXT_TITLE},
+      {"{{EXT_UBO}}", IDS_AERIUM_ONB_EXT_UBO},
+      {"{{EXT_UBOL}}", IDS_AERIUM_ONB_EXT_UBOL},
+      {"{{GUARD_SUB}}", IDS_AERIUM_ONB_GUARD_SUB},
+      {"{{GUARD_TITLE}}", IDS_AERIUM_ONB_GUARD_TITLE},
+      {"{{LIGHT}}", IDS_AERIUM_ONB_LIGHT},
+      {"{{LOOK_TITLE}}", IDS_AERIUM_ONB_LOOK_TITLE},
+      {"{{MAKE_DEFAULT}}", IDS_AERIUM_ONB_MAKE_DEFAULT},
+      {"{{MODE_PERFORMANCE}}", IDS_AERIUM_ONB_MODE_PERFORMANCE},
+      {"{{MODE_PERFORMANCE_SUB}}", IDS_AERIUM_ONB_MODE_PERFORMANCE_SUB},
+      {"{{MODE_PRIVACY}}", IDS_AERIUM_ONB_MODE_PRIVACY},
+      {"{{MODE_PRIVACY_SUB}}", IDS_AERIUM_ONB_MODE_PRIVACY_SUB},
+      {"{{MODE_RECOMMENDED}}", IDS_AERIUM_ONB_MODE_RECOMMENDED},
+      {"{{MODE_RECOMMENDED_SUB}}", IDS_AERIUM_ONB_MODE_RECOMMENDED_SUB},
+      {"{{MODE_SECURITY}}", IDS_AERIUM_ONB_MODE_SECURITY},
+      {"{{MODE_SECURITY_SUB}}", IDS_AERIUM_ONB_MODE_SECURITY_SUB},
+      {"{{PICK_ONE}}", IDS_AERIUM_ONB_PICK_ONE},
+      {"{{READY_TITLE}}", IDS_AERIUM_ONB_READY_TITLE},
+      {"{{RESTORE}}", IDS_AERIUM_ONB_RESTORE},
+      {"{{SEARCH}}", IDS_AERIUM_ONB_SEARCH},
+      {"{{SKIP}}", IDS_AERIUM_ONB_SKIP},
+      {"{{START}}", IDS_AERIUM_ONB_START},
+      {"{{START_BROWSING}}", IDS_AERIUM_ONB_START_BROWSING},
+      {"{{TAGLINE}}", IDS_AERIUM_ONB_TAGLINE},
+      {"{{THEME}}", IDS_AERIUM_ONB_THEME},
+      {"{{TOP}}", IDS_AERIUM_ONB_TOP},
+      {"{{UPDATES}}", IDS_AERIUM_ONB_UPDATES},
+      {"{{UPDATES_DAILY}}", IDS_AERIUM_ONB_UPDATES_DAILY},
   };
   for (const auto& [token, id] : kStrings) {
     base::ReplaceSubstringsAfterOffset(
         &html, 0, token, base::EscapeForHTML(l10n_util::GetStringUTF8(id)));
   }
+
+  const std::pair<const char*, int> kScriptStrings[] = {
+      {"step", IDS_AERIUM_ONB_STEP},
+      {"install", IDS_AERIUM_ONB_INSTALL},
+      {"cont", IDS_AERIUM_ONB_CONTINUE},
+      {"installing", IDS_AERIUM_ONB_INSTALLING},
+      {"installed", IDS_AERIUM_ONB_INSTALLED},
+      {"someFailed", IDS_AERIUM_ONB_SOME_FAILED},
+      {"none", IDS_AERIUM_ONB_NONE},
+      {"auto", IDS_AERIUM_ONB_AUTO},
+      {"dnsMalware", IDS_AERIUM_ONB_DNS_MALWARE},
+      {"dnsNoLogs", IDS_AERIUM_ONB_DNS_NO_LOGS},
+      {"dnsAds", IDS_AERIUM_ONB_DNS_ADS},
+      {"dnsFilters", IDS_AERIUM_ONB_DNS_FILTERS},
+      {"dnsFamily", IDS_AERIUM_ONB_DNS_FAMILY},
+  };
+  base::DictValue strings;
+  for (const auto& [key, id] : kScriptStrings) {
+    strings.Set(key, l10n_util::GetStringUTF8(id));
+  }
+
+  base::ListValue dns;
+  for (const auto& entry : chrome_browser_net::secure_dns::SelectEnabledProviders(
+           chrome_browser_net::secure_dns::ProvidersForCountry(
+               net::DohProviderEntry::GetList(),
+               country_codes::GetCurrentCountryID()))) {
+    net::DnsOverHttpsConfig config({entry->doh_server_config});
+    base::DictValue item;
+    item.Set("id", std::string(entry->provider));
+    item.Set("name", std::string(entry->ui_name));
+    item.Set("template", config.ToString());
+    dns.Append(std::move(item));
+  }
+
+  std::string guard;
+  std::string search;
+  if (profile_) {
+    guard = profile_->GetPrefs()->GetString(
+        browsing_data::prefs::kAeriumGuardActivePreset);
+    TemplateURLService* service =
+        TemplateURLServiceFactory::GetForProfile(profile_);
+    const TemplateURL* engine =
+        service ? service->GetDefaultSearchProvider() : nullptr;
+    if (engine) {
+      search = base::UTF16ToUTF8(engine->short_name());
+    }
+  }
+
+  base::DictValue data;
+  data.Set("strings", std::move(strings));
+  data.Set("dns", std::move(dns));
+  data.Set("guard", guard);
+  data.Set("search", search);
+  std::string json = base::WriteJson(data).value_or("{}");
+  base::ReplaceSubstringsAfterOffset(&json, 0, "<", "\\u003C");
+  base::ReplaceSubstringsAfterOffset(&html, 0, "{{DATA}}", json);
+
+  base::ReplaceSubstringsAfterOffset(
+      &html, 0, "{{TITLE}}",
+      base::EscapeForHTML(l10n_util::GetStringUTF8(IDS_AERIUM_FIRST_RUN_TITLE)));
   base::ReplaceSubstringsAfterOffset(
       &html, 0, "{{LANG}}",
       base::EscapeForHTML(g_browser_process->GetApplicationLocale()));
@@ -547,16 +967,417 @@ class AeriumFirstRunUIConfig
       : DefaultWebUIConfig("chrome", "aerium-first-run") {}
 };
 
-class AeriumFirstRun : public content::WebUIController {
+class AeriumFirstRun : public content::WebUIController,
+                       public extensions::ExtensionRegistryObserver {
  public:
-  explicit AeriumFirstRun(content::WebUI* web_ui)
-      : content::WebUIController(web_ui) {
-    content::URLDataSource::Add(Profile::FromWebUI(web_ui),
-                                std::make_unique<AeriumFirstRunDataSource>());
-  }
+  explicit AeriumFirstRun(content::WebUI* web_ui);
   AeriumFirstRun(const AeriumFirstRun&) = delete;
   AeriumFirstRun& operator=(const AeriumFirstRun&) = delete;
+  ~AeriumFirstRun() override = default;
+
+  void OnExtensionInstalled(content::BrowserContext* browser_context,
+                            const extensions::Extension* extension,
+                            bool is_update) override;
+
+ private:
+  struct Item {
+    std::string id;
+    std::string source;
+    bool aerogel = false;
+  };
+
+  Profile* profile() { return Profile::FromWebUI(web_ui()); }
+  void HandleApply(const base::ListValue& args);
+  void HandleFinish(const base::ListValue& args);
+  void HandleRestore(const base::ListValue& args);
+  void HandleDefault(const base::ListValue& args);
+  void Next();
+  void StartStore(const std::string& id);
+  void StartGithub(const std::string& repo);
+  void OnCrxDownloaded(base::FilePath path);
+  void OnCrxInstalled(const std::optional<extensions::CrxInstallError>& error);
+  void OnReleaseFetched(std::optional<std::string> body);
+  void OnZipDownloaded(base::FilePath path);
+  void OnZipUnpacked(extensions::ZipFileInstaller::DoneCallback register_cb,
+                     const base::FilePath& zip_file,
+                     const base::FilePath& unzip_dir,
+                     const std::string& error);
+  void OnUnpackedTimeout();
+  void AllowInAerogel(const std::string& id);
+  void ItemDone(bool ok);
+  void Progress(bool finished);
+  network::mojom::URLLoaderFactory* Factory();
+  std::unique_ptr<network::SimpleURLLoader> MakeLoader(const GURL& url,
+                                                       bool json);
+
+  std::vector<Item> queue_;
+  size_t index_ = 0;
+  size_t failed_ = 0;
+  bool started_ = false;
+  bool waiting_unpacked_ = false;
+  std::unique_ptr<network::SimpleURLLoader> loader_;
+  base::OneShotTimer unpacked_timeout_;
+  base::ScopedObservation<extensions::ExtensionRegistry,
+                          extensions::ExtensionRegistryObserver>
+      registry_observation_{this};
+  base::WeakPtrFactory<AeriumFirstRun> weak_factory_{this};
 };
+
+inline AeriumFirstRun::AeriumFirstRun(content::WebUI* web_ui)
+    : content::WebUIController(web_ui) {
+  Profile* profile = Profile::FromWebUI(web_ui);
+  content::URLDataSource::Add(
+      profile, std::make_unique<AeriumFirstRunDataSource>(profile));
+  web_ui->RegisterMessageCallback(
+      "aeriumOnboardingApply",
+      base::BindRepeating(&AeriumFirstRun::HandleApply,
+                          base::Unretained(this)));
+  web_ui->RegisterMessageCallback(
+      "aeriumOnboardingFinish",
+      base::BindRepeating(&AeriumFirstRun::HandleFinish,
+                          base::Unretained(this)));
+  web_ui->RegisterMessageCallback(
+      "aeriumOnboardingRestore",
+      base::BindRepeating(&AeriumFirstRun::HandleRestore,
+                          base::Unretained(this)));
+  web_ui->RegisterMessageCallback(
+      "aeriumOnboardingDefault",
+      base::BindRepeating(&AeriumFirstRun::HandleDefault,
+                          base::Unretained(this)));
+}
+
+inline network::mojom::URLLoaderFactory* AeriumFirstRun::Factory() {
+  return profile()
+      ->GetDefaultStoragePartition()
+      ->GetURLLoaderFactoryForBrowserProcess()
+      .get();
+}
+
+inline std::unique_ptr<network::SimpleURLLoader> AeriumFirstRun::MakeLoader(
+    const GURL& url,
+    bool json) {
+  constexpr net::NetworkTrafficAnnotationTag kAnnotation =
+      net::DefineNetworkTrafficAnnotation("aerium_onboarding_extensions", R"(
+        semantics {
+          sender: "Aerium onboarding"
+          description:
+            "Downloads the extensions the user picked on the first-run page, "
+            "from the Chrome Web Store update server or from the extension's "
+            "own GitHub releases."
+          trigger:
+            "The user picks one or more extensions on the first-run page and "
+            "taps Install."
+          data: "The extension ID or repository name. No user data."
+          destination: OTHER
+        }
+        policy {
+          cookies_allowed: NO
+          setting: "Only runs when the user asks for it on the first-run page."
+          policy_exception_justification: "Not implemented."
+        })");
+  auto request = std::make_unique<network::ResourceRequest>();
+  request->url = url;
+  request->method = "GET";
+  request->credentials_mode = network::mojom::CredentialsMode::kOmit;
+  request->load_flags = net::LOAD_DISABLE_CACHE | net::LOAD_BYPASS_CACHE;
+  if (json) {
+    request->headers.SetHeader(net::HttpRequestHeaders::kAccept,
+                               "application/vnd.github+json");
+  }
+  request->headers.SetHeader(net::HttpRequestHeaders::kUserAgent, "Aerium");
+  std::unique_ptr<network::SimpleURLLoader> loader =
+      network::SimpleURLLoader::Create(std::move(request), kAnnotation);
+  loader->SetRetryOptions(2,
+                          network::SimpleURLLoader::RETRY_ON_NETWORK_CHANGE |
+                              network::SimpleURLLoader::RETRY_ON_5XX);
+  return loader;
+}
+
+inline void AeriumFirstRun::HandleApply(const base::ListValue& args) {
+  if (started_ || args.empty() || !args[0].is_string()) {
+    return;
+  }
+  std::optional<base::Value> parsed =
+      base::JSONReader::Read(args[0].GetString(), base::JSON_PARSE_RFC);
+  if (!parsed || !parsed->is_dict()) {
+    return;
+  }
+  started_ = true;
+  const base::DictValue& dict = parsed->GetDict();
+
+  if (const std::string* guard = dict.FindString("guard")) {
+    if (*guard == "recommended" || *guard == "privacy" ||
+        *guard == "performance" || *guard == "security") {
+      profile()->GetPrefs()->SetString(
+          browsing_data::prefs::kAeriumGuardRequestedPreset, *guard);
+    }
+  }
+
+  if (const base::DictValue* dns = dict.FindDict("dns")) {
+    const std::string* mode = dns->FindString("mode");
+    const std::string* templates = dns->FindString("template");
+    PrefService* local_state = g_browser_process->local_state();
+    if (mode && *mode == SecureDnsConfig::kModeAutomatic) {
+      local_state->SetString(prefs::kDnsOverHttpsMode,
+                             SecureDnsConfig::kModeAutomatic);
+      local_state->ClearPref(prefs::kDnsOverHttpsTemplates);
+    } else if (mode && *mode == SecureDnsConfig::kModeSecure && templates &&
+               net::DnsOverHttpsConfig::FromString(*templates).has_value()) {
+      local_state->SetString(prefs::kDnsOverHttpsTemplates, *templates);
+      local_state->SetString(prefs::kDnsOverHttpsMode,
+                             SecureDnsConfig::kModeSecure);
+    }
+  }
+
+  if (const base::ListValue* extensions = dict.FindList("extensions")) {
+    for (const base::Value& value : *extensions) {
+      if (!value.is_dict()) {
+        continue;
+      }
+      const base::DictValue& entry = value.GetDict();
+      const std::string* id = entry.FindString("id");
+      const std::string* source = entry.FindString("source");
+      if (!id || !source) {
+        continue;
+      }
+      if (*source == "cws" && crx_file::id_util::IdIsValid(*id)) {
+        queue_.push_back({*id, *source, entry.FindBool("aerogel").value_or(false)});
+      } else if (*source == "github" && *id == "gorhill/uBlock") {
+        queue_.push_back({*id, *source, entry.FindBool("aerogel").value_or(false)});
+      }
+    }
+  }
+
+  registry_observation_.Observe(extensions::ExtensionRegistry::Get(profile()));
+  Next();
+}
+
+inline void AeriumFirstRun::Next() {
+  if (index_ >= queue_.size()) {
+    Progress(true);
+    return;
+  }
+  Progress(false);
+  const Item& item = queue_[index_];
+  if (item.source == "cws") {
+    StartStore(item.id);
+  } else {
+    StartGithub(item.id);
+  }
+}
+
+inline void AeriumFirstRun::StartStore(const std::string& id) {
+  const GURL url(
+      "https://clients2.google.com/service/update2/crx?response=redirect"
+      "&prodversion=" +
+      std::string(version_info::GetVersionNumber()) +
+      "&acceptformat=crx3&x=id%3D" + id + "%26uc");
+  loader_ = MakeLoader(url, false);
+  loader_->DownloadToFile(
+      Factory(),
+      base::BindOnce(&AeriumFirstRun::OnCrxDownloaded,
+                     weak_factory_.GetWeakPtr()),
+      profile()->GetPath().AppendASCII("aerium-onboarding.crx"),
+      64 * 1024 * 1024);
+}
+
+inline void AeriumFirstRun::OnCrxDownloaded(base::FilePath path) {
+  loader_.reset();
+  content::WebContents* contents = web_ui()->GetWebContents();
+  if (path.empty() || !contents) {
+    ItemDone(false);
+    return;
+  }
+  scoped_refptr<extensions::CrxInstaller> installer =
+      extensions::CrxInstaller::Create(
+          profile(),
+          std::make_unique<ExtensionInstallPrompt>(
+              contents,
+              std::make_unique<extensions::InstallPromptData>(
+                  extensions::InstallPromptData::UNSET_PROMPT_TYPE)));
+  installer->set_expected_id(queue_[index_].id);
+  installer->set_delete_source(true);
+  installer->set_error_on_unsupported_requirements(true);
+  installer->AddInstallerCallback(base::BindOnce(
+      &AeriumFirstRun::OnCrxInstalled, weak_factory_.GetWeakPtr()));
+  installer->InstallCrx(path);
+}
+
+inline void AeriumFirstRun::OnCrxInstalled(
+    const std::optional<extensions::CrxInstallError>& error) {
+  if (!error && queue_[index_].aerogel) {
+    AllowInAerogel(queue_[index_].id);
+  }
+  ItemDone(!error);
+}
+
+inline void AeriumFirstRun::StartGithub(const std::string& repo) {
+  loader_ = MakeLoader(
+      GURL("https://api.github.com/repos/" + repo + "/releases/latest"), true);
+  loader_->DownloadToString(
+      Factory(),
+      base::BindOnce(&AeriumFirstRun::OnReleaseFetched,
+                     weak_factory_.GetWeakPtr()),
+      1024 * 1024);
+}
+
+inline void AeriumFirstRun::OnReleaseFetched(std::optional<std::string> body) {
+  loader_.reset();
+  std::optional<base::Value> parsed;
+  if (body) {
+    parsed = base::JSONReader::Read(*body, base::JSON_PARSE_RFC);
+  }
+  std::string asset;
+  if (parsed && parsed->is_dict()) {
+    if (const base::ListValue* assets = parsed->GetDict().FindList("assets")) {
+      for (const base::Value& value : *assets) {
+        if (!value.is_dict()) {
+          continue;
+        }
+        const std::string* name = value.GetDict().FindString("name");
+        const std::string* link =
+            value.GetDict().FindString("browser_download_url");
+        if (name && link && base::EndsWith(*name, ".chromium.zip") &&
+            base::StartsWith(*link, "https://github.com/")) {
+          asset = *link;
+          break;
+        }
+      }
+    }
+  }
+  if (asset.empty()) {
+    ItemDone(false);
+    return;
+  }
+  loader_ = MakeLoader(GURL(asset), false);
+  loader_->DownloadToFile(
+      Factory(),
+      base::BindOnce(&AeriumFirstRun::OnZipDownloaded,
+                     weak_factory_.GetWeakPtr()),
+      profile()->GetPath().AppendASCII("aerium-onboarding.zip"),
+      64 * 1024 * 1024);
+}
+
+inline void AeriumFirstRun::OnZipDownloaded(base::FilePath path) {
+  loader_.reset();
+  if (path.empty()) {
+    ItemDone(false);
+    return;
+  }
+  waiting_unpacked_ = true;
+  unpacked_timeout_.Start(FROM_HERE, base::Seconds(90),
+                          base::BindOnce(&AeriumFirstRun::OnUnpackedTimeout,
+                                         weak_factory_.GetWeakPtr()));
+  extensions::ZipFileInstaller::Create(
+      extensions::GetExtensionFileTaskRunner(),
+      base::BindOnce(&AeriumFirstRun::OnZipUnpacked,
+                     weak_factory_.GetWeakPtr(),
+                     extensions::MakeRegisterInExtensionServiceCallback(
+                         profile())))
+      ->InstallZipFileToUnpackedExtensionsDir(
+          path, extensions::ExtensionRegistrar::Get(profile())
+                    ->unpacked_install_directory());
+}
+
+inline void AeriumFirstRun::OnZipUnpacked(
+    extensions::ZipFileInstaller::DoneCallback register_cb,
+    const base::FilePath& zip_file,
+    const base::FilePath& unzip_dir,
+    const std::string& error) {
+  base::ThreadPool::PostTask(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
+      base::GetDeleteFileCallback(zip_file));
+  if (!error.empty()) {
+    if (waiting_unpacked_) {
+      waiting_unpacked_ = false;
+      unpacked_timeout_.Stop();
+      ItemDone(false);
+    }
+    return;
+  }
+  std::move(register_cb).Run(zip_file, unzip_dir, error);
+}
+
+inline void AeriumFirstRun::OnExtensionInstalled(
+    content::BrowserContext* browser_context,
+    const extensions::Extension* extension,
+    bool is_update) {
+  if (!waiting_unpacked_ || index_ >= queue_.size() ||
+      extension->location() != extensions::mojom::ManifestLocation::kUnpacked) {
+    return;
+  }
+  waiting_unpacked_ = false;
+  unpacked_timeout_.Stop();
+  if (queue_[index_].aerogel) {
+    AllowInAerogel(extension->id());
+  }
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(&AeriumFirstRun::ItemDone,
+                                weak_factory_.GetWeakPtr(), true));
+}
+
+inline void AeriumFirstRun::OnUnpackedTimeout() {
+  if (!waiting_unpacked_) {
+    return;
+  }
+  waiting_unpacked_ = false;
+  ItemDone(false);
+}
+
+inline void AeriumFirstRun::AllowInAerogel(const std::string& id) {
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          [](base::WeakPtr<Profile> profile, std::string id) {
+            if (profile) {
+              extensions::util::SetIsIncognitoEnabled(id, profile.get(), true);
+            }
+          },
+          profile()->GetWeakPtr(), id));
+}
+
+inline void AeriumFirstRun::ItemDone(bool ok) {
+  if (!ok) {
+    ++failed_;
+  }
+  ++index_;
+  Next();
+}
+
+inline void AeriumFirstRun::Progress(bool finished) {
+  web_ui()->CallJavascriptFunctionUnsafe(
+      "aeriumOnboardingProgress", base::Value(static_cast<int>(index_)),
+      base::Value(static_cast<int>(failed_)), base::Value(finished));
+}
+
+inline void AeriumFirstRun::HandleFinish(const base::ListValue& args) {
+  std::string theme;
+  std::string top;
+  if (!args.empty() && args[0].is_string()) {
+    std::optional<base::Value> parsed =
+        base::JSONReader::Read(args[0].GetString(), base::JSON_PARSE_RFC);
+    if (parsed && parsed->is_dict()) {
+      const std::string* value = parsed->GetDict().FindString("theme");
+      if (value && (*value == "light" || *value == "dark" ||
+                    *value == "black")) {
+        theme = *value;
+      }
+      std::optional<bool> on_top = parsed->GetDict().FindBool("top");
+      if (on_top.has_value()) {
+        top = *on_top ? "1" : "0";
+      }
+    }
+  }
+  AeriumOnboardingRequest("finish;theme=" + theme + ";top=" + top);
+}
+
+inline void AeriumFirstRun::HandleRestore(const base::ListValue& args) {
+  AeriumOnboardingRequest("restore");
+}
+
+inline void AeriumFirstRun::HandleDefault(const base::ListValue& args) {
+  AeriumOnboardingRequest("default");
+}
 
 #endif  // CHROME_BROWSER_UI_WEBUI_AERIUM_FIRST_RUN_H_
 AERIUM_FIRST_RUN_H
@@ -586,6 +1407,148 @@ sed_i 's|^                ADAPTIVE_TOOLBAR_CUSTOMIZATION_ENABLED,$|             
 # it greeting on every launch.
 sed_i 's|        getTabCreator(incognito).launchUrl(url, TabLaunchType.FROM_STARTUP);|        // Aerium: greet once, on the first launch after install.\n        if (!incognito\n                \&\& !ChromeSharedPreferences.getInstance()\n                        .readBoolean(\n                                ChromePreferenceKeys.AERIUM_FIRST_RUN_PAGE_SHOWN, false)) {\n            ChromeSharedPreferences.getInstance()\n                    .writeBoolean(ChromePreferenceKeys.AERIUM_FIRST_RUN_PAGE_SHOWN, true);\n            url = "chrome://aerium-first-run/";\n        }\n&|' \
     chrome/android/java/src/org/chromium/chrome/browser/ChromeTabbedActivity.java
+
+sed_i 's|    public static final String FIRST_RUN_FLOW_COMPLETE = "first_run_flow";|    public static final String AERIUM_ONBOARDING_REQUEST =\n            "Chrome.Aerium.OnboardingRequest";\n\n&|' \
+    $CPK
+sed_i 's|^                ADAPTIVE_TOOLBAR_CUSTOMIZATION_ENABLED,$|                AERIUM_ONBOARDING_REQUEST,\n&|' \
+    $CPK
+
+cat > chrome/android/java/src/org/chromium/chrome/browser/AeriumOnboardingRequests.java <<'AERIUM_ONBOARDING_JAVA'
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+package org.chromium.chrome.browser;
+
+import android.app.role.RoleManager;
+import android.content.ActivityNotFoundException;
+import android.content.Intent;
+import android.content.SharedPreferences;
+import android.provider.Settings;
+
+import org.chromium.base.ContextUtils;
+import org.chromium.base.IntentUtils;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
+import org.chromium.chrome.browser.night_mode.GlobalNightModeStateProviderHolder;
+import org.chromium.chrome.browser.night_mode.ThemeType;
+import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
+import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
+import org.chromium.chrome.browser.settings.AeriumBackupFragment;
+import org.chromium.chrome.browser.settings.SettingsNavigationFactory;
+import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.content_public.browser.LoadUrlParams;
+import org.chromium.ui.base.PageTransition;
+
+import java.lang.ref.WeakReference;
+
+@NullMarked
+public final class AeriumOnboardingRequests {
+    private static final int REQUEST_DEFAULT_BROWSER = 0x4145;
+    private static final String FIRST_RUN_URL = "chrome://aerium-first-run/";
+    private static final String NEW_TAB_URL = "chrome-native://newtab/";
+
+    private static SharedPreferences.@Nullable OnSharedPreferenceChangeListener sListener;
+    private static WeakReference<ChromeTabbedActivity> sActivity = new WeakReference<>(null);
+
+    private AeriumOnboardingRequests() {}
+
+    static void attach(ChromeTabbedActivity activity) {
+        sActivity = new WeakReference<>(activity);
+        if (sListener != null) return;
+        SharedPreferences prefs = ContextUtils.getAppSharedPreferences();
+        prefs.edit().remove(ChromePreferenceKeys.AERIUM_ONBOARDING_REQUEST).apply();
+        sListener =
+                (sharedPrefs, key) -> {
+                    if (ChromePreferenceKeys.AERIUM_ONBOARDING_REQUEST.equals(key)) handle();
+                };
+        prefs.registerOnSharedPreferenceChangeListener(sListener);
+    }
+
+    private static void handle() {
+        SharedPreferences prefs = ContextUtils.getAppSharedPreferences();
+        String request = prefs.getString(ChromePreferenceKeys.AERIUM_ONBOARDING_REQUEST, "");
+        if (request == null || request.isEmpty()) return;
+        ChromeTabbedActivity activity = sActivity.get();
+        if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
+        prefs.edit().remove(ChromePreferenceKeys.AERIUM_ONBOARDING_REQUEST).apply();
+        String[] parts = request.split(";", -1);
+        switch (parts[0]) {
+            case "restore":
+                SettingsNavigationFactory.createSettingsNavigation()
+                        .startSettings(activity, AeriumBackupFragment.class);
+                break;
+            case "default":
+                askToBeDefault(activity);
+                break;
+            case "finish":
+                finish(activity, parts);
+                break;
+            default:
+                break;
+        }
+    }
+
+    private static void askToBeDefault(ChromeTabbedActivity activity) {
+        RoleManager roleManager = activity.getSystemService(RoleManager.class);
+        if (roleManager != null
+                && roleManager.isRoleAvailable(RoleManager.ROLE_BROWSER)
+                && !roleManager.isRoleHeld(RoleManager.ROLE_BROWSER)) {
+            try {
+                activity.startActivityForResult(
+                        roleManager.createRequestRoleIntent(RoleManager.ROLE_BROWSER),
+                        REQUEST_DEFAULT_BROWSER);
+                return;
+            } catch (ActivityNotFoundException e) {
+                IntentUtils.safeStartActivity(
+                        activity, new Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS));
+                return;
+            }
+        }
+        IntentUtils.safeStartActivity(
+                activity, new Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS));
+    }
+
+    private static void finish(ChromeTabbedActivity activity, String[] parts) {
+        String theme = "";
+        String top = "";
+        for (String part : parts) {
+            if (part.startsWith("theme=")) theme = part.substring(6);
+            if (part.startsWith("top=")) top = part.substring(4);
+        }
+        var sharedPrefs = ChromeSharedPreferences.getInstance();
+        boolean recreate = false;
+        if (theme.equals("light") || theme.equals("dark") || theme.equals("black")) {
+            boolean black = theme.equals("black");
+            int type = theme.equals("light") ? ThemeType.LIGHT : ThemeType.DARK;
+            boolean nightBefore = GlobalNightModeStateProviderHolder.getInstance().isInNightMode();
+            boolean blackBefore =
+                    sharedPrefs.readBoolean(ChromePreferenceKeys.AERIUM_PURE_BLACK, true);
+            sharedPrefs.writeBoolean(ChromePreferenceKeys.AERIUM_PURE_BLACK, black);
+            sharedPrefs.writeInt(ChromePreferenceKeys.UI_THEME_SETTING, type);
+            boolean nightAfter = GlobalNightModeStateProviderHolder.getInstance().isInNightMode();
+            recreate = nightBefore == nightAfter && nightAfter && blackBefore != black;
+        }
+        if (top.equals("0") || top.equals("1")) {
+            sharedPrefs.writeBoolean(ChromePreferenceKeys.TOOLBAR_TOP_ANCHORED, top.equals("1"));
+        }
+        Tab tab = activity.getActivityTab();
+        if (tab != null && tab.getUrl().getSpec().startsWith(FIRST_RUN_URL)) {
+            LoadUrlParams params = new LoadUrlParams(NEW_TAB_URL, PageTransition.AUTO_TOPLEVEL);
+            params.setShouldReplaceCurrentEntry(true);
+            tab.loadUrl(params);
+        }
+        if (recreate) activity.recreate();
+    }
+}
+AERIUM_ONBOARDING_JAVA
+
+sed_i 's|^  "java/src/org/chromium/chrome/browser/browsing_data/BrowsingDataCounterBridge.java",$|  "java/src/org/chromium/chrome/browser/AeriumOnboardingRequests.java",\n&|' \
+    chrome/android/chrome_java_sources.gni
+sed_i 's|^            new NavigationPredictorBridge(profile, getLifecycleDispatcher(), this::isWarmOnResume);$|&\n            AeriumOnboardingRequests.attach(this);|' \
+    chrome/android/java/src/org/chromium/chrome/browser/ChromeTabbedActivity.java
+
+echo "[aerium] onboarding page applied"
 
 # --- Let the system autofill service win even when it is Google's.
 #
@@ -9288,257 +10251,204 @@ sed_i 's|      <message name="IDS_AERIUM_BACKUP_TITLE" desc=|      <message name
 
 echo "[aerium] app links switch applied"
 
-AERIUM_UBO_CRX=chrome/browser/resources/aerium/ublock_origin_lite.crx
-mkdir -p "$(dirname $AERIUM_UBO_CRX)"
-AERIUM_UBO_ID=ddkjiahejlhfcafbddmgiahcphecmpfh
-AERIUM_CWS_URL="https://clients2.google.com/service/update2/crx?response=redirect&prodversion=${VERSION}&acceptformat=crx2,crx3&x=id%3D${AERIUM_UBO_ID}%26uc"
-if ! curl -sSfL --retry 4 --retry-delay 5 -o "$AERIUM_UBO_CRX" "$AERIUM_CWS_URL" \
-   || [ "$(head -c4 "$AERIUM_UBO_CRX")" != "Cr24" ]; then
-    echo "[aerium] FATAL: could not fetch the uBlock Origin Lite .crx to preinstall" >&2
-    return 1
-fi
-python3 - "$AERIUM_UBO_CRX" <<'PYEOF' || echo "[aerium] WARNING: could not read the bundled uBlock Origin Lite manifest"
-import json, sys, zipfile
-manifest = json.loads(zipfile.ZipFile(sys.argv[1]).read('manifest.json').decode('utf-8-sig'))
-update_url = manifest.get('update_url', '')
-if update_url.startswith('https://'):
-    print('[aerium] uBlock Origin Lite %s updates itself from %s' % (manifest.get('version'), update_url))
-else:
-    print('[aerium] WARNING: the bundled uBlock Origin Lite has no update_url and will never update itself')
-PYEOF
-
-sed_i 's|^      <include name="IDR_NETWORK_SPEECH_SYNTHESIS_JS" file="network_speech_synthesis/tts_extension.js" type="BINDATA" />$|      <include name="IDR_AERIUM_UBLOCK_ORIGIN_LITE_CRX" file="aerium/ublock_origin_lite.crx" type="BINDATA" />\n&|' \
-    chrome/browser/resources/component_extension_resources.grd
-
-cat > chrome/browser/extensions/aerium_preinstall.h <<'AERIUM_PREINSTALL_H'
-// Copyright 2026 The Aerium Authors
-
-#ifndef CHROME_BROWSER_EXTENSIONS_AERIUM_PREINSTALL_H_
-#define CHROME_BROWSER_EXTENSIONS_AERIUM_PREINSTALL_H_
-
-#include <optional>
-#include <string>
-#include <utility>
-
-#include "base/files/file_path.h"
-#include "base/files/file_util.h"
-#include "base/functional/bind.h"
-#include "base/location.h"
-#include "base/memory/scoped_refptr.h"
-#include "base/memory/weak_ptr.h"
-#include "base/task/thread_pool.h"
-#include "chrome/grit/component_extension_resources.h"
-#include "content/public/browser/browser_context.h"
-#include "extensions/browser/crx_installer.h"
-#include "extensions/browser/extension_registry.h"
-#include "extensions/browser/install/crx_install_error.h"
-#include "extensions/common/extension.h"
-#include "extensions/common/manifest.h"
-#include "ui/base/resource/resource_bundle.h"
-
-namespace extensions {
-
-inline constexpr char kAeriumPreinstallMarker[] = "Aerium Preinstalled Extensions";
-inline constexpr char kAeriumUblockOriginLiteCrx[] = "aerium-ublock-origin-lite.crx";
-
-inline void AeriumMarkPreinstalled(const base::FilePath& profile_dir) {
-  base::ThreadPool::PostTask(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
-      base::BindOnce(
-          [](const base::FilePath& marker) {
-            if (!base::WriteFile(marker, "")) {
-              return;
-            }
-          },
-          profile_dir.AppendASCII(kAeriumPreinstallMarker)));
-}
-
-inline void AeriumInstallUblockOriginLite(
-    base::WeakPtr<content::BrowserContext> context,
-    const base::FilePath& crx,
-    bool written) {
-  if (!context || !written) {
-    return;
-  }
-  scoped_refptr<CrxInstaller> installer =
-      CrxInstaller::CreateSilent(context.get());
-  installer->set_off_store_install_allow_reason(
-      CrxInstaller::OffStoreInstallAllowedFromSettingsPage);
-  installer->set_allow_silent_install(true);
-  installer->set_delete_source(true);
-  installer->AddInstallerCallback(base::BindOnce(
-      [](const base::FilePath& profile_dir,
-         const std::optional<CrxInstallError>& error) {
-        if (!error) {
-          AeriumMarkPreinstalled(profile_dir);
-        }
-      },
-      context->GetPath()));
-  installer->InstallCrx(crx);
-}
-
-inline void AeriumPreinstallIfUnmarked(
-    base::WeakPtr<content::BrowserContext> context,
-    const base::FilePath& profile_dir,
-    bool marked) {
-  if (!context || marked) {
-    return;
-  }
-  for (const auto& extension :
-       ExtensionRegistry::Get(context.get())->GenerateInstalledExtensionsSet()) {
-    if (extension->location() == mojom::ManifestLocation::kInternal ||
-        Manifest::IsUnpackedLocation(extension->location())) {
-      AeriumMarkPreinstalled(profile_dir);
-      return;
-    }
-  }
-  std::string crx_data =
-      ui::ResourceBundle::GetSharedInstance().LoadDataResourceString(
-          IDR_AERIUM_UBLOCK_ORIGIN_LITE_CRX);
-  if (crx_data.empty()) {
-    return;
-  }
-  const base::FilePath crx = profile_dir.AppendASCII(kAeriumUblockOriginLiteCrx);
-  base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
-      base::BindOnce(
-          [](const base::FilePath& path, const std::string& data) {
-            return base::WriteFile(path, data);
-          },
-          crx, std::move(crx_data)),
-      base::BindOnce(&AeriumInstallUblockOriginLite, context, crx));
-}
-
-inline void AeriumPreinstallUblockOriginLite(
-    base::WeakPtr<content::BrowserContext> context) {
-  if (!context || context->IsOffTheRecord()) {
-    return;
-  }
-  const base::FilePath profile_dir = context->GetPath();
-  base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
-      base::BindOnce(&base::PathExists,
-                     profile_dir.AppendASCII(kAeriumPreinstallMarker)),
-      base::BindOnce(&AeriumPreinstallIfUnmarked, context, profile_dir));
-}
-
-}  // namespace extensions
-
-#endif  // CHROME_BROWSER_EXTENSIONS_AERIUM_PREINSTALL_H_
-AERIUM_PREINSTALL_H
-
-sed_i 's|^#include "chrome/browser/extensions/component_loader.h"$|#include "chrome/browser/extensions/aerium_preinstall.h"\n&|' \
-    chrome/browser/extensions/chrome_extension_system.cc
-sed_i 's|^  extension_service_->Init();$|&\n\n  ready_.Post(FROM_HERE,\n              base::BindOnce(\&AeriumPreinstallUblockOriginLite,\n                             profile_->GetWeakPtr()));|' \
-    chrome/browser/extensions/chrome_extension_system.cc
-
-echo "[aerium] uBlock Origin Lite bundled for first-run preinstall"
-
 AERIUM_FIRST_RUN_MESSAGES=$(cat <<'AERIUM_FIRST_RUN_GRD'
       <message name="IDS_AERIUM_FIRST_RUN_TITLE" desc="Title of the first-run page and its heading.">
         Welcome to Aerium
       </message>
-      <message name="IDS_AERIUM_FIRST_RUN_TAGLINE" desc="Tagline under the first-run heading.">
+      <message name="IDS_AERIUM_ONB_TAGLINE" desc="Line under the Aerium name on the first screen of the first-run page.">
         The browser that stays out of the way.
       </message>
-      <message name="IDS_AERIUM_FIRST_RUN_EXTENSIONS" desc="Heading of the extensions section on the first-run page.">
-        Extensions, finally.
+      <message name="IDS_AERIUM_ONB_SKIP" desc="Button that skips the rest of the first-run setup, or one of its steps.">
+        Skip
       </message>
-      <message name="IDS_AERIUM_FIRST_RUN_UBLOCK" desc="Line under the uBlock Origin Lite row, which comes preinstalled.">
-        Already installed and blocking ads
+      <message name="IDS_AERIUM_ONB_START" desc="Main button on the first screen of the first-run page.">
+        Get started
       </message>
-      <message name="IDS_AERIUM_FIRST_RUN_MORE_EXTENSIONS" desc="Row title for installing more extensions.">
-        More extensions
+      <message name="IDS_AERIUM_ONB_RESTORE" desc="Button on the first screen that opens the backup restore screen.">
+        Restore a backup
       </message>
-      <message name="IDS_AERIUM_FIRST_RUN_MORE_EXTENSIONS_SUB" desc="Line under the row for installing more extensions.">
-        Install from the extension store as usual, Manifest V2 included
+      <message name="IDS_AERIUM_ONB_BACK" desc="Accessible label of the back arrow on each first-run step.">
+        Back
       </message>
-      <message name="IDS_AERIUM_FIRST_RUN_BROWSE" desc="Button that opens the extension store.">
-        Browse
+      <message name="IDS_AERIUM_ONB_STEP" desc="Accessible label of the step dots, for example Step 2 of 6.">
+        Step <ph name="CURRENT">$1<ex>2</ex></ph> of <ph name="TOTAL">$2<ex>6</ex></ph>
       </message>
-      <message name="IDS_AERIUM_FIRST_RUN_FROM_FILE" desc="Row title for installing an extension from a file on the phone.">
-        Install from a file
+      <message name="IDS_AERIUM_ONB_GUARD_TITLE" desc="Heading of the first-run step that picks an Aerium Guard mode.">
+        How private?
       </message>
-      <message name="IDS_AERIUM_FIRST_RUN_FROM_FILE_SUB" desc="Line under the install-from-file row.">
-        A .crx or .zip that is already on your phone
+      <message name="IDS_AERIUM_ONB_GUARD_SUB" desc="Line under that heading.">
+        Pick a mode. Change it anytime.
       </message>
-      <message name="IDS_AERIUM_FIRST_RUN_OPEN" desc="Button that opens the install-from-file page.">
-        Open
+      <message name="IDS_AERIUM_ONB_MODE_RECOMMENDED" desc="Name of the Recommended Aerium Guard mode.">
+        Recommended
       </message>
-      <message name="IDS_AERIUM_FIRST_RUN_PRIVATE" desc="Heading of the privacy section on the first-run page.">
-        Private by default.
+      <message name="IDS_AERIUM_ONB_MODE_RECOMMENDED_SUB" desc="Short description of the Recommended mode.">
+        Stops tracking, sites keep working
       </message>
-      <message name="IDS_AERIUM_FIRST_RUN_NO_TELEMETRY" desc="Row title saying the browser sends no telemetry.">
-        Nothing phones home
+      <message name="IDS_AERIUM_ONB_MODE_PRIVACY" desc="Name of the Privacy Aerium Guard mode, also the heading of the privacy extensions group.">
+        Privacy
       </message>
-      <message name="IDS_AERIUM_FIRST_RUN_NO_TELEMETRY_SUB" desc="Line under the no-telemetry row.">
-        No telemetry and no big tech services
+      <message name="IDS_AERIUM_ONB_MODE_PRIVACY_SUB" desc="Short description of the Privacy mode.">
+        Wipes your data when you close
       </message>
-      <message name="IDS_AERIUM_FIRST_RUN_GUARD_SUB" desc="Line under the Aerium Guard row.">
-        Privacy, security and speed options in one place, in Settings
+      <message name="IDS_AERIUM_ONB_MODE_PERFORMANCE" desc="Name of the Performance Aerium Guard mode.">
+        Performance
       </message>
-      <message name="IDS_AERIUM_FIRST_RUN_APP_LINKS" desc="Row title for the setting that decides whether links open in installed apps.">
-        Links on your terms
+      <message name="IDS_AERIUM_ONB_MODE_PERFORMANCE_SUB" desc="Short description of the Performance mode.">
+        Loads pages before you tap
       </message>
-      <message name="IDS_AERIUM_FIRST_RUN_APP_LINKS_SUB" desc="Line under the app links row, naming where the setting is.">
-        Choose whether links open in installed apps, in Settings › Privacy and security
+      <message name="IDS_AERIUM_ONB_MODE_SECURITY" desc="Name of the Security Aerium Guard mode.">
+        Security
       </message>
-      <message name="IDS_AERIUM_FIRST_RUN_EVERYDAY" desc="Heading of the everyday features section on the first-run page.">
-        Made for every day.
+      <message name="IDS_AERIUM_ONB_MODE_SECURITY_SUB" desc="Short description of the Security mode.">
+        Fewer ways in for attacks
       </message>
-      <message name="IDS_AERIUM_FIRST_RUN_DARK" desc="Row title for the true black dark mode.">
-        True black dark mode
+      <message name="IDS_AERIUM_ONB_CONTINUE" desc="Button that moves to the next first-run step.">
+        Continue
       </message>
-      <message name="IDS_AERIUM_FIRST_RUN_DARK_SUB" desc="Line under the dark mode row, naming where the setting is.">
-        Settings › Appearance › Theme
+      <message name="IDS_AERIUM_ONB_DNS_TITLE" desc="Heading of the first-run step that picks a DNS over HTTPS provider.">
+        Secure DNS
       </message>
-      <message name="IDS_AERIUM_FIRST_RUN_WEB_APPS" desc="Row title for installing websites as apps.">
-        Web apps
+      <message name="IDS_AERIUM_ONB_DNS_SUB" desc="Line under that heading.">
+        Your network won't see the sites you visit.
       </message>
-      <message name="IDS_AERIUM_FIRST_RUN_WEB_APPS_SUB" desc="Line under the web apps row.">
-        Install a site from the menu and it opens like an app
+      <message name="IDS_AERIUM_ONB_DNS_MALWARE" desc="Tag next to a DNS provider that blocks malicious domains.">
+        Blocks malware
       </message>
-      <message name="IDS_AERIUM_FIRST_RUN_PASSWORDS" desc="Row title for passwords.">
-        Passwords
+      <message name="IDS_AERIUM_ONB_DNS_NO_LOGS" desc="Tag next to a DNS provider that keeps no logs.">
+        No logs
       </message>
-      <message name="IDS_AERIUM_FIRST_RUN_PASSWORDS_SUB" desc="Line under the passwords row.">
-        Filled by your Android autofill app
+      <message name="IDS_AERIUM_ONB_DNS_ADS" desc="Tag next to a DNS provider that blocks ads.">
+        Blocks ads
       </message>
-      <message name="IDS_AERIUM_FIRST_RUN_BACKUP" desc="Row title for backup and restore.">
-        Backup and restore
+      <message name="IDS_AERIUM_ONB_DNS_FILTERS" desc="Tag next to a DNS provider whose filtering the user configures.">
+        Your own filters
       </message>
-      <message name="IDS_AERIUM_FIRST_RUN_BACKUP_SUB" desc="Line under the backup and restore row.">
-        Tabs, site permissions, settings and flags in one file
+      <message name="IDS_AERIUM_ONB_DNS_FAMILY" desc="Tag next to a DNS provider that filters adult content.">
+        Family filter
       </message>
-      <message name="IDS_AERIUM_FIRST_RUN_UPDATES" desc="Heading of the updates section on the first-run page.">
+      <message name="IDS_AERIUM_ONB_DNS_CUSTOM" desc="Choice that lets the user type their own DNS over HTTPS address.">
+        Custom
+      </message>
+      <message name="IDS_AERIUM_ONB_DNS_CUSTOM_TAG" desc="Tag next to the Custom DNS choice.">
+        Your address
+      </message>
+      <message name="IDS_AERIUM_ONB_DNS_CUSTOM_INVALID" desc="Error under the custom DNS address field when the address is not valid.">
+        That address doesn't look right.
+      </message>
+      <message name="IDS_AERIUM_ONB_DNS_AUTO" desc="Choice that keeps using the network's own DNS and upgrades it when possible.">
+        Automatic
+      </message>
+      <message name="IDS_AERIUM_ONB_DNS_AUTO_TAG" desc="Tag next to the Automatic DNS choice.">
+        Your network's
+      </message>
+      <message name="IDS_AERIUM_ONB_LOOK_TITLE" desc="Heading of the first-run step that picks the theme and address bar position.">
+        Your look
+      </message>
+      <message name="IDS_AERIUM_ONB_THEME" desc="Label of the theme choices.">
+        Theme
+      </message>
+      <message name="IDS_AERIUM_ONB_LIGHT" desc="Light theme choice.">
+        Light
+      </message>
+      <message name="IDS_AERIUM_ONB_DARK" desc="Dark grey theme choice.">
+        Dark
+      </message>
+      <message name="IDS_AERIUM_ONB_BLACK" desc="Pure black theme choice for OLED screens.">
+        Black
+      </message>
+      <message name="IDS_AERIUM_ONB_AUTO" desc="Shown on the summary when the theme follows the system.">
+        Auto
+      </message>
+      <message name="IDS_AERIUM_ONB_BAR" desc="Label of the address bar position choices.">
+        Address bar
+      </message>
+      <message name="IDS_AERIUM_ONB_TOP" desc="Address bar at the top of the screen.">
+        Top
+      </message>
+      <message name="IDS_AERIUM_ONB_BOTTOM" desc="Address bar at the bottom of the screen.">
+        Bottom
+      </message>
+      <message name="IDS_AERIUM_ONB_EXT_TITLE" desc="Heading of the first-run step that offers extensions.">
+        Add extensions
+      </message>
+      <message name="IDS_AERIUM_ONB_EXT_SUB" desc="Line under that heading.">
+        Open source, reviewed by the community.
+      </message>
+      <message name="IDS_AERIUM_ONB_CAT_ADS" desc="Heading of the ad blocker group.">
+        Ads and trackers
+      </message>
+      <message name="IDS_AERIUM_ONB_PICK_ONE" desc="Hint that only one ad blocker can be picked.">
+        Pick one
+      </message>
+      <message name="IDS_AERIUM_ONB_CAT_SYNC" desc="Heading of the bookmark sync extensions group.">
+        Bookmark sync
+      </message>
+      <message name="IDS_AERIUM_ONB_CAT_NEWTAB" desc="Heading of the new tab page extensions group.">
+        New tab page
+      </message>
+      <message name="IDS_AERIUM_ONB_EXT_UBOL" desc="Description of uBlock Origin Lite.">
+        Light, works right away
+      </message>
+      <message name="IDS_AERIUM_ONB_EXT_UBO" desc="Description of uBlock Origin.">
+        Full control, Manifest V2
+      </message>
+      <message name="IDS_AERIUM_ONB_EXT_ADGUARD" desc="Description of AdGuard.">
+        Easy filter lists
+      </message>
+      <message name="IDS_AERIUM_ONB_EXT_FLOCCUS" desc="Description of floccus, which syncs bookmarks through a server or cloud the user picks.">
+        Your own server or cloud
+      </message>
+      <message name="IDS_AERIUM_ONB_EXT_DECENTRALEYES" desc="Description of Decentraleyes.">
+        Loads common files locally
+      </message>
+      <message name="IDS_AERIUM_ONB_EXT_CONSENT" desc="Description of Consent-O-Matic.">
+        Answers cookie pop-ups
+      </message>
+      <message name="IDS_AERIUM_ONB_EXT_TABLISS" desc="Description of TablissNG.">
+        Wallpapers and widgets
+      </message>
+      <message name="IDS_AERIUM_ONB_EXT_SPONSORBLOCK" desc="Description of SponsorBlock.">
+        Skips sponsor segments
+      </message>
+      <message name="IDS_AERIUM_ONB_AEROGEL_TOO" desc="Switch that lets the extension run in Aerogel tabs too. Aerogel is the name of private tabs in Aerium; keep it untranslated.">
+        Also in Aerogel tabs
+      </message>
+      <message name="IDS_AERIUM_ONB_INSTALL" desc="Button that installs the picked extensions, with how many.">
+        Install <ph name="COUNT">$1<ex>2</ex></ph>
+      </message>
+      <message name="IDS_AERIUM_ONB_READY_TITLE" desc="Heading of the last first-run step.">
+        You're set.
+      </message>
+      <message name="IDS_AERIUM_ONB_SEARCH" desc="Label of the search engine row on the summary.">
+        Search
+      </message>
+      <message name="IDS_AERIUM_ONB_EXTENSIONS" desc="Label of the extensions row on the summary.">
+        Extensions
+      </message>
+      <message name="IDS_AERIUM_ONB_UPDATES" desc="Label of the updates row on the summary.">
         Updates
       </message>
-      <message name="IDS_AERIUM_FIRST_RUN_DAILY" desc="Row title for the daily update check.">
-        Daily update check
+      <message name="IDS_AERIUM_ONB_UPDATES_DAILY" desc="Value of the updates row: Aerium checks for a new version every day.">
+        Checked daily
       </message>
-      <message name="IDS_AERIUM_FIRST_RUN_DAILY_SUB" desc="Line under the daily update check row.">
-        Allow notifications so you don't miss a new version
+      <message name="IDS_AERIUM_ONB_INSTALLING" desc="Progress while the picked extensions install.">
+        Installing <ph name="CURRENT">$1<ex>2</ex></ph> of <ph name="TOTAL">$2<ex>6</ex></ph>
       </message>
-      <message name="IDS_AERIUM_FIRST_RUN_OBTAINIUM_SUB" desc="Line under the Obtainium row. Obtainium is an app that installs updates from release pages.">
-        Or let Obtainium install every update for you
+      <message name="IDS_AERIUM_ONB_INSTALLED" desc="Result when the picked extensions installed.">
+        <ph name="COUNT">$1<ex>2</ex></ph> installed
       </message>
-      <message name="IDS_AERIUM_FIRST_RUN_ADD" desc="Button that adds Aerium to Obtainium.">
-        Add
+      <message name="IDS_AERIUM_ONB_SOME_FAILED" desc="Result when some picked extensions could not be installed.">
+        <ph name="COUNT">$1<ex>2</ex></ph> installed, <ph name="FAILED">$2<ex>1</ex></ph> failed
       </message>
-      <message name="IDS_AERIUM_FIRST_RUN_SUPPORT" desc="Heading of the donation section on the first-run page.">
-        Support Aerium
+      <message name="IDS_AERIUM_ONB_NONE" desc="Value of the extensions row when none were picked.">
+        None
       </message>
-      <message name="IDS_AERIUM_FIRST_RUN_SUPPORT_TEXT" desc="Text asking for a donation.">
-        No ads and no tracking. If you like Aerium, a small donation keeps it going. Thank you.
+      <message name="IDS_AERIUM_ONB_MAKE_DEFAULT" desc="Button that asks Android to make Aerium the default browser.">
+        Make Aerium my default
       </message>
-      <message name="IDS_AERIUM_FIRST_RUN_DONATE_XMR" desc="Button to donate with the Monero cryptocurrency.">
-        Donate with Monero
-      </message>
-      <message name="IDS_AERIUM_FIRST_RUN_DONATE_LTC" desc="Button to donate with the Litecoin cryptocurrency.">
-        Donate with Litecoin
-      </message>
-      <message name="IDS_AERIUM_FIRST_RUN_AEROGEL" desc="Footer line explaining where the name Aerium comes from.">
-        Named after aerogel, the lightest solid there is.
+      <message name="IDS_AERIUM_ONB_START_BROWSING" desc="Button that closes the first-run page and opens a new tab.">
+        Start browsing
       </message>
 AERIUM_FIRST_RUN_GRD
 )

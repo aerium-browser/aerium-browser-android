@@ -32,13 +32,13 @@
 
 ## Extensions, finally.
 
-uBlock Origin Lite comes preinstalled. floccus and other open-source extensions work too, Manifest V2 included.
+Nothing comes preinstalled. On first launch Aerium asks which open source extensions you want, from ad blockers to bookmark sync, and installs them from the store so they keep updating. Manifest V2 works too.
 
 Open the [extension store](https://chromewebstore.google.com/) and install as usual. The Opera and Edge add-on stores work too, and so does a `.crx` from a release page. You still get the permissions prompt before anything installs.
 
 Worth installing, all free and open source:
 
-- **[uBlock Origin Lite](https://chromewebstore.google.com/detail/ublock-origin-lite/ddkjiahejlhfcafbddmgiahcphecmpfh)** comes preinstalled. Remove it like any other extension if you would rather not have it.
+- **[uBlock Origin Lite](https://chromewebstore.google.com/detail/ublock-origin-lite/ddkjiahejlhfcafbddmgiahcphecmpfh)**, light and ready right away.
 - **[uBlock Origin](https://github.com/gorhill/uBlock)**, same author and filter lists, Manifest V2.
 - **[floccus](https://chromewebstore.google.com/detail/floccus-bookmarks-sync/fnaicdffflnofjppbagibeoednhnbjhg)**, bookmark sync on storage you control.
 - **[TablissNG](https://chromewebstore.google.com/detail/tablissng/dlaogejjiafeobgofajdlkkhjlignalk)**, a new tab page that takes over the default one.
