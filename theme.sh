@@ -1435,6 +1435,7 @@ import org.chromium.chrome.browser.night_mode.ThemeType;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 import org.chromium.chrome.browser.settings.AeriumBackupFragment;
+import org.chromium.chrome.browser.settings.AeriumToolbarPrefs;
 import org.chromium.chrome.browser.settings.SettingsNavigationFactory;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.content_public.browser.LoadUrlParams;
@@ -1530,7 +1531,8 @@ public final class AeriumOnboardingRequests {
             recreate = nightBefore == nightAfter && nightAfter && blackBefore != black;
         }
         if (top.equals("0") || top.equals("1")) {
-            sharedPrefs.writeBoolean(ChromePreferenceKeys.TOOLBAR_TOP_ANCHORED, top.equals("1"));
+            AeriumToolbarPrefs.setLayout(
+                    top.equals("1") ? AeriumToolbarPrefs.CLASSIC : AeriumToolbarPrefs.THUMB);
         }
         Tab tab = activity.getActivityTab();
         if (tab != null && tab.getUrl().getSpec().startsWith(FIRST_RUN_URL)) {
@@ -6587,7 +6589,7 @@ echo "[aerium] external download manager applied"
 
 # Distinct local names: the blacken-dark-sites block below already declares
 # commandLine, existing and merged in this same scope.
-sed_i 's%        FontPreloader.getInstance().load(getApplication());%&\n\n        // Aerium: features are fixed when the process starts, so the bottom\n        // bar goes on the command line here rather than being flipped live.\n        //\n        // Ours goes FIRST in the merged value, ahead of anything already\n        // there. FeatureList::RegisterOverride() uses try_emplace, and says\n        // so in as many words - "only the first override for a given\n        // feature name takes effect" - so with this appended last, an\n        // AndroidBottomBar entry set from chrome://flags won and the params\n        // below were silently dropped. Everyone told to enable that flag by\n        // hand before this shipped is in exactly that position.\n        if (!org.chromium.chrome.browser.toolbar.settings.AddressBarPreference\n                .isToolbarConfiguredToShowOnTop()) {\n            CommandLine bottomBarLine = CommandLine.getInstance();\n            String bottomBarExisting = bottomBarLine.getSwitchValue("enable-features");\n            String bottomBarFeature =\n                    "AndroidBottomBar:show_bottom_bar_on_gts/true/disable_on_ntp/false";\n            String bottomBarMerged =\n                    (bottomBarExisting == null || bottomBarExisting.isEmpty())\n                            ? bottomBarFeature\n                            : bottomBarFeature + "," + bottomBarExisting;\n            bottomBarLine.appendSwitchWithValue("enable-features", bottomBarMerged);\n        }%' \
+sed_i 's%        FontPreloader.getInstance().load(getApplication());%&\n\n        // Aerium: features are fixed when the process starts, so the bottom\n        // bar goes on the command line here rather than being flipped live.\n        //\n        // Ours goes FIRST in the merged value, ahead of anything already\n        // there. FeatureList::RegisterOverride() uses try_emplace, and says\n        // so in as many words - "only the first override for a given\n        // feature name takes effect" - so with this appended last, an\n        // AndroidBottomBar entry set from chrome://flags won and the params\n        // below were silently dropped. Everyone told to enable that flag by\n        // hand before this shipped is in exactly that position.\n        if (org.chromium.chrome.browser.settings.AeriumToolbarPrefs.isBottomBarOn()) {\n            CommandLine bottomBarLine = CommandLine.getInstance();\n            String bottomBarExisting = bottomBarLine.getSwitchValue("enable-features");\n            String bottomBarFeature =\n                    org.chromium.chrome.browser.settings.AeriumToolbarPrefs.getBottomBarFeature();\n            String bottomBarMerged =\n                    (bottomBarExisting == null || bottomBarExisting.isEmpty())\n                            ? bottomBarFeature\n                            : bottomBarFeature + "," + bottomBarExisting;\n            bottomBarLine.appendSwitchWithValue("enable-features", bottomBarMerged);\n        }%' \
     $CAI
 
 
@@ -7740,7 +7742,7 @@ sed_i 's|^        super.onCreate(savedInstanceState);$|&\n        org.chromium.b
     chrome/android/java/src/org/chromium/chrome/browser/settings/SettingsActivity.java
 sed_i 's|^        super.onDestroy();$|        org.chromium.base.ContextUtils.getAppSharedPreferences()\n                .unregisterOnSharedPreferenceChangeListener(mToolbarPositionListener);\n&|' \
     chrome/android/java/src/org/chromium/chrome/browser/settings/SettingsActivity.java
-sed_i 's|^    private void ensureActivityNotExported() {$|    private final android.content.SharedPreferences.OnSharedPreferenceChangeListener\n            mToolbarPositionListener =\n                    (prefs, key) -> {\n                        if (org.chromium.chrome.browser.preferences.ChromePreferenceKeys\n                                .TOOLBAR_TOP_ANCHORED\n                                .equals(key)) {\n                            showToolbarPositionRestartSnackbar();\n                        }\n                    };\n\n    private void showToolbarPositionRestartSnackbar() {\n        String features =\n                org.chromium.base.CommandLine.getInstance().getSwitchValue("enable-features");\n        boolean bottomBarOn = features != null \&\& features.contains("AndroidBottomBar");\n        if (bottomBarOn\n                != org.chromium.chrome.browser.toolbar.settings.AddressBarPreference\n                        .isToolbarConfiguredToShowOnTop()) {\n            return;\n        }\n        getSnackbarManager()\n                .showSnackbar(\n                        org.chromium.chrome.browser.ui.messages.snackbar.Snackbar.make(\n                                        getString(R.string.aerium_restart_to_apply),\n                                        new SnackbarManager.SnackbarController() {\n                                            @Override\n                                            public void onAction(@Nullable Object actionData) {\n                                                org.chromium.chrome.browser.lifetime\n                                                        .ApplicationLifetime.terminate(true);\n                                            }\n                                        },\n                                        org.chromium.chrome.browser.ui.messages.snackbar\n                                                .Snackbar.TYPE_ACTION,\n                                        org.chromium.chrome.browser.ui.messages.snackbar\n                                                .Snackbar.UMA_UNKNOWN)\n                                .setAction(getString(R.string.aerium_relaunch), null)\n                                .setDuration(10000));\n    }\n\n&|' \
+sed_i 's|^    private void ensureActivityNotExported() {$|    private final android.content.SharedPreferences.OnSharedPreferenceChangeListener\n            mToolbarPositionListener =\n                    (prefs, key) -> {\n                        if (org.chromium.chrome.browser.preferences.ChromePreferenceKeys\n                                .TOOLBAR_TOP_ANCHORED\n                                .equals(key)) {\n                            showToolbarPositionRestartSnackbar();\n                        }\n                    };\n\n    private void showToolbarPositionRestartSnackbar() {\n        String features =\n                org.chromium.base.CommandLine.getInstance().getSwitchValue("enable-features");\n        boolean bottomBarOn = features != null \&\& features.contains("AndroidBottomBar");\n        if (org.chromium.chrome.browser.settings.AeriumToolbarPrefs.isChangingLayout()\n                \|\| bottomBarOn\n                        == org.chromium.chrome.browser.settings.AeriumToolbarPrefs.isBottomBarOn()) {\n            return;\n        }\n        getSnackbarManager()\n                .showSnackbar(\n                        org.chromium.chrome.browser.ui.messages.snackbar.Snackbar.make(\n                                        getString(R.string.aerium_restart_to_apply),\n                                        new SnackbarManager.SnackbarController() {\n                                            @Override\n                                            public void onAction(@Nullable Object actionData) {\n                                                org.chromium.chrome.browser.lifetime\n                                                        .ApplicationLifetime.terminate(true);\n                                            }\n                                        },\n                                        org.chromium.chrome.browser.ui.messages.snackbar\n                                                .Snackbar.TYPE_ACTION,\n                                        org.chromium.chrome.browser.ui.messages.snackbar\n                                                .Snackbar.UMA_UNKNOWN)\n                                .setAction(getString(R.string.aerium_relaunch), null)\n                                .setDuration(10000));\n    }\n\n&|' \
     chrome/android/java/src/org/chromium/chrome/browser/settings/SettingsActivity.java
 sed_i 's|if (!HomepageManager.shouldShowHomepageSettings()) {|if (true) {|' \
     $MAIN_SETTINGS
@@ -11044,5 +11046,940 @@ done
 python3 "$SCRIPT_DIR/l10n/aerogel.py" || return 1
 
 echo "[aerium] Aerogel tabs applied"
+
+AERIUM_TB_SRC=chrome/android/java/src/org/chromium/chrome/browser
+AERIUM_TB_RES=chrome/android/java/res
+mkdir -p $AERIUM_TB_RES/drawable
+cat > $AERIUM_TB_SRC/app/appmenu/AeriumAppMenu.java <<'AERIUM_APP_MENU_JAVA'
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+package org.chromium.chrome.browser.app.appmenu;
+
+import android.content.SharedPreferences;
+
+import org.chromium.base.ContextUtils;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.chrome.R;
+import org.chromium.chrome.browser.ui.appmenu.AppMenuHandler;
+import org.chromium.chrome.browser.ui.appmenu.AppMenuItemProperties;
+import org.chromium.ui.modelutil.MVCListAdapter;
+import org.chromium.ui.modelutil.PropertyModel;
+
+import java.util.HashSet;
+import java.util.Set;
+
+@NullMarked
+public final class AeriumAppMenu {
+    public static final String HIDDEN_KEY = "Chrome.Aerium.MenuHidden";
+
+    public static final String[] QUICK_KEYS = {"forward", "bookmark", "download", "info", "reload"};
+
+    public static final int[] QUICK_TITLES = {
+        R.string.aerium_menu_item_forward,
+        R.string.aerium_menu_item_bookmark,
+        R.string.menu_download,
+        R.string.aerium_menu_item_page_info,
+        R.string.aerium_menu_item_reload,
+    };
+
+    public static final String[] ITEM_KEYS = {
+        "new_tab",
+        "new_aerogel_tab",
+        "new_window",
+        "history",
+        "quick_delete",
+        "downloads",
+        "bookmarks",
+        "recent_tabs",
+        "extensions",
+        "install_extension",
+        "view_source",
+        "zoom",
+        "share",
+        "download_page",
+        "print",
+        "find_in_page",
+        "translate",
+        "reader_mode",
+        "open_with",
+        "add_to_home",
+        "open_in_app",
+        "desktop_site",
+        "dark_theme",
+    };
+
+    public static final int[] ITEM_TITLES = {
+        R.string.menu_new_tab,
+        R.string.menu_new_incognito_tab,
+        R.string.menu_new_window,
+        R.string.menu_history,
+        R.string.menu_quick_delete,
+        R.string.menu_downloads,
+        R.string.menu_bookmarks,
+        R.string.menu_recent_tabs,
+        R.string.menu_extensions,
+        R.string.aerium_menu_install_extension,
+        R.string.aerium_menu_view_source,
+        R.string.page_zoom_menu_title,
+        R.string.menu_share_page,
+        R.string.menu_download_page,
+        R.string.menu_print,
+        R.string.menu_find_in_page,
+        R.string.menu_translate,
+        R.string.show_reading_mode_text,
+        R.string.menu_open_with,
+        R.string.menu_install_create_shortcut,
+        R.string.open_in_app,
+        R.string.menu_request_desktop_site,
+        R.string.menu_auto_dark_web_contents,
+    };
+
+    private AeriumAppMenu() {}
+
+    private static int[] quickIds() {
+        return new int[] {
+            R.id.forward_menu_id,
+            R.id.bookmark_this_page_id,
+            R.id.offline_page_id,
+            R.id.info_menu_id,
+            R.id.reload_menu_id,
+        };
+    }
+
+    private static int[] itemIds() {
+        return new int[] {
+            R.id.new_tab_menu_id,
+            R.id.new_incognito_tab_menu_id,
+            R.id.new_window_menu_id,
+            R.id.open_history_menu_id,
+            R.id.quick_delete_menu_id,
+            R.id.downloads_menu_id,
+            R.id.all_bookmarks_menu_id,
+            R.id.recent_tabs_menu_id,
+            R.id.extensions_menu_menu_id,
+            R.id.aerium_install_extension,
+            R.id.view_source,
+            R.id.page_zoom_id,
+            R.id.share_menu_id,
+            R.id.download_page_id,
+            R.id.print_id,
+            R.id.find_in_page_id,
+            R.id.translate_id,
+            R.id.reader_mode_menu_id,
+            R.id.open_with_id,
+            R.id.universal_install,
+            R.id.open_in_app_menu_id,
+            R.id.request_desktop_site_id,
+            R.id.auto_dark_web_contents_id,
+        };
+    }
+
+    private static SharedPreferences prefs() {
+        return ContextUtils.getAppSharedPreferences();
+    }
+
+    public static Set<String> getHidden() {
+        Set<String> stored = prefs().getStringSet(HIDDEN_KEY, null);
+        return stored == null ? new HashSet<>() : new HashSet<>(stored);
+    }
+
+    public static boolean isShown(String key) {
+        return !getHidden().contains(key);
+    }
+
+    public static void setShown(String key, boolean shown) {
+        Set<String> hidden = getHidden();
+        if (shown) {
+            hidden.remove(key);
+        } else {
+            hidden.add(key);
+        }
+        prefs().edit().putStringSet(HIDDEN_KEY, hidden).apply();
+    }
+
+    public static void reset() {
+        prefs().edit().remove(HIDDEN_KEY).apply();
+    }
+
+    private static int idOf(PropertyModel model) {
+        if (!model.containsKey(AppMenuItemProperties.MENU_ITEM_ID)) return 0;
+        return model.get(AppMenuItemProperties.MENU_ITEM_ID);
+    }
+
+    private static boolean isDivider(MVCListAdapter.ModelList list, int index) {
+        return list.get(index).type == AppMenuHandler.AppMenuItemType.DIVIDER;
+    }
+
+    public static void filter(MVCListAdapter.ModelList modelList) {
+        Set<String> hidden = getHidden();
+        if (hidden.isEmpty()) return;
+
+        Set<Integer> quick = new HashSet<>();
+        int[] quickIds = quickIds();
+        for (int i = 0; i < QUICK_KEYS.length; i++) {
+            if (hidden.contains(QUICK_KEYS[i])) quick.add(quickIds[i]);
+        }
+        Set<Integer> items = new HashSet<>();
+        int[] itemIds = itemIds();
+        for (int i = 0; i < ITEM_KEYS.length; i++) {
+            if (hidden.contains(ITEM_KEYS[i])) items.add(itemIds[i]);
+        }
+        items.addAll(quick);
+
+        for (int i = modelList.size() - 1; i >= 0; i--) {
+            MVCListAdapter.ListItem item = modelList.get(i);
+            if (item.type == AppMenuHandler.AppMenuItemType.BUTTON_ROW) {
+                if (!item.model.containsKey(AppMenuItemProperties.ADDITIONAL_ICONS)) continue;
+                MVCListAdapter.ModelList icons =
+                        item.model.get(AppMenuItemProperties.ADDITIONAL_ICONS);
+                if (icons == null) continue;
+                for (int j = icons.size() - 1; j >= 0; j--) {
+                    if (quick.contains(idOf(icons.get(j).model))) icons.removeAt(j);
+                }
+                if (icons.isEmpty()) modelList.removeAt(i);
+                continue;
+            }
+            if (items.contains(idOf(item.model))) modelList.removeAt(i);
+        }
+
+        for (int i = modelList.size() - 1; i >= 0; i--) {
+            if (!isDivider(modelList, i)) continue;
+            boolean edge = i == 0 || i == modelList.size() - 1;
+            boolean doubled = i + 1 < modelList.size() && isDivider(modelList, i + 1);
+            if (edge || doubled) modelList.removeAt(i);
+        }
+    }
+}
+AERIUM_APP_MENU_JAVA
+
+cat > $AERIUM_TB_SRC/settings/AeriumToolbarPrefs.java <<'AERIUM_TOOLBAR_PREFS_JAVA'
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+package org.chromium.chrome.browser.settings;
+
+import android.content.SharedPreferences;
+
+import org.chromium.base.CommandLine;
+import org.chromium.base.ContextUtils;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.chrome.R;
+import org.chromium.chrome.browser.toolbar.ToolbarPositionController.ToolbarPositionAndSource;
+import org.chromium.chrome.browser.toolbar.settings.AddressBarPreference;
+
+@NullMarked
+public final class AeriumToolbarPrefs {
+    public static final int CLASSIC = 0;
+    public static final int SPLIT = 1;
+    public static final int THUMB = 2;
+    public static final int MINIMAL = 3;
+
+    private static final String BOTTOM_BAR = "Chrome.Aerium.BottomBar";
+    private static final String MENU_IN_BAR = "Chrome.Aerium.BottomBarMenu";
+    private static final String HOME_IN_BAR = "Chrome.Aerium.BottomBarHome";
+    private static final String KEEP_VISIBLE = "Chrome.Aerium.KeepBarsVisible";
+
+    private static final String CACHED_FLAG = "Chrome.Flags.CachedFlag.AndroidBottomBar";
+    private static final String CACHED_PARAM = "Chrome.Flags.FeatureParamCached.AndroidBottomBar:";
+
+    private static boolean sChangingLayout;
+
+    private AeriumToolbarPrefs() {}
+
+    private static SharedPreferences prefs() {
+        return ContextUtils.getAppSharedPreferences();
+    }
+
+    public static boolean isAddressBarOnTop() {
+        return AddressBarPreference.isToolbarConfiguredToShowOnTop();
+    }
+
+    public static boolean isBottomBarOn() {
+        int value = prefs().getInt(BOTTOM_BAR, -1);
+        if (value < 0) return !isAddressBarOnTop();
+        return value == 1;
+    }
+
+    public static boolean isBottomBarRunning() {
+        String features = CommandLine.getInstance().getSwitchValue("enable-features");
+        return features != null && features.contains("AndroidBottomBar");
+    }
+
+    public static boolean isChangingLayout() {
+        return sChangingLayout;
+    }
+
+    public static boolean isMenuInBar() {
+        return prefs().getBoolean(MENU_IN_BAR, true);
+    }
+
+    public static boolean isHomeInBar() {
+        return prefs().getBoolean(HOME_IN_BAR, true);
+    }
+
+    public static boolean keepsBarsVisible() {
+        return prefs().getBoolean(KEEP_VISIBLE, false);
+    }
+
+    public static int getLayout() {
+        boolean bar = isBottomBarOn();
+        if (isAddressBarOnTop()) return bar ? SPLIT : CLASSIC;
+        return bar ? THUMB : MINIMAL;
+    }
+
+    public static int getLayoutTitle(int layout) {
+        if (layout == SPLIT) return R.string.aerium_toolbar_split;
+        if (layout == THUMB) return R.string.aerium_toolbar_thumb;
+        if (layout == MINIMAL) return R.string.aerium_toolbar_minimal;
+        return R.string.aerium_toolbar_classic;
+    }
+
+    public static boolean setLayout(int layout) {
+        boolean top = layout == CLASSIC || layout == SPLIT;
+        boolean bar = layout == SPLIT || layout == THUMB;
+        prefs().edit().putInt(BOTTOM_BAR, bar ? 1 : 0).apply();
+        writeCache();
+        if (top != isAddressBarOnTop()) {
+            sChangingLayout = true;
+            try {
+                AddressBarPreference.setToolbarPositionAndSource(
+                        top
+                                ? ToolbarPositionAndSource.TOP_SETTINGS
+                                : ToolbarPositionAndSource.BOTTOM_SETTINGS);
+            } finally {
+                sChangingLayout = false;
+            }
+        }
+        return isBottomBarRunning() != bar;
+    }
+
+    public static void setMenuInBar(boolean value) {
+        prefs().edit().putBoolean(MENU_IN_BAR, value).apply();
+        writeCache();
+    }
+
+    public static void setHomeInBar(boolean value) {
+        prefs().edit().putBoolean(HOME_IN_BAR, value).apply();
+        writeCache();
+    }
+
+    public static void setKeepBarsVisible(boolean value) {
+        prefs().edit().putBoolean(KEEP_VISIBLE, value).apply();
+    }
+
+    public static String getBottomBarFeature() {
+        return "AndroidBottomBar:show_bottom_bar_on_gts/true/disable_on_ntp/false"
+                + "/keep_app_menu_in_toolbar/"
+                + (isMenuInBar() ? "false" : "true")
+                + "/keep_home_button_in_toolbar/"
+                + (isHomeInBar() ? "false" : "true");
+    }
+
+    private static void writeCache() {
+        boolean bar = isBottomBarOn();
+        SharedPreferences.Editor editor = prefs().edit().putBoolean(CACHED_FLAG, bar);
+        if (bar) {
+            editor.putBoolean(CACHED_PARAM + "show_bottom_bar_on_gts", true)
+                    .putBoolean(CACHED_PARAM + "disable_on_ntp", false)
+                    .putBoolean(CACHED_PARAM + "keep_app_menu_in_toolbar", !isMenuInBar())
+                    .putBoolean(CACHED_PARAM + "keep_home_button_in_toolbar", !isHomeInBar());
+        }
+        editor.apply();
+    }
+}
+AERIUM_TOOLBAR_PREFS_JAVA
+
+cat > $AERIUM_TB_SRC/settings/AeriumToolbarLayoutPreference.java <<'AERIUM_TOOLBAR_LAYOUT_JAVA'
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+package org.chromium.chrome.browser.settings;
+
+import android.content.Context;
+import android.util.AttributeSet;
+import android.widget.RadioGroup;
+
+import androidx.preference.PreferenceViewHolder;
+
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.chrome.R;
+import org.chromium.components.browser_ui.settings.ContainedRadioButtonGroupPreference;
+import org.chromium.components.browser_ui.widget.RadioButtonWithDescription;
+import org.chromium.components.browser_ui.widget.RadioButtonWithDescriptionLayout;
+
+@NullMarked
+public class AeriumToolbarLayoutPreference extends ContainedRadioButtonGroupPreference
+        implements RadioGroup.OnCheckedChangeListener {
+    private int mLayout;
+
+    public AeriumToolbarLayoutPreference(Context context, AttributeSet attrs) {
+        super(context, attrs);
+        setLayoutResource(R.layout.aerium_toolbar_layout_preference);
+        mLayout = AeriumToolbarPrefs.getLayout();
+    }
+
+    private static int[] buttonIds() {
+        return new int[] {
+            R.id.aerium_layout_classic,
+            R.id.aerium_layout_split,
+            R.id.aerium_layout_thumb,
+            R.id.aerium_layout_minimal,
+        };
+    }
+
+    public void setLayoutValue(int layout) {
+        if (mLayout == layout) return;
+        mLayout = layout;
+        notifyChanged();
+    }
+
+    @Override
+    public void onBindViewHolder(PreferenceViewHolder holder) {
+        super.onBindViewHolder(holder);
+        RadioButtonWithDescriptionLayout group =
+                (RadioButtonWithDescriptionLayout) holder.findViewById(R.id.aerium_layout_group);
+        int[] ids = buttonIds();
+        for (int i = 0; i < ids.length; i++) {
+            RadioButtonWithDescription button =
+                    (RadioButtonWithDescription) holder.findViewById(ids[i]);
+            button.setChecked(i == mLayout);
+        }
+        group.setOnCheckedChangeListener(this);
+    }
+
+    @Override
+    public void onCheckedChanged(RadioGroup group, int checkedId) {
+        int[] ids = buttonIds();
+        for (int i = 0; i < ids.length; i++) {
+            if (ids[i] != checkedId || i == mLayout) continue;
+            if (callChangeListener(i)) mLayout = i;
+            return;
+        }
+    }
+}
+AERIUM_TOOLBAR_LAYOUT_JAVA
+
+cat > $AERIUM_TB_SRC/settings/AeriumToolbarFragment.java <<'AERIUM_TOOLBAR_FRAGMENT_JAVA'
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+package org.chromium.chrome.browser.settings;
+
+import android.app.Activity;
+import android.content.Context;
+import android.os.Bundle;
+
+import androidx.preference.Preference;
+
+import org.chromium.base.DeviceInfo;
+import org.chromium.base.supplier.MonotonicObservableSupplier;
+import org.chromium.base.supplier.ObservableSuppliers;
+import org.chromium.base.supplier.SettableMonotonicObservableSupplier;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
+import org.chromium.chrome.R;
+import org.chromium.chrome.browser.appearance.settings.AppearanceSettingsFragment;
+import org.chromium.chrome.browser.lifetime.ApplicationLifetime;
+import org.chromium.chrome.browser.settings.search.ChromeBaseSearchIndexProvider;
+import org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;
+import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
+import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager.SnackbarManageable;
+import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
+import org.chromium.components.browser_ui.settings.SettingsFragment;
+import org.chromium.components.browser_ui.settings.SettingsUtils;
+import org.chromium.ui.base.DeviceFormFactor;
+
+@NullMarked
+public class AeriumToolbarFragment extends ChromeBaseSettingsFragment {
+    private static final String PREF_LAYOUT_SECTION = "aerium_toolbar_layout_section";
+    private static final String PREF_LAYOUT = "aerium_toolbar_layout";
+    private static final String PREF_MENU_BOTTOM = "aerium_toolbar_menu_bottom";
+    private static final String PREF_HOME_BOTTOM = "aerium_toolbar_home_bottom";
+    private static final String PREF_SHORTCUT = "aerium_toolbar_shortcut";
+    private static final String PREF_HIDE_ON_SCROLL = "aerium_toolbar_hide_on_scroll";
+
+    private static final int RESTART_SNACKBAR_DURATION_MS = 10000;
+
+    private final SettableMonotonicObservableSupplier<String> mPageTitle =
+            ObservableSuppliers.createMonotonic();
+
+    public static boolean canMoveAddressBar(Context context) {
+        return !DeviceInfo.isAutomotive()
+                && (DeviceInfo.isFoldable()
+                        || !DeviceFormFactor.isNonMultiDisplayContextOnTablet(context));
+    }
+
+    @Override
+    public void onCreatePreferences(@Nullable Bundle savedInstanceState, @Nullable String rootKey) {
+        SettingsUtils.addPreferencesFromResource(this, R.xml.aerium_toolbar_preferences);
+        mPageTitle.set(getString(R.string.aerium_toolbar_title));
+
+        Preference layoutSection = findPreference(PREF_LAYOUT_SECTION);
+        if (layoutSection != null && !canMoveAddressBar(getContext())) {
+            layoutSection.setVisible(false);
+        }
+
+        AeriumToolbarLayoutPreference layout = findPreference(PREF_LAYOUT);
+        if (layout != null) {
+            layout.setOnPreferenceChangeListener(
+                    (preference, newValue) -> {
+                        if (AeriumToolbarPrefs.setLayout((int) newValue)) showRestartSnackbar();
+                        updateBarSwitches();
+                        return true;
+                    });
+        }
+
+        ChromeSwitchPreference menuBottom = findPreference(PREF_MENU_BOTTOM);
+        if (menuBottom != null) {
+            menuBottom.setChecked(AeriumToolbarPrefs.isMenuInBar());
+            menuBottom.setOnPreferenceChangeListener(
+                    (preference, newValue) -> {
+                        AeriumToolbarPrefs.setMenuInBar((boolean) newValue);
+                        showRestartSnackbar();
+                        return true;
+                    });
+        }
+
+        ChromeSwitchPreference homeBottom = findPreference(PREF_HOME_BOTTOM);
+        if (homeBottom != null) {
+            homeBottom.setChecked(AeriumToolbarPrefs.isHomeInBar());
+            homeBottom.setOnPreferenceChangeListener(
+                    (preference, newValue) -> {
+                        AeriumToolbarPrefs.setHomeInBar((boolean) newValue);
+                        showRestartSnackbar();
+                        return true;
+                    });
+        }
+
+        ChromeSwitchPreference hideOnScroll = findPreference(PREF_HIDE_ON_SCROLL);
+        if (hideOnScroll != null) {
+            hideOnScroll.setChecked(!AeriumToolbarPrefs.keepsBarsVisible());
+            hideOnScroll.setOnPreferenceChangeListener(
+                    (preference, newValue) -> {
+                        AeriumToolbarPrefs.setKeepBarsVisible(!(boolean) newValue);
+                        return true;
+                    });
+        }
+
+        AppearanceSettingsFragment.shouldShowToolbarShortcutPrefAsync(
+                getContext(),
+                getProfile(),
+                (shouldShow) -> {
+                    Preference shortcut = findPreference(PREF_SHORTCUT);
+                    if (shortcut != null && !shouldShow) {
+                        shortcut.setVisible(false);
+                        notifyPreferencesUpdated();
+                    }
+                });
+
+        updateBarSwitches();
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        AeriumToolbarLayoutPreference layout = findPreference(PREF_LAYOUT);
+        if (layout != null) layout.setLayoutValue(AeriumToolbarPrefs.getLayout());
+        updateBarSwitches();
+    }
+
+    private void updateBarSwitches() {
+        boolean bar = AeriumToolbarPrefs.isBottomBarOn();
+        Preference menuBottom = findPreference(PREF_MENU_BOTTOM);
+        if (menuBottom != null) menuBottom.setEnabled(bar);
+        Preference homeBottom = findPreference(PREF_HOME_BOTTOM);
+        if (homeBottom != null) homeBottom.setEnabled(bar);
+    }
+
+    private void showRestartSnackbar() {
+        Activity activity = getActivity();
+        if (!(activity instanceof SnackbarManageable)) return;
+        SnackbarManager manager = ((SnackbarManageable) activity).getSnackbarManager();
+        manager.showSnackbar(
+                Snackbar.make(
+                                getString(R.string.aerium_restart_to_apply),
+                                new SnackbarManager.SnackbarController() {
+                                    @Override
+                                    public void onAction(@Nullable Object actionData) {
+                                        ApplicationLifetime.terminate(true);
+                                    }
+                                },
+                                Snackbar.TYPE_ACTION,
+                                Snackbar.UMA_UNKNOWN)
+                        .setAction(getString(R.string.aerium_relaunch), null)
+                        .setDuration(RESTART_SNACKBAR_DURATION_MS));
+    }
+
+    @Override
+    public MonotonicObservableSupplier<String> getPageTitle() {
+        return mPageTitle;
+    }
+
+    @Override
+    public @SettingsFragment.AnimationType int getAnimationType() {
+        return SettingsFragment.AnimationType.PROPERTY;
+    }
+
+    public static final ChromeBaseSearchIndexProvider SEARCH_INDEX_DATA_PROVIDER =
+            new ChromeBaseSearchIndexProvider(
+                    AeriumToolbarFragment.class.getName(), R.xml.aerium_toolbar_preferences);
+}
+AERIUM_TOOLBAR_FRAGMENT_JAVA
+
+cat > $AERIUM_TB_SRC/settings/AeriumMenuFragment.java <<'AERIUM_MENU_FRAGMENT_JAVA'
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+package org.chromium.chrome.browser.settings;
+
+import android.content.Context;
+import android.os.Bundle;
+
+import androidx.preference.Preference;
+import androidx.preference.PreferenceCategory;
+
+import org.chromium.base.supplier.MonotonicObservableSupplier;
+import org.chromium.base.supplier.ObservableSuppliers;
+import org.chromium.base.supplier.SettableMonotonicObservableSupplier;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
+import org.chromium.chrome.R;
+import org.chromium.chrome.browser.app.appmenu.AeriumAppMenu;
+import org.chromium.chrome.browser.settings.search.ChromeBaseSearchIndexProvider;
+import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
+import org.chromium.components.browser_ui.settings.SettingsFragment;
+import org.chromium.components.browser_ui.settings.SettingsUtils;
+
+@NullMarked
+public class AeriumMenuFragment extends ChromeBaseSettingsFragment {
+    private static final String PREF_QUICK_SECTION = "aerium_menu_quick_section";
+    private static final String PREF_ITEMS_SECTION = "aerium_menu_items_section";
+    private static final String PREF_RESET = "aerium_menu_reset";
+
+    private final SettableMonotonicObservableSupplier<String> mPageTitle =
+            ObservableSuppliers.createMonotonic();
+
+    @Override
+    public void onCreatePreferences(@Nullable Bundle savedInstanceState, @Nullable String rootKey) {
+        SettingsUtils.addPreferencesFromResource(this, R.xml.aerium_menu_preferences);
+        mPageTitle.set(getString(R.string.aerium_menu_items));
+
+        Preference reset = findPreference(PREF_RESET);
+        if (reset != null) {
+            reset.setOnPreferenceClickListener(
+                    preference -> {
+                        AeriumAppMenu.reset();
+                        rebuild();
+                        return true;
+                    });
+        }
+        rebuild();
+    }
+
+    private Context getStyledContext() {
+        return getPreferenceManager().getContext();
+    }
+
+    private void rebuild() {
+        fill(PREF_QUICK_SECTION, AeriumAppMenu.QUICK_KEYS, AeriumAppMenu.QUICK_TITLES);
+        fill(PREF_ITEMS_SECTION, AeriumAppMenu.ITEM_KEYS, AeriumAppMenu.ITEM_TITLES);
+        notifyPreferencesUpdated();
+    }
+
+    private void fill(String sectionKey, String[] keys, int[] titles) {
+        PreferenceCategory section = findPreference(sectionKey);
+        if (section == null) return;
+        section.removeAll();
+        for (int i = 0; i < keys.length; i++) {
+            String key = keys[i];
+            ChromeSwitchPreference row = new ChromeSwitchPreference(getStyledContext());
+            row.setKey("aerium_menu_" + key);
+            row.setPersistent(false);
+            row.setTitle(titles[i]);
+            row.setChecked(AeriumAppMenu.isShown(key));
+            row.setOnPreferenceChangeListener(
+                    (preference, newValue) -> {
+                        AeriumAppMenu.setShown(key, (boolean) newValue);
+                        return true;
+                    });
+            section.addPreference(row);
+        }
+    }
+
+    @Override
+    public MonotonicObservableSupplier<String> getPageTitle() {
+        return mPageTitle;
+    }
+
+    @Override
+    public @SettingsFragment.AnimationType int getAnimationType() {
+        return SettingsFragment.AnimationType.PROPERTY;
+    }
+
+    public static final ChromeBaseSearchIndexProvider SEARCH_INDEX_DATA_PROVIDER =
+            new ChromeBaseSearchIndexProvider(
+                    AeriumMenuFragment.class.getName(), R.xml.aerium_menu_preferences);
+}
+AERIUM_MENU_FRAGMENT_JAVA
+
+cat > $AERIUM_TB_RES/layout/aerium_toolbar_layout_preference.xml <<'AERIUM_TOOLBAR_LAYOUT_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright 2026 The Chromium Authors
+     Use of this source code is governed by a BSD-style license that can be
+     found in the LICENSE file. -->
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:focusable="false">
+
+    <org.chromium.components.browser_ui.widget.RadioButtonWithDescriptionLayout
+        android:id="@+id/aerium_layout_group"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <org.chromium.components.browser_ui.widget.RadioButtonWithDescription
+            android:id="@+id/aerium_layout_classic"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="@dimen/min_touch_target_size"
+            android:paddingTop="@dimen/settings_item_default_padding"
+            android:paddingBottom="@dimen/settings_item_default_padding"
+            app:iconSrc="@drawable/aerium_layout_classic"
+            app:primaryText="@string/aerium_toolbar_classic"
+            app:descriptionText="@string/aerium_toolbar_classic_summary" />
+
+        <org.chromium.components.browser_ui.widget.RadioButtonWithDescription
+            android:id="@+id/aerium_layout_split"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="@dimen/min_touch_target_size"
+            android:paddingTop="@dimen/settings_item_default_padding"
+            android:paddingBottom="@dimen/settings_item_default_padding"
+            app:iconSrc="@drawable/aerium_layout_split"
+            app:primaryText="@string/aerium_toolbar_split"
+            app:descriptionText="@string/aerium_toolbar_split_summary" />
+
+        <org.chromium.components.browser_ui.widget.RadioButtonWithDescription
+            android:id="@+id/aerium_layout_thumb"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="@dimen/min_touch_target_size"
+            android:paddingTop="@dimen/settings_item_default_padding"
+            android:paddingBottom="@dimen/settings_item_default_padding"
+            app:iconSrc="@drawable/aerium_layout_thumb"
+            app:primaryText="@string/aerium_toolbar_thumb"
+            app:descriptionText="@string/aerium_toolbar_thumb_summary" />
+
+        <org.chromium.components.browser_ui.widget.RadioButtonWithDescription
+            android:id="@+id/aerium_layout_minimal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="@dimen/min_touch_target_size"
+            android:paddingTop="@dimen/settings_item_default_padding"
+            android:paddingBottom="@dimen/settings_item_default_padding"
+            app:iconSrc="@drawable/aerium_layout_minimal"
+            app:primaryText="@string/aerium_toolbar_minimal"
+            app:descriptionText="@string/aerium_toolbar_minimal_summary" />
+
+    </org.chromium.components.browser_ui.widget.RadioButtonWithDescriptionLayout>
+
+</LinearLayout>
+AERIUM_TOOLBAR_LAYOUT_XML
+
+cat > $AERIUM_TB_RES/xml/aerium_toolbar_preferences.xml <<'AERIUM_TOOLBAR_PREFS_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright 2026 The Chromium Authors
+     Use of this source code is governed by a BSD-style license that can be
+     found in the LICENSE file. -->
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+    <PreferenceCategory
+        android:key="aerium_toolbar_layout_section"
+        android:title="@string/aerium_toolbar_layout">
+        <org.chromium.chrome.browser.settings.AeriumToolbarLayoutPreference
+            android:key="aerium_toolbar_layout"
+            android:persistent="false" />
+    </PreferenceCategory>
+    <PreferenceCategory
+        android:key="aerium_toolbar_buttons_section"
+        android:title="@string/aerium_toolbar_buttons">
+        <org.chromium.components.browser_ui.settings.ChromeSwitchPreference
+            android:key="aerium_toolbar_menu_bottom"
+            android:persistent="false"
+            android:title="@string/aerium_toolbar_menu_bottom"
+            android:summary="@string/aerium_toolbar_menu_bottom_summary" />
+        <org.chromium.components.browser_ui.settings.ChromeSwitchPreference
+            android:key="aerium_toolbar_home_bottom"
+            android:persistent="false"
+            android:title="@string/aerium_toolbar_home_bottom"
+            android:summary="@string/aerium_toolbar_home_bottom_summary" />
+        <org.chromium.components.browser_ui.settings.ChromeBasePreference
+            android:key="aerium_toolbar_shortcut"
+            android:fragment="org.chromium.chrome.browser.toolbar.adaptive.settings.AdaptiveToolbarSettingsFragment"
+            android:title="@string/toolbar_shortcut"
+            android:summary="@string/aerium_toolbar_shortcut_summary" />
+    </PreferenceCategory>
+    <PreferenceCategory
+        android:key="aerium_toolbar_scroll_section"
+        android:title="@string/aerium_toolbar_scrolling">
+        <org.chromium.components.browser_ui.settings.ChromeSwitchPreference
+            android:key="aerium_toolbar_hide_on_scroll"
+            android:persistent="false"
+            android:title="@string/aerium_toolbar_hide_on_scroll"
+            android:summary="@string/aerium_toolbar_hide_on_scroll_summary" />
+    </PreferenceCategory>
+    <PreferenceCategory
+        android:key="aerium_toolbar_menu_section"
+        android:title="@string/aerium_menu_title">
+        <org.chromium.components.browser_ui.settings.ChromeBasePreference
+            android:key="aerium_menu_items"
+            android:fragment="org.chromium.chrome.browser.settings.AeriumMenuFragment"
+            android:title="@string/aerium_menu_items"
+            android:summary="@string/aerium_menu_items_summary" />
+    </PreferenceCategory>
+</PreferenceScreen>
+AERIUM_TOOLBAR_PREFS_XML
+
+cat > $AERIUM_TB_RES/xml/aerium_menu_preferences.xml <<'AERIUM_MENU_PREFS_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright 2026 The Chromium Authors
+     Use of this source code is governed by a BSD-style license that can be
+     found in the LICENSE file. -->
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+    <PreferenceCategory
+        android:key="aerium_menu_quick_section"
+        android:title="@string/aerium_menu_quick_row" />
+    <PreferenceCategory
+        android:key="aerium_menu_items_section"
+        android:title="@string/aerium_menu_items_section" />
+    <org.chromium.components.browser_ui.settings.ChromeBasePreference
+        android:key="aerium_menu_reset"
+        android:persistent="false"
+        android:title="@string/aerium_menu_reset"
+        android:summary="@string/aerium_menu_reset_summary" />
+</PreferenceScreen>
+AERIUM_MENU_PREFS_XML
+
+cat > $AERIUM_TB_RES/drawable/aerium_layout_classic.xml <<'AERIUM_LAYOUT_CLASSIC_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="?attr/colorControlNormal">
+  <path
+      android:fillColor="@android:color/white"
+      android:fillType="evenOdd"
+      android:pathData="M8,1.5H16A2.5,2.5 0,0 1,18.5,4V20A2.5,2.5 0,0 1,16,22.5H8A2.5,2.5 0,0 1,5.5,20V4A2.5,2.5 0,0 1,8,1.5ZM8,3A1,1 0,0 0,7,4V20A1,1 0,0 0,8,21H16A1,1 0,0 0,17,20V4A1,1 0,0 0,16,3Z" />
+  <path
+      android:fillColor="@android:color/white"
+      android:pathData="M8.5,4.5h7v2.5h-7z" />
+</vector>
+AERIUM_LAYOUT_CLASSIC_XML
+
+cat > $AERIUM_TB_RES/drawable/aerium_layout_split.xml <<'AERIUM_LAYOUT_SPLIT_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="?attr/colorControlNormal">
+  <path
+      android:fillColor="@android:color/white"
+      android:fillType="evenOdd"
+      android:pathData="M8,1.5H16A2.5,2.5 0,0 1,18.5,4V20A2.5,2.5 0,0 1,16,22.5H8A2.5,2.5 0,0 1,5.5,20V4A2.5,2.5 0,0 1,8,1.5ZM8,3A1,1 0,0 0,7,4V20A1,1 0,0 0,8,21H16A1,1 0,0 0,17,20V4A1,1 0,0 0,16,3Z" />
+  <path
+      android:fillColor="@android:color/white"
+      android:pathData="M8.5,4.5h7v2.5h-7zM8.5,17h7v2.5h-7z" />
+</vector>
+AERIUM_LAYOUT_SPLIT_XML
+
+cat > $AERIUM_TB_RES/drawable/aerium_layout_thumb.xml <<'AERIUM_LAYOUT_THUMB_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="?attr/colorControlNormal">
+  <path
+      android:fillColor="@android:color/white"
+      android:fillType="evenOdd"
+      android:pathData="M8,1.5H16A2.5,2.5 0,0 1,18.5,4V20A2.5,2.5 0,0 1,16,22.5H8A2.5,2.5 0,0 1,5.5,20V4A2.5,2.5 0,0 1,8,1.5ZM8,3A1,1 0,0 0,7,4V20A1,1 0,0 0,8,21H16A1,1 0,0 0,17,20V4A1,1 0,0 0,16,3Z" />
+  <path
+      android:fillColor="@android:color/white"
+      android:pathData="M8.5,13.5h7v2.5h-7zM8.5,17h7v2.5h-7z" />
+</vector>
+AERIUM_LAYOUT_THUMB_XML
+
+cat > $AERIUM_TB_RES/drawable/aerium_layout_minimal.xml <<'AERIUM_LAYOUT_MINIMAL_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="?attr/colorControlNormal">
+  <path
+      android:fillColor="@android:color/white"
+      android:fillType="evenOdd"
+      android:pathData="M8,1.5H16A2.5,2.5 0,0 1,18.5,4V20A2.5,2.5 0,0 1,16,22.5H8A2.5,2.5 0,0 1,5.5,20V4A2.5,2.5 0,0 1,8,1.5ZM8,3A1,1 0,0 0,7,4V20A1,1 0,0 0,8,21H16A1,1 0,0 0,17,20V4A1,1 0,0 0,16,3Z" />
+  <path
+      android:fillColor="@android:color/white"
+      android:pathData="M8.5,17h7v2.5h-7z" />
+</vector>
+AERIUM_LAYOUT_MINIMAL_XML
+
+sed_i 's|^  "java/src/org/chromium/chrome/browser/browsing_data/BrowsingDataCounterBridge.java",$|  "java/src/org/chromium/chrome/browser/app/appmenu/AeriumAppMenu.java",\n  "java/src/org/chromium/chrome/browser/settings/AeriumMenuFragment.java",\n  "java/src/org/chromium/chrome/browser/settings/AeriumToolbarFragment.java",\n  "java/src/org/chromium/chrome/browser/settings/AeriumToolbarLayoutPreference.java",\n  "java/src/org/chromium/chrome/browser/settings/AeriumToolbarPrefs.java",\n&|' \
+    chrome/android/chrome_java_sources.gni
+sed_i 's|^  "java/res/xml/appearance_preferences.xml",$|  "java/res/xml/aerium_menu_preferences.xml",\n  "java/res/xml/aerium_toolbar_preferences.xml",\n&|' \
+    chrome/android/chrome_java_resources.gni
+sed_i 's|^  "java/res/layout/account_chooser_dialog_item.xml",$|  "java/res/layout/aerium_toolbar_layout_preference.xml",\n&|' \
+    chrome/android/chrome_java_resources.gni
+sed_i 's|^  "java/res/drawable/acute_24dp.xml",$|  "java/res/drawable/aerium_layout_classic.xml",\n  "java/res/drawable/aerium_layout_minimal.xml",\n  "java/res/drawable/aerium_layout_split.xml",\n  "java/res/drawable/aerium_layout_thumb.xml",\n&|' \
+    chrome/android/chrome_java_resources.gni
+
+perl -0777 -pi -e '
+    s{(            populateTabletEmptyModeMenu\(modelList\);\n        \}\n)(        return modelList;\n)}{$1        if (menuGroup == MenuGroup.PAGE_MENU) {\n            org.chromium.chrome.browser.app.appmenu.AeriumAppMenu.filter(modelList);\n        }\n$2}
+        or die "[aerium] FATAL: TabbedAppMenuPropertiesDelegate.buildMenuModelList() no longer ends this way\n";
+' $AERIUM_TB_SRC/tabbed_mode/TabbedAppMenuPropertiesDelegate.java || return 1
+
+sed_i 's|^        android:fragment="org.chromium.chrome.browser.toolbar.settings.AddressBarSettingsFragment"$|        android:fragment="org.chromium.chrome.browser.settings.AeriumToolbarFragment"|' \
+    $AERIUM_TB_RES/xml/main_preferences.xml
+sed_i 's|^        android:title="@string/address_bar_settings"/>$|        android:title="@string/aerium_toolbar_title"/>|' \
+    $AERIUM_TB_RES/xml/main_preferences.xml
+perl -0777 -pi -e '
+    s{(    private static boolean shouldShowAddressBarPref\(Context context\) \{\n).*?(\n    \}\n)}{$1        return !DeviceInfo.isAutomotive();$2}s
+        or die "[aerium] FATAL: MainSettings.shouldShowAddressBarPref() moved\n";
+    s{(            addressBarPreference\.setSummary\(\n)                    AddressBarPreference\.isToolbarConfiguredToShowOnTop\(\)\n                            \? R\.string\.address_bar_settings_top\n                            : R\.string\.address_bar_settings_bottom\);\n}{$1                    AeriumToolbarFragment.canMoveAddressBar(getContext())\n                            ? AeriumToolbarPrefs.getLayoutTitle(AeriumToolbarPrefs.getLayout())\n                            : R.string.aerium_menu_items);\n}
+        or die "[aerium] FATAL: MainSettings no longer sets the address bar summary this way\n";
+' $AERIUM_TB_SRC/settings/MainSettings.java || return 1
+sed_i '/^import org.chromium.chrome.browser.toolbar.settings.AddressBarPreference;$/d' \
+    $AERIUM_TB_SRC/settings/MainSettings.java
+sed_i '/^import org.chromium.ui.base.DeviceFormFactor;$/d' \
+    $AERIUM_TB_SRC/settings/MainSettings.java
+
+sed_i 's|^        if (!DeviceClassManager.enableFullscreen()) {$|        if (org.chromium.chrome.browser.settings.AeriumToolbarPrefs.keepsBarsVisible()) {\n            enableHidingBrowserControls = false;\n        }\n&|' \
+    $AERIUM_TB_SRC/tab/TabStateBrowserControlsVisibilityDelegate.java
+
+sed_i 's|^import org.chromium.chrome.browser.browsing_data.ClearBrowsingDataFragment;$|&\nimport org.chromium.chrome.browser.settings.AeriumMenuFragment;\nimport org.chromium.chrome.browser.settings.AeriumToolbarFragment;|' \
+    $SIPR
+sed_i 's|^                    AboutChromeSettings.SEARCH_INDEX_DATA_PROVIDER,$|&\n                    AeriumToolbarFragment.SEARCH_INDEX_DATA_PROVIDER,\n                    AeriumMenuFragment.SEARCH_INDEX_DATA_PROVIDER,|' \
+    $SIPR
+
+sed_i 's|      <message name="IDS_AERIUM_MEDIA_TITLE" desc=|      <message name="IDS_AERIUM_TOOLBAR_TITLE" desc="Title of the settings screen that sets the toolbar layout, its buttons and the menu items, and its row in the main Settings list.">\n        Toolbar and menu\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_LAYOUT" desc="Header above the four toolbar layout choices.">\n        Layout\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_CLASSIC" desc="Name of the layout with the address bar at the top and no bar at the bottom.">\n        Classic\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_CLASSIC_SUMMARY" desc="Description under the Classic layout choice.">\n        Address bar at the top\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_SPLIT" desc="Name of the layout with the address bar at the top and a bar of buttons at the bottom.">\n        Split\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_SPLIT_SUMMARY" desc="Description under the Split layout choice.">\n        Address bar at the top, buttons at the bottom\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_THUMB" desc="Name of the layout with the address bar and a bar of buttons both at the bottom, where the thumb reaches.">\n        Thumb\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_THUMB_SUMMARY" desc="Description under the Thumb layout choice.">\n        Address bar and buttons at the bottom, easy to reach\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_MINIMAL" desc="Name of the layout with only the address bar, at the bottom.">\n        Minimal\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_MINIMAL_SUMMARY" desc="Description under the Minimal layout choice.">\n        Only the address bar, at the bottom\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_BUTTONS" desc="Header above the toolbar button options.">\n        Buttons\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_MENU_BOTTOM" desc="Switch that puts the menu button in the bottom bar.">\n        Menu button at the bottom\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_MENU_BOTTOM_SUMMARY" desc="Summary under that switch. Split and Thumb are the layout names above.">\n        Off keeps it next to the address bar. Works with Split and Thumb.\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_HOME_BOTTOM" desc="Switch that puts the home button in the bottom bar.">\n        Home button at the bottom\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_HOME_BOTTOM_SUMMARY" desc="Summary under that switch. Split and Thumb are the layout names above.">\n        Off keeps it next to the address bar. Works with Split and Thumb.\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_SHORTCUT_SUMMARY" desc="Summary under the row that picks the toolbar shortcut button.">\n        One extra button next to the address bar\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_SCROLLING" desc="Header above the scrolling option.">\n        Scrolling\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_HIDE_ON_SCROLL" desc="Switch that lets the toolbar and bottom bar slide away while a page scrolls.">\n        Hide bars while scrolling\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_HIDE_ON_SCROLL_SUMMARY" desc="Summary under that switch.">\n        Gives pages more room. Turn off to keep the bars in place.\n      </message>\n      <message name="IDS_AERIUM_MENU_TITLE" desc="Header above the row that opens the menu items screen.">\n        Menu\n      </message>\n      <message name="IDS_AERIUM_MENU_ITEMS" desc="Title of the screen with a switch for each item of the main menu, and its row.">\n        Menu items\n      </message>\n      <message name="IDS_AERIUM_MENU_ITEMS_SUMMARY" desc="Summary under the Menu items row.">\n        Choose what the menu shows\n      </message>\n      <message name="IDS_AERIUM_MENU_QUICK_ROW" desc="Header above the switches for the row of icons at the top of the menu.">\n        Quick row\n      </message>\n      <message name="IDS_AERIUM_MENU_ITEMS_SECTION" desc="Header above the switches for the menu list items.">\n        Items\n      </message>\n      <message name="IDS_AERIUM_MENU_RESET" desc="Row that turns every menu item back on.">\n        Show everything again\n      </message>\n      <message name="IDS_AERIUM_MENU_RESET_SUMMARY" desc="Summary under that row. Settings is the name of the menu item that can not be hidden.">\n        Settings always stays in the menu\n      </message>\n      <message name="IDS_AERIUM_MENU_ITEM_FORWARD" desc="Switch for the forward arrow in the quick row of the menu.">\n        Forward\n      </message>\n      <message name="IDS_AERIUM_MENU_ITEM_BOOKMARK" desc="Switch for the star that bookmarks the page, in the quick row of the menu.">\n        Bookmark\n      </message>\n      <message name="IDS_AERIUM_MENU_ITEM_PAGE_INFO" desc="Switch for the page info icon in the quick row of the menu.">\n        Page info\n      </message>\n      <message name="IDS_AERIUM_MENU_ITEM_RELOAD" desc="Switch for the reload icon in the quick row of the menu.">\n        Reload\n      </message>\n&|' \
+    chrome/browser/ui/android/strings/android_chrome_strings.grd
+
+echo "[aerium] toolbar layouts and menu items applied"
 
 python3 "$SCRIPT_DIR/l10n/inject.py" || return 1

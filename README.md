@@ -61,6 +61,7 @@ Pin an extension to the toolbar from its <kbd>⋮</kbd> menu in the extensions l
 ## Made for every day.
 
 - **True black dark mode.** On OLED, a black pixel is simply off.
+- **Your toolbar, your way.** Pick Classic, Split, Thumb or Minimal, put the menu and home buttons where your thumb is, and choose what the menu shows.
 - **Media keeps playing** when you switch apps or turn the screen off.
 - **Password managers fill natively** through Android autofill.
 - **Web apps without Google.** Install any site from the menu and it opens in its own window. Links to it from other apps open there too, and **Settings → Web apps** manages them.
