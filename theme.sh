@@ -10942,6 +10942,32 @@ sed_i 's|^      <message name="IDS_GOT_IT" desc=|      <message name="IDS_AERIUM
 
 echo "[aerium] per-site data rule applied"
 
+AERIUM_HTV=chrome/browser/hub/internal/android/java/src/org/chromium/chrome/browser/hub/HubToolbarView.java
+sed_i 's|^        mPaneSwitcher.removeAllTabs();$|&\n        mPaneSwitcher.setInlineLabel(true);|' \
+    $AERIUM_HTV
+sed_i 's|^                tab.setIcon(drawable);$|&\n                tab.setText(buttonData.resolveText(context));|' \
+    $AERIUM_HTV
+sed_i 's|^        tab.setIcon(drawable);$|&\n        tab.setText(buttonData.resolveText(context));|' \
+    $AERIUM_HTV
+sed_i 's|^        mPaneSwitcher.setTabIconTint(selectableIconList);$|&\n        mPaneSwitcher.setTabTextColors(selectableIconList);|' \
+    $AERIUM_HTV
+sed_i 's|^          app:tabUnboundedRipple="true" />$|          app:tabUnboundedRipple="true"\n          app:tabTextAppearance="@style/TextAppearance.TextMediumThick.Primary" />|' \
+    chrome/browser/hub/internal/android/res/layout/hub_toolbar_layout.xml
+perl -0777 -pi -e '
+    s{(                new ResourceButtonData\(\n                        R\.string\.)accessibility_tab_switcher_incognito_stack(,\n                        R\.string\.accessibility_tab_switcher_incognito_stack,\n                        R\.drawable\.ic_incognito\);)}{$1notification_category_incognito$2}
+        or die "[aerium] FATAL: IncognitoTabSwitcherPane no longer builds its pane button this way\n";
+' chrome/android/features/tab_ui/java/src/org/chromium/chrome/browser/tasks/tab_management/IncognitoTabSwitcherPane.java || return 1
+sed_i 's|^    <color name="pane_switcher_background_incognito">@color/gm3_baseline_surface_container_dark</color>$|    <color name="pane_switcher_background_incognito">#161838</color>|' \
+    chrome/browser/ui/android/theme/java/res/values/colors.xml
+sed_i 's|^    <color name="pane_switcher_selected_tab_incognito">@color/gm3_baseline_surface_bright_dark</color>$|    <color name="pane_switcher_selected_tab_incognito">#5464E6</color>|' \
+    chrome/browser/ui/android/theme/java/res/values/colors.xml
+sed_i 's|^                    ContextCompat.getColor(context, R.color.filled_button_bg_color_light);$|                    0xFF5464E6;|' \
+    chrome/browser/hub/internal/android/java/src/org/chromium/chrome/browser/hub/HubColors.java
+sed_i 's|^                    ContextCompat.getColor(context, R.color.default_icon_color_on_accent1_dark);$|                    0xFFFFFFFF;|' \
+    chrome/browser/hub/internal/android/java/src/org/chromium/chrome/browser/hub/HubColors.java
+
+echo "[aerium] tab switcher labels and Aerogel colors applied"
+
 cat > components/browser_ui/styles/android/java/res/drawable/ic_incognito_24dp.xml <<'AERIUM_IC_INCOGNITO_24DP_XML'
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
