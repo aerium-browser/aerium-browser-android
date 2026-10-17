@@ -8516,16 +8516,11 @@ cat > chrome/android/java/res/xml/aerium_backup_preferences.xml <<'AERIUM_BACKUP
      Use of this source code is governed by a BSD-style license that can be
      found in the LICENSE file. -->
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
-    <Preference
-        android:key="aerium_backup_export"
+    <org.chromium.chrome.browser.settings.AeriumBackupPanelPreference
+        android:key="aerium_backup_panel"
         android:persistent="false"
-        android:title="@string/aerium_backup_export_title"
-        android:summary="@string/aerium_backup_export_summary" />
-    <Preference
-        android:key="aerium_backup_restore"
-        android:persistent="false"
-        android:title="@string/aerium_backup_restore_title"
-        android:summary="@string/aerium_backup_restore_summary" />
+        android:selectable="false"
+        android:title="@string/aerium_backup_up" />
     <Preference
         android:key="aerium_backup_installs"
         android:persistent="false"
@@ -8553,11 +8548,28 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.res.ColorStateList;
+import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.Browser;
+import android.provider.DocumentsContract;
+import android.provider.OpenableColumns;
+import android.text.InputType;
+import android.text.format.DateUtils;
+import android.text.format.Formatter;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.accessibility.AccessibilityNodeInfo;
+import android.widget.Button;
+import android.widget.CheckBox;
+import android.widget.CompoundButton;
+import android.widget.EditText;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.appcompat.app.AlertDialog;
 import androidx.preference.Preference;
 
 import org.json.JSONArray;
@@ -8575,6 +8587,7 @@ import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.app.tabwindow.TabWindowManagerSingleton;
+import org.chromium.chrome.browser.bookmarks.BookmarkModel;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.lifetime.ApplicationLifetime;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
@@ -8589,6 +8602,8 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager.SnackbarManageable;
+import org.chromium.components.bookmarks.BookmarkId;
+import org.chromium.components.bookmarks.BookmarkItem;
 import org.chromium.components.browser_ui.settings.SettingsFragment;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
 import org.chromium.components.browser_ui.site_settings.ContentSettingException;
@@ -8601,20 +8616,35 @@ import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.url.GURL;
 
 import java.io.BufferedInputStream;
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
+import java.io.File;
+import java.io.FilterOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
+import java.security.SecureRandom;
+import java.text.SimpleDateFormat;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+import javax.crypto.Cipher;
+import javax.crypto.CipherOutputStream;
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.GCMParameterSpec;
+import javax.crypto.spec.PBEKeySpec;
+import javax.crypto.spec.SecretKeySpec;
+
 @NullMarked
 public class AeriumBackupFragment extends ChromeBaseSettingsFragment {
-    private static final String PREF_EXPORT = "aerium_backup_export";
-    private static final String PREF_RESTORE = "aerium_backup_restore";
+    private static final String PREF_PANEL = "aerium_backup_panel";
     private static final String PREF_INSTALLS = "aerium_backup_installs";
     private static final String PREF_MANUAL = "aerium_backup_manual";
 
@@ -8622,10 +8652,31 @@ public class AeriumBackupFragment extends ChromeBaseSettingsFragment {
     private static final int REQUEST_RESTORE = 4213;
 
     private static final String BACKUP_MIME_TYPE = "application/zip";
-    private static final int BACKUP_VERSION = 3;
+    private static final String LOCKED_MIME_TYPE = "application/octet-stream";
+    private static final int BACKUP_VERSION = 4;
     private static final int RESTART_SNACKBAR_DURATION_MS = 10000;
 
     private static final String SHARED_PREF_PREFIX = "Chrome.Aerium.";
+    private static final String OWN_PREF_PREFIX = "Chrome.Aerium.Backup";
+    private static final String INCLUDE_PREFIX = "Chrome.Aerium.BackupInclude.";
+    private static final String LOCK_KEY = "Chrome.Aerium.BackupLock";
+    private static final String LAST_KEY = "Chrome.Aerium.BackupLast";
+
+    private static final String INCLUDE_SETTINGS = "settings";
+    private static final String INCLUDE_SITES = "sites";
+    private static final String INCLUDE_TABS = "tabs";
+    private static final String INCLUDE_BOOKMARKS = "bookmarks";
+    private static final String INCLUDE_EXTENSIONS = "extensions";
+
+    private static final byte[] LOCK_MAGIC = {'A', 'E', 'R', 'I', 'U', 'M', 'L', 'K'};
+    private static final int LOCK_FORMAT = 1;
+    private static final int LOCK_SALT_BYTES = 16;
+    private static final int LOCK_IV_BYTES = 12;
+    private static final int LOCK_TAG_BITS = 128;
+    private static final int LOCK_KEY_BITS = 256;
+    private static final int LOCK_ROUNDS = 210000;
+
+    private static final int MAX_BOOKMARK_DEPTH = 32;
 
     private static final int PREF_TYPE_BOOLEAN = 1;
     private static final int PREF_TYPE_INTEGER = 2;
@@ -8640,9 +8691,16 @@ public class AeriumBackupFragment extends ChromeBaseSettingsFragment {
 
     private boolean mWatchInstalls;
     private List<String> mManual = new java.util.ArrayList<>();
+    private JSONArray mExtensions = new JSONArray();
+    private char @Nullable [] mPassphrase;
     private final SharedPreferences.OnSharedPreferenceChangeListener mInstallListener =
             (prefs, key) -> {
-                if (AeriumExtensionInstalls.PROGRESS_KEY.equals(key)) updateInstallRows();
+                if (!AeriumExtensionInstalls.PROGRESS_KEY.equals(key)) return;
+                updateInstallRows();
+                if (AeriumExtensionInstalls.readProgress()[3] != 0) {
+                    loadExtensions();
+                    refreshPanel();
+                }
             };
 
     private static final String[] STOCK_SHARED_PREFS = {
@@ -8669,7 +8727,6 @@ public class AeriumBackupFragment extends ChromeBaseSettingsFragment {
         "browser.clear_data.aerium_on_exit.hosted_apps_data",
         "browser.clear_data.aerium_on_exit.passwords",
         "browser.clear_data.aerium_on_exit.site_settings",
-        "browser.clear_data.aerium_on_exit.site_rules",
         "aerium.update.check_enabled",
         "aerium_guard.active_preset",
         "enable_do_not_track",
@@ -8682,6 +8739,10 @@ public class AeriumBackupFragment extends ChromeBaseSettingsFragment {
         "enable_a_ping",
         "alternate_error_pages.enabled",
         "payments.can_make_payment_enabled",
+    };
+
+    private static final String[] SITE_PROFILE_PREFS = {
+        "browser.clear_data.aerium_on_exit.site_rules",
     };
 
     private static final String[] LOCAL_STATE_PREFS = {
@@ -8705,27 +8766,29 @@ public class AeriumBackupFragment extends ChromeBaseSettingsFragment {
         ContentSettingsType.COOKIES,
     };
 
+    private static final String UBOL_ID = "ddkjiahejlhfcafbddmgiahcphecmpfh";
+    private static final String UBO_STORE_ID = "cjpalhdlnbpafiamejdnhcphjbkeiagm";
+    private static final String ADGUARD_ID = "bgnkhhnnamicmpeenaelnjfhikgbkllg";
+    private static final String FLOCCUS_ID = "fnaicdffflnofjppbagibeoednhnbjhg";
+    private static final String DECENTRALEYES_ID = "ldpochfccmkkmhdbclfhpagapcfdljkj";
+    private static final String CONSENT_ID = "mdjildafknihdffpkfmmpnpoiajfjnjd";
+    private static final String TABLISS_ID = "dlaogejjiafeobgofajdlkkhjlignalk";
+    private static final String SPONSORBLOCK_ID = "mnjggcdmjocbbbhaepdhchncahnbgone";
+
+    private static final int[] TILE_COLORS = {
+        0xFF1B2C5E, 0xFF0F766E, 0xFF9333EA, 0xFFB45309,
+        0xFFBE123C, 0xFF4338CA, 0xFF15803D, 0xFF3F3F46,
+    };
+
     @Override
     public void onCreatePreferences(@Nullable Bundle savedInstanceState, @Nullable String rootKey) {
         SettingsUtils.addPreferencesFromResource(this, R.xml.aerium_backup_preferences);
-        mPageTitle.set(getString(R.string.aerium_backup_title));
+        mPageTitle.set(getString(R.string.aerium_backup_screen));
 
-        Preference exportPref = findPreference(PREF_EXPORT);
-        if (exportPref != null) {
-            exportPref.setOnPreferenceClickListener(
-                    preference -> {
-                        startExport();
-                        return true;
-                    });
-        }
-
-        Preference restorePref = findPreference(PREF_RESTORE);
-        if (restorePref != null) {
-            restorePref.setOnPreferenceClickListener(
-                    preference -> {
-                        startRestore();
-                        return true;
-                    });
+        loadExtensions();
+        Preference panel = findPreference(PREF_PANEL);
+        if (panel instanceof AeriumBackupPanelPreference backupPanel) {
+            backupPanel.setBinder(this::bindPanel);
         }
 
         ContextUtils.getAppSharedPreferences()
@@ -8734,10 +8797,265 @@ public class AeriumBackupFragment extends ChromeBaseSettingsFragment {
     }
 
     @Override
+    public void onResume() {
+        super.onResume();
+        loadExtensions();
+        refreshPanel();
+    }
+
+    @Override
     public void onDestroy() {
         ContextUtils.getAppSharedPreferences()
                 .unregisterOnSharedPreferenceChangeListener(mInstallListener);
+        clearPassphrase();
         super.onDestroy();
+    }
+
+    private void loadExtensions() {
+        try {
+            mExtensions = AeriumExtensionBackup.collect(getProfilePrefs());
+        } catch (JSONException e) {
+            mExtensions = new JSONArray();
+        }
+    }
+
+    private void refreshPanel() {
+        Preference panel = findPreference(PREF_PANEL);
+        if (panel instanceof AeriumBackupPanelPreference backupPanel) backupPanel.refresh();
+    }
+
+    private static SharedPreferences sharedPrefs() {
+        return ContextUtils.getAppSharedPreferences();
+    }
+
+    private static boolean isIncluded(String type) {
+        return sharedPrefs().getBoolean(INCLUDE_PREFIX + type, true);
+    }
+
+    private static boolean isLocked() {
+        return sharedPrefs().getBoolean(LOCK_KEY, false);
+    }
+
+    private void bindPanel(View root) {
+        View up = root.findViewById(R.id.aerium_backup_up);
+        if (up != null) up.setOnClickListener(view -> onBackUp());
+        View restore = root.findViewById(R.id.aerium_backup_restore);
+        if (restore != null) restore.setOnClickListener(view -> startRestore());
+
+        View last = root.findViewById(R.id.aerium_backup_last);
+        if (last instanceof TextView text) text.setText(lastBackupText(root.getContext()));
+
+        View group = root.findViewById(R.id.aerium_backup_include);
+        if (group != null) group.setClipToOutline(true);
+        bindInclude(root, R.id.aerium_backup_row_settings, R.id.aerium_backup_check_settings,
+                INCLUDE_SETTINGS);
+        bindInclude(root, R.id.aerium_backup_row_sites, R.id.aerium_backup_check_sites,
+                INCLUDE_SITES);
+        bindInclude(root, R.id.aerium_backup_row_tabs, R.id.aerium_backup_check_tabs,
+                INCLUDE_TABS);
+        bindInclude(root, R.id.aerium_backup_row_bookmarks, R.id.aerium_backup_check_bookmarks,
+                INCLUDE_BOOKMARKS);
+        bindInclude(root, R.id.aerium_backup_row_extensions,
+                R.id.aerium_backup_check_extensions, INCLUDE_EXTENSIONS);
+        styleExtensionCard(root);
+        fillExtensions(root);
+
+        View lockRow = root.findViewById(R.id.aerium_backup_row_lock);
+        View lockSwitch = root.findViewById(R.id.aerium_backup_lock_switch);
+        if (lockSwitch instanceof CompoundButton toggle) toggle.setChecked(isLocked());
+        if (lockRow != null) {
+            lockRow.setOnClickListener(
+                    view -> {
+                        boolean locked = !isLocked();
+                        sharedPrefs().edit().putBoolean(LOCK_KEY, locked).apply();
+                        if (lockSwitch instanceof CompoundButton toggle) toggle.setChecked(locked);
+                    });
+            lockRow.setAccessibilityDelegate(
+                    new View.AccessibilityDelegate() {
+                        @Override
+                        public void onInitializeAccessibilityNodeInfo(
+                                View host, AccessibilityNodeInfo info) {
+                            super.onInitializeAccessibilityNodeInfo(host, info);
+                            info.setClassName(android.widget.Switch.class.getName());
+                            info.setCheckable(true);
+                            info.setChecked(isLocked());
+                        }
+                    });
+        }
+    }
+
+    private void bindInclude(View root, int rowId, int checkId, String type) {
+        View row = root.findViewById(rowId);
+        View check = root.findViewById(checkId);
+        if (check instanceof CheckBox box) box.setChecked(isIncluded(type));
+        if (row == null) return;
+        row.setOnClickListener(
+                view -> {
+                    boolean included = !isIncluded(type);
+                    sharedPrefs().edit().putBoolean(INCLUDE_PREFIX + type, included).apply();
+                    if (check instanceof CheckBox box) box.setChecked(included);
+                    if (INCLUDE_EXTENSIONS.equals(type)) styleExtensionCard(root);
+                });
+        row.setAccessibilityDelegate(
+                new View.AccessibilityDelegate() {
+                    @Override
+                    public void onInitializeAccessibilityNodeInfo(
+                            View host, AccessibilityNodeInfo info) {
+                        super.onInitializeAccessibilityNodeInfo(host, info);
+                        info.setClassName(CheckBox.class.getName());
+                        info.setCheckable(true);
+                        info.setChecked(isIncluded(type));
+                    }
+                });
+    }
+
+    private void styleExtensionCard(View root) {
+        boolean included = isIncluded(INCLUDE_EXTENSIONS);
+        View card = root.findViewById(R.id.aerium_backup_extensions);
+        if (card != null) {
+            card.setBackgroundResource(
+                    included
+                            ? R.drawable.aerium_backup_card_on
+                            : R.drawable.aerium_backup_card_off);
+        }
+        float alpha = included ? 1f : 0.5f;
+        View list = root.findViewById(R.id.aerium_backup_extension_list);
+        if (list != null) list.setAlpha(alpha);
+        View note = root.findViewById(R.id.aerium_backup_extension_note);
+        if (note != null) note.setAlpha(alpha);
+        View empty = root.findViewById(R.id.aerium_backup_extension_empty);
+        if (empty != null) empty.setAlpha(alpha);
+    }
+
+    private void fillExtensions(View root) {
+        View listView = root.findViewById(R.id.aerium_backup_extension_list);
+        if (!(listView instanceof LinearLayout list)) return;
+        list.removeAllViews();
+        LayoutInflater inflater = LayoutInflater.from(list.getContext());
+        int shown = 0;
+        for (int i = 0; i < mExtensions.length(); i++) {
+            JSONObject item = mExtensions.optJSONObject(i);
+            if (item == null) continue;
+            String id = item.optString("id", "");
+            String name = item.optString("name", "");
+            if (name.isEmpty()) name = id;
+            View row = inflater.inflate(R.layout.aerium_backup_extension_row, list, false);
+            View mark = row.findViewById(R.id.aerium_backup_ext_mark);
+            if (mark instanceof TextView tile) {
+                tile.setText(markFor(id, name));
+                tile.setBackgroundTintList(ColorStateList.valueOf(colorFor(id, name)));
+            }
+            View title = row.findViewById(R.id.aerium_backup_ext_name);
+            if (title instanceof TextView text) text.setText(name);
+            View note = row.findViewById(R.id.aerium_backup_ext_note);
+            if (note instanceof TextView text) text.setText(noteFor(id));
+            list.addView(row);
+            shown++;
+        }
+        list.setVisibility(shown > 0 ? View.VISIBLE : View.GONE);
+        View empty = root.findViewById(R.id.aerium_backup_extension_empty);
+        if (empty != null) empty.setVisibility(shown > 0 ? View.GONE : View.VISIBLE);
+        View footer = root.findViewById(R.id.aerium_backup_extension_note);
+        if (footer != null) footer.setVisibility(shown > 0 ? View.VISIBLE : View.GONE);
+    }
+
+    private static String markFor(String id, String name) {
+        switch (id) {
+            case UBOL_ID:
+            case UBO_STORE_ID:
+            case AeriumExtensionBackup.UBO_GITHUB_ID:
+                return "uB";
+            case ADGUARD_ID:
+                return "AG";
+            case FLOCCUS_ID:
+                return "fl";
+            case DECENTRALEYES_ID:
+                return "De";
+            case CONSENT_ID:
+                return "CM";
+            case TABLISS_ID:
+                return "Tb";
+            case SPONSORBLOCK_ID:
+                return "SB";
+            default:
+                break;
+        }
+        List<String> words = new java.util.ArrayList<>();
+        for (String word : name.trim().split("[^\\p{L}\\p{N}]+")) {
+            if (!word.isEmpty()) words.add(word);
+        }
+        if (words.isEmpty()) return "?";
+        if (words.size() >= 2) {
+            return (words.get(0).substring(0, 1) + words.get(1).substring(0, 1))
+                    .toUpperCase(Locale.getDefault());
+        }
+        String word = words.get(0);
+        StringBuilder capitals = new StringBuilder();
+        for (int i = 0; i < word.length() && capitals.length() < 2; i++) {
+            char c = word.charAt(i);
+            if (Character.isUpperCase(c)) capitals.append(c);
+        }
+        if (capitals.length() == 2) return capitals.toString();
+        return word.length() >= 2 ? word.substring(0, 2) : word;
+    }
+
+    private static int colorFor(String id, String name) {
+        switch (id) {
+            case UBOL_ID:
+                return 0xFF800000;
+            case UBO_STORE_ID:
+            case AeriumExtensionBackup.UBO_GITHUB_ID:
+                return 0xFF5A0000;
+            case ADGUARD_ID:
+                return 0xFF3E8E57;
+            case FLOCCUS_ID:
+                return 0xFF2563EB;
+            case DECENTRALEYES_ID:
+                return 0xFF14532D;
+            case CONSENT_ID:
+                return 0xFF334155;
+            case TABLISS_ID:
+                return 0xFF6D28D9;
+            case SPONSORBLOCK_ID:
+                return 0xFFC2410C;
+            default:
+                return TILE_COLORS[Math.floorMod(name.hashCode(), TILE_COLORS.length)];
+        }
+    }
+
+    private static int noteFor(String id) {
+        switch (id) {
+            case UBOL_ID:
+            case UBO_STORE_ID:
+            case AeriumExtensionBackup.UBO_GITHUB_ID:
+            case ADGUARD_ID:
+                return R.string.aerium_backup_note_filters;
+            case FLOCCUS_ID:
+                return R.string.aerium_backup_note_sync;
+            case TABLISS_ID:
+                return R.string.aerium_backup_note_widgets;
+            default:
+                return R.string.aerium_backup_note_settings;
+        }
+    }
+
+    private String lastBackupText(Context context) {
+        String raw = sharedPrefs().getString(LAST_KEY, "");
+        String[] parts = raw == null ? new String[0] : raw.split("\\|", 3);
+        if (parts.length < 3) return getString(R.string.aerium_backup_none);
+        long when;
+        long size;
+        try {
+            when = Long.parseLong(parts[0]);
+            size = Long.parseLong(parts[1]);
+        } catch (NumberFormatException e) {
+            return getString(R.string.aerium_backup_none);
+        }
+        String date =
+                DateUtils.formatDateTime(
+                        context, when, DateUtils.FORMAT_SHOW_DATE | DateUtils.FORMAT_ABBREV_MONTH);
+        String sizeText = Formatter.formatShortFileSize(context, size);
+        return getString(R.string.aerium_backup_last, date, sizeText, parts[2]);
     }
 
     private void updateInstallRows() {
@@ -8769,14 +9087,120 @@ public class AeriumBackupFragment extends ChromeBaseSettingsFragment {
         }
     }
 
+    private void onBackUp() {
+        if (isLocked()) {
+            showSetPassphraseDialog(null);
+        } else {
+            clearPassphrase();
+            startExport();
+        }
+    }
+
+    private void clearPassphrase() {
+        char[] passphrase = mPassphrase;
+        if (passphrase != null) Arrays.fill(passphrase, '\0');
+        mPassphrase = null;
+    }
+
+    private Context getStyledContext() {
+        return getPreferenceManager().getContext();
+    }
+
+    private EditText passphraseField(Context context, int hint) {
+        EditText field = new EditText(context);
+        field.setSingleLine(true);
+        field.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        field.setHint(hint);
+        return field;
+    }
+
+    private void showSetPassphraseDialog(@Nullable Uri target) {
+        Context context = getStyledContext();
+        int padding = Math.round(24 * context.getResources().getDisplayMetrics().density);
+        EditText first = passphraseField(context, R.string.aerium_backup_pass_hint);
+        EditText second = passphraseField(context, R.string.aerium_backup_pass_repeat);
+        LinearLayout layout = new LinearLayout(context);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(padding, padding / 2, padding, 0);
+        layout.addView(first);
+        layout.addView(second);
+
+        AlertDialog dialog =
+                new AlertDialog.Builder(context, R.style.ThemeOverlay_BrowserUI_AlertDialog)
+                        .setTitle(R.string.aerium_backup_pass_set)
+                        .setMessage(R.string.aerium_backup_pass_note)
+                        .setView(layout)
+                        .setPositiveButton(R.string.aerium_backup_up, null)
+                        .setNegativeButton(android.R.string.cancel, null)
+                        .create();
+        dialog.show();
+        Button positive = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+        if (positive == null) return;
+        positive.setOnClickListener(
+                view -> {
+                    String value = first.getText().toString();
+                    if (value.isEmpty()) {
+                        first.requestFocus();
+                        return;
+                    }
+                    if (!value.equals(second.getText().toString())) {
+                        second.setError(getString(R.string.aerium_backup_pass_mismatch));
+                        return;
+                    }
+                    dialog.dismiss();
+                    if (target != null) {
+                        writeBackup(target, value.toCharArray());
+                    } else {
+                        clearPassphrase();
+                        mPassphrase = value.toCharArray();
+                        startExport();
+                    }
+                });
+    }
+
+    private void showUnlockDialog(Uri uri) {
+        Context context = getStyledContext();
+        int padding = Math.round(24 * context.getResources().getDisplayMetrics().density);
+        EditText field = passphraseField(context, R.string.aerium_backup_pass_hint);
+        LinearLayout layout = new LinearLayout(context);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(padding, padding / 2, padding, 0);
+        layout.addView(field);
+
+        AlertDialog dialog =
+                new AlertDialog.Builder(context, R.style.ThemeOverlay_BrowserUI_AlertDialog)
+                        .setTitle(R.string.aerium_backup_pass_enter)
+                        .setView(layout)
+                        .setPositiveButton(R.string.aerium_backup_restore, null)
+                        .setNegativeButton(android.R.string.cancel, null)
+                        .create();
+        dialog.show();
+        Button positive = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+        if (positive == null) return;
+        positive.setOnClickListener(
+                view -> {
+                    String value = field.getText().toString();
+                    if (value.isEmpty()) {
+                        field.requestFocus();
+                        return;
+                    }
+                    dialog.dismiss();
+                    readBackup(uri, value.toCharArray());
+                });
+    }
+
     private void startExport() {
+        boolean locked = mPassphrase != null;
+        String day = new SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(new Date());
         Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
-        intent.setType(BACKUP_MIME_TYPE);
-        intent.putExtra(Intent.EXTRA_TITLE, "aerium-backup.zip");
+        intent.setType(locked ? LOCKED_MIME_TYPE : BACKUP_MIME_TYPE);
+        intent.putExtra(
+                Intent.EXTRA_TITLE, "aerium-backup-" + day + (locked ? ".aerium" : ".zip"));
         try {
             startActivityForResult(intent, REQUEST_EXPORT);
         } catch (RuntimeException e) {
+            clearPassphrase();
         }
     }
 
@@ -8793,83 +9217,284 @@ public class AeriumBackupFragment extends ChromeBaseSettingsFragment {
     @Override
     public void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (resultCode != Activity.RESULT_OK || data == null) return;
-        Uri uri = data.getData();
-        if (uri == null) return;
+        Uri uri = resultCode == Activity.RESULT_OK && data != null ? data.getData() : null;
         if (requestCode == REQUEST_EXPORT) {
-            writeBackup(uri);
-        } else if (requestCode == REQUEST_RESTORE) {
-            readBackup(uri);
+            char[] passphrase = mPassphrase;
+            mPassphrase = null;
+            if (uri == null) {
+                if (passphrase != null) Arrays.fill(passphrase, '\0');
+                return;
+            }
+            if (passphrase == null && isLocked()) {
+                showSetPassphraseDialog(uri);
+                return;
+            }
+            writeBackup(uri, passphrase);
+        } else if (requestCode == REQUEST_RESTORE && uri != null) {
+            readBackup(uri, null);
         }
     }
 
-    private void writeBackup(Uri uri) {
+    private void writeBackup(Uri uri, char @Nullable [] passphrase) {
+        Profile profile = getProfile();
+        if (isIncluded(INCLUDE_BOOKMARKS) && profile != null) {
+            BookmarkModel model = BookmarkModel.getForProfile(profile);
+            model.finishLoadingBookmarkModel(
+                    () -> {
+                        JSONObject bookmarks;
+                        try {
+                            bookmarks = collectBookmarks(model);
+                        } catch (JSONException e) {
+                            bookmarks = null;
+                        }
+                        writeBackup(uri, passphrase, bookmarks);
+                    });
+        } else {
+            writeBackup(uri, passphrase, null);
+        }
+    }
+
+    private void writeBackup(
+            Uri uri, char @Nullable [] passphrase, @Nullable JSONObject bookmarks) {
         Context context = getContext();
-        if (context == null) return;
+        if (context == null) {
+            if (passphrase != null) Arrays.fill(passphrase, '\0');
+            return;
+        }
         byte[] bytes;
         JSONArray extensions;
         try {
-            JSONObject backup = buildBackup();
+            JSONObject backup = buildBackup(bookmarks);
             extensions = backup.optJSONArray("extensions");
             bytes = backup.toString(2).getBytes(StandardCharsets.UTF_8);
         } catch (JSONException e) {
+            if (passphrase != null) Arrays.fill(passphrase, '\0');
             showToast(R.string.aerium_backup_export_failed);
             return;
         }
         PostTask.postTask(
                 TaskTraits.BEST_EFFORT_MAY_BLOCK,
                 () -> {
-                    boolean ok;
-                    try (OutputStream out = context.getContentResolver().openOutputStream(uri)) {
-                        if (out == null) throw new IOException("no output stream for " + uri);
-                        AeriumExtensionBackup.writeZip(out, bytes, extensions);
-                        ok = true;
-                    } catch (IOException e) {
-                        ok = false;
+                    long written = -1;
+                    try (OutputStream raw = context.getContentResolver().openOutputStream(uri)) {
+                        if (raw == null) throw new IOException("no output stream for " + uri);
+                        CountingOutputStream counted = new CountingOutputStream(raw);
+                        if (passphrase != null) {
+                            byte[] salt = randomBytes(LOCK_SALT_BYTES);
+                            byte[] iv = randomBytes(LOCK_IV_BYTES);
+                            counted.write(LOCK_MAGIC);
+                            counted.write(LOCK_FORMAT);
+                            counted.write(salt);
+                            counted.write(iv);
+                            OutputStream sealed =
+                                    new CipherOutputStream(
+                                            counted,
+                                            lockCipher(Cipher.ENCRYPT_MODE, passphrase, salt, iv));
+                            AeriumExtensionBackup.writeZip(sealed, bytes, extensions);
+                            sealed.close();
+                        } else {
+                            AeriumExtensionBackup.writeZip(counted, bytes, extensions);
+                            counted.flush();
+                        }
+                        written = counted.count();
+                    } catch (IOException | GeneralSecurityException e) {
+                        written = -1;
+                    } finally {
+                        if (passphrase != null) Arrays.fill(passphrase, '\0');
                     }
-                    boolean success = ok;
+                    if (written >= 0) {
+                        sharedPrefs()
+                                .edit()
+                                .putString(
+                                        LAST_KEY,
+                                        System.currentTimeMillis()
+                                                + "|"
+                                                + written
+                                                + "|"
+                                                + placeOf(context, uri))
+                                .apply();
+                    }
+                    boolean success = written >= 0;
                     PostTask.postTask(
                             TaskTraits.UI_DEFAULT,
-                            () ->
-                                    showToast(
-                                            success
-                                                    ? R.string.aerium_backup_export_done
-                                                    : R.string.aerium_backup_export_failed));
+                            () -> {
+                                showToast(
+                                        success
+                                                ? R.string.aerium_backup_export_done
+                                                : R.string.aerium_backup_export_failed);
+                                refreshPanel();
+                            });
                 });
     }
 
-    private void readBackup(Uri uri) {
+    private static final class CountingOutputStream extends FilterOutputStream {
+        private long mCount;
+
+        CountingOutputStream(OutputStream out) {
+            super(out);
+        }
+
+        @Override
+        public void write(int b) throws IOException {
+            out.write(b);
+            mCount++;
+        }
+
+        @Override
+        public void write(byte[] b, int off, int len) throws IOException {
+            out.write(b, off, len);
+            mCount += len;
+        }
+
+        long count() {
+            return mCount;
+        }
+    }
+
+    private static byte[] randomBytes(int length) {
+        byte[] bytes = new byte[length];
+        new SecureRandom().nextBytes(bytes);
+        return bytes;
+    }
+
+    private static Cipher lockCipher(int mode, char[] passphrase, byte[] salt, byte[] iv)
+            throws GeneralSecurityException {
+        PBEKeySpec spec = new PBEKeySpec(passphrase, salt, LOCK_ROUNDS, LOCK_KEY_BITS);
+        byte[] key;
+        try {
+            key =
+                    SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
+                            .generateSecret(spec)
+                            .getEncoded();
+        } finally {
+            spec.clearPassword();
+        }
+        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+        cipher.init(mode, new SecretKeySpec(key, "AES"), new GCMParameterSpec(LOCK_TAG_BITS, iv));
+        Arrays.fill(key, (byte) 0);
+        return cipher;
+    }
+
+    private static String placeOf(Context context, Uri uri) {
+        try {
+            if (DocumentsContract.isDocumentUri(context, uri)) {
+                String id = DocumentsContract.getDocumentId(uri);
+                String authority = uri.getAuthority();
+                if ("com.android.externalstorage.documents".equals(authority)) {
+                    int colon = id.indexOf(':');
+                    String path = colon >= 0 ? id.substring(colon + 1) : id;
+                    int slash = path.lastIndexOf('/');
+                    if (slash > 0) return path.substring(0, slash);
+                } else if ("com.android.providers.downloads.documents".equals(authority)) {
+                    if (id.startsWith("raw:")) {
+                        File parent = new File(id.substring(4)).getParentFile();
+                        if (parent != null) return parent.getName();
+                    }
+                    return "Download";
+                }
+            }
+        } catch (RuntimeException e) {
+        }
+        String[] columns = {OpenableColumns.DISPLAY_NAME};
+        try (Cursor cursor =
+                context.getContentResolver().query(uri, columns, null, null, null)) {
+            if (cursor != null && cursor.moveToFirst()) {
+                String name = cursor.getString(0);
+                if (name != null && !name.isEmpty()) return name;
+            }
+        } catch (RuntimeException e) {
+        }
+        String segment = uri.getLastPathSegment();
+        return segment == null ? "" : segment;
+    }
+
+    private static int readUpTo(InputStream in, byte[] buffer) throws IOException {
+        int total = 0;
+        while (total < buffer.length) {
+            int read = in.read(buffer, total, buffer.length - total);
+            if (read < 0) break;
+            total += read;
+        }
+        return total;
+    }
+
+    private void readBackup(Uri uri, char @Nullable [] passphrase) {
         Context context = getContext();
-        if (context == null) return;
+        if (context == null) {
+            if (passphrase != null) Arrays.fill(passphrase, '\0');
+            return;
+        }
         PostTask.postTask(
                 TaskTraits.BEST_EFFORT_MAY_BLOCK,
                 () -> {
                     String json = null;
+                    boolean needsPassphrase = false;
+                    boolean wrongPassphrase = false;
                     try (InputStream raw = context.getContentResolver().openInputStream(uri)) {
                         if (raw == null) throw new IOException("no input stream for " + uri);
                         BufferedInputStream in = new BufferedInputStream(raw);
-                        in.mark(4);
-                        int first = in.read();
-                        int second = in.read();
+                        in.mark(LOCK_MAGIC.length);
+                        byte[] head = new byte[LOCK_MAGIC.length];
+                        int headLength = readUpTo(in, head);
                         in.reset();
+                        InputStream source = in;
+                        if (headLength == LOCK_MAGIC.length && Arrays.equals(head, LOCK_MAGIC)) {
+                            if (passphrase == null) {
+                                needsPassphrase = true;
+                                throw new IOException("locked backup");
+                            }
+                            DataInputStream data = new DataInputStream(in);
+                            data.readFully(head);
+                            if (data.read() != LOCK_FORMAT) throw new IOException("unknown lock");
+                            byte[] salt = new byte[LOCK_SALT_BYTES];
+                            byte[] iv = new byte[LOCK_IV_BYTES];
+                            data.readFully(salt);
+                            data.readFully(iv);
+                            byte[] sealed = AeriumExtensionBackup.readAll(data);
+                            byte[] plain;
+                            try {
+                                plain =
+                                        lockCipher(Cipher.DECRYPT_MODE, passphrase, salt, iv)
+                                                .doFinal(sealed);
+                            } catch (GeneralSecurityException e) {
+                                wrongPassphrase = true;
+                                throw new IOException("cannot unlock", e);
+                            }
+                            source = new BufferedInputStream(new ByteArrayInputStream(plain));
+                        }
+                        source.mark(4);
+                        int first = source.read();
+                        int second = source.read();
+                        source.reset();
                         if (first == 'P' && second == 'K') {
-                            json = AeriumExtensionBackup.readZip(in);
+                            json = AeriumExtensionBackup.readZip(source);
                         } else {
                             json =
                                     new String(
-                                            AeriumExtensionBackup.readAll(in),
+                                            AeriumExtensionBackup.readAll(source),
                                             StandardCharsets.UTF_8);
                         }
                     } catch (IOException e) {
                         json = null;
+                    } finally {
+                        if (passphrase != null) Arrays.fill(passphrase, '\0');
                     }
                     String finalJson = json;
+                    boolean askPassphrase = needsPassphrase;
+                    boolean wrong = wrongPassphrase;
                     PostTask.postTask(
                             TaskTraits.UI_DEFAULT,
                             () -> {
+                                if (askPassphrase) {
+                                    if (getContext() != null) showUnlockDialog(uri);
+                                    return;
+                                }
                                 if (finalJson == null) {
                                     discardStaged();
-                                    showToast(R.string.aerium_backup_restore_failed);
+                                    showToast(
+                                            wrong
+                                                    ? R.string.aerium_backup_pass_wrong
+                                                    : R.string.aerium_backup_restore_failed);
                                     return;
                                 }
                                 try {
@@ -8919,24 +9544,33 @@ public class AeriumBackupFragment extends ChromeBaseSettingsFragment {
         return profile == null ? null : UserPrefs.get(profile);
     }
 
-    private JSONObject buildBackup() throws JSONException {
+    private JSONObject buildBackup(@Nullable JSONObject bookmarks) throws JSONException {
         JSONObject root = new JSONObject();
         root.put("aerium_backup_version", BACKUP_VERSION);
-        root.put("tabs", collectTabs());
-        root.put("permissions", collectPermissions());
-        root.put("permission_defaults", collectPermissionDefaults());
-        root.put("extensions", AeriumExtensionBackup.collect(getProfilePrefs()));
-        JSONObject settings = new JSONObject();
-        settings.put("shared_preferences", collectSharedPreferences());
-        settings.put("profile_prefs", collectPrefs(getProfilePrefs(), PROFILE_PREFS));
-        settings.put("local_state_prefs", collectPrefs(LocalStatePrefs.get(), LOCAL_STATE_PREFS));
-        root.put("settings", settings);
+        if (isIncluded(INCLUDE_TABS)) root.put("tabs", collectTabs());
+        if (isIncluded(INCLUDE_SITES)) {
+            root.put("permissions", collectPermissions());
+            root.put("permission_defaults", collectPermissionDefaults());
+            root.put("site_prefs", collectPrefs(getProfilePrefs(), SITE_PROFILE_PREFS));
+        }
+        if (isIncluded(INCLUDE_EXTENSIONS)) {
+            root.put("extensions", AeriumExtensionBackup.collect(getProfilePrefs()));
+        }
+        if (bookmarks != null) root.put("bookmarks", bookmarks);
+        if (isIncluded(INCLUDE_SETTINGS)) {
+            JSONObject settings = new JSONObject();
+            settings.put("shared_preferences", collectSharedPreferences());
+            settings.put("profile_prefs", collectPrefs(getProfilePrefs(), PROFILE_PREFS));
+            settings.put(
+                    "local_state_prefs", collectPrefs(LocalStatePrefs.get(), LOCAL_STATE_PREFS));
+            root.put("settings", settings);
+        }
         return root;
     }
 
     private void applyBackup(JSONObject root) throws JSONException {
         JSONObject settings = root.optJSONObject("settings");
-        if (settings != null) {
+        if (settings != null && isIncluded(INCLUDE_SETTINGS)) {
             JSONArray sharedPrefs = settings.optJSONArray("shared_preferences");
             if (sharedPrefs != null) restoreSharedPreferences(sharedPrefs);
 
@@ -8949,21 +9583,124 @@ public class AeriumBackupFragment extends ChromeBaseSettingsFragment {
             }
         }
 
-        JSONArray permissionDefaults = root.optJSONArray("permission_defaults");
-        if (permissionDefaults != null) restorePermissionDefaults(permissionDefaults);
+        if (isIncluded(INCLUDE_SITES)) {
+            JSONArray sitePrefs = root.optJSONArray("site_prefs");
+            if (sitePrefs == null && settings != null) {
+                sitePrefs = settings.optJSONArray("profile_prefs");
+            }
+            if (sitePrefs != null) restorePrefs(getProfilePrefs(), SITE_PROFILE_PREFS, sitePrefs);
 
-        JSONArray permissions = root.optJSONArray("permissions");
-        if (permissions != null) restorePermissions(permissions);
+            JSONArray permissionDefaults = root.optJSONArray("permission_defaults");
+            if (permissionDefaults != null) restorePermissionDefaults(permissionDefaults);
+
+            JSONArray permissions = root.optJSONArray("permissions");
+            if (permissions != null) restorePermissions(permissions);
+        }
 
         JSONArray tabs = root.optJSONArray("tabs");
-        if (tabs != null) restoreTabs(tabs);
+        if (tabs != null && isIncluded(INCLUDE_TABS)) restoreTabs(tabs);
+
+        JSONObject bookmarks = root.optJSONObject("bookmarks");
+        if (bookmarks != null && isIncluded(INCLUDE_BOOKMARKS)) restoreBookmarks(bookmarks);
 
         AeriumToolbarPrefs.refreshCache();
-        mManual =
-                AeriumExtensionBackup.queueInstalls(
-                        root.optJSONArray("extensions"), getProfilePrefs());
+        if (isIncluded(INCLUDE_EXTENSIONS)) {
+            mManual =
+                    AeriumExtensionBackup.queueInstalls(
+                            root.optJSONArray("extensions"), getProfilePrefs());
+        } else {
+            mManual = new java.util.ArrayList<>();
+            discardStaged();
+        }
         mWatchInstalls = true;
         updateInstallRows();
+    }
+
+    private static JSONObject collectBookmarks(BookmarkModel model) throws JSONException {
+        JSONObject result = new JSONObject();
+        result.put("bar", collectFolder(model, model.getDesktopFolderId(), 0));
+        result.put("other", collectFolder(model, model.getOtherFolderId(), 0));
+        result.put("mobile", collectFolder(model, model.getMobileFolderId(), 0));
+        return result;
+    }
+
+    private static JSONArray collectFolder(
+            BookmarkModel model, @Nullable BookmarkId folder, int depth) throws JSONException {
+        JSONArray array = new JSONArray();
+        if (folder == null || depth > MAX_BOOKMARK_DEPTH) return array;
+        for (BookmarkId id : model.getChildIds(folder)) {
+            BookmarkItem item = model.getBookmarkById(id);
+            if (item == null || item.isManaged()) continue;
+            JSONObject entry = new JSONObject();
+            entry.put("title", item.getTitle());
+            if (item.isFolder()) {
+                entry.put("children", collectFolder(model, id, depth + 1));
+            } else {
+                GURL url = item.getUrl();
+                if (!url.isValid() || url.getSpec().isEmpty()) continue;
+                entry.put("url", url.getSpec());
+            }
+            array.put(entry);
+        }
+        return array;
+    }
+
+    private void restoreBookmarks(JSONObject bookmarks) {
+        Profile profile = getProfile();
+        if (profile == null) return;
+        BookmarkModel model = BookmarkModel.getForProfile(profile);
+        model.finishLoadingBookmarkModel(
+                () -> {
+                    if (!model.isEditBookmarksEnabled()) return;
+                    mergeFolder(
+                            model, model.getDesktopFolderId(), bookmarks.optJSONArray("bar"), 0);
+                    mergeFolder(
+                            model, model.getOtherFolderId(), bookmarks.optJSONArray("other"), 0);
+                    mergeFolder(
+                            model, model.getMobileFolderId(), bookmarks.optJSONArray("mobile"), 0);
+                });
+    }
+
+    private static void mergeFolder(
+            BookmarkModel model,
+            @Nullable BookmarkId folder,
+            @Nullable JSONArray items,
+            int depth) {
+        if (folder == null || items == null || depth > MAX_BOOKMARK_DEPTH) return;
+        for (int i = 0; i < items.length(); i++) {
+            JSONObject item = items.optJSONObject(i);
+            if (item == null) continue;
+            String title = item.optString("title", "");
+            JSONArray children = item.optJSONArray("children");
+            if (children != null) {
+                BookmarkId child = findChild(model, folder, title, null);
+                if (child == null) {
+                    child = model.addFolder(folder, model.getChildCount(folder), title);
+                }
+                mergeFolder(model, child, children, depth + 1);
+                continue;
+            }
+            String spec = item.optString("url", "");
+            if (spec.isEmpty()) continue;
+            GURL url = new GURL(spec);
+            if (!url.isValid() || isInternalScheme(url.getScheme())) continue;
+            if (findChild(model, folder, title, url) != null) continue;
+            model.addBookmark(folder, model.getChildCount(folder), title, url);
+        }
+    }
+
+    private static @Nullable BookmarkId findChild(
+            BookmarkModel model, BookmarkId folder, String title, @Nullable GURL url) {
+        for (BookmarkId id : model.getChildIds(folder)) {
+            BookmarkItem child = model.getBookmarkById(id);
+            if (child == null) continue;
+            if (url == null) {
+                if (child.isFolder() && title.equals(child.getTitle())) return id;
+            } else if (!child.isFolder() && url.getSpec().equals(child.getUrl().getSpec())) {
+                return id;
+            }
+        }
+        return null;
     }
 
     private static boolean isInternalScheme(@Nullable String scheme) {
@@ -9107,7 +9844,9 @@ public class AeriumBackupFragment extends ChromeBaseSettingsFragment {
     }
 
     private static boolean isBackedUpSharedPreference(String key) {
-        return key.startsWith(SHARED_PREF_PREFIX) || Arrays.asList(STOCK_SHARED_PREFS).contains(key);
+        if (key.startsWith(OWN_PREF_PREFIX)) return false;
+        return key.startsWith(SHARED_PREF_PREFIX)
+                || Arrays.asList(STOCK_SHARED_PREFS).contains(key);
     }
 
     private JSONArray collectSharedPreferences() throws JSONException {
@@ -14256,6 +14995,243 @@ perl -0777 -pi -e '
 echo "[aerium] canvas palette, font and settings look applied"
 
 AERIUM_CANVAS_DRAWABLES=chrome/android/java/res/drawable
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_backup_up.xml <<'AERIUM_IC_BACKUP_UP_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/aeriumOnAcc"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M12 15V4" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/aeriumOnAcc"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M7 8l5-5 5 5" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/aeriumOnAcc"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M5 14v6h14v-6" />
+</vector>
+AERIUM_IC_BACKUP_UP_XML
+
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_backup_restore.xml <<'AERIUM_IC_BACKUP_RESTORE_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M12 4v11" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M7 10l5 5 5-5" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M5 20h14" />
+</vector>
+AERIUM_IC_BACKUP_RESTORE_XML
+
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_backup_settings.xml <<'AERIUM_IC_BACKUP_SETTINGS_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M9,12a3,3 0,1 0,6,0a3,3 0,1 0,-6,0Z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8" />
+</vector>
+AERIUM_IC_BACKUP_SETTINGS_XML
+
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_backup_sites.xml <<'AERIUM_IC_BACKUP_SITES_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M3.5,12a8.5,8.5 0,1 0,17,0a8.5,8.5 0,1 0,-17,0Z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M3.5 12h17" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M12 3.5a13 13 0 0 1 0 17a13 13 0 0 1 0-17" />
+</vector>
+AERIUM_IC_BACKUP_SITES_XML
+
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_backup_tabs.xml <<'AERIUM_IC_BACKUP_TABS_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="20"
+    android:viewportHeight="20">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="butt"
+        android:strokeLineJoin="miter"
+        android:pathData="M6,0.875h8a5.125,5.125 0,0 1,5.125,5.125v8a5.125,5.125 0,0 1,-5.125,5.125h-8a5.125,5.125 0,0 1,-5.125,-5.125v-8a5.125,5.125 0,0 1,5.125,-5.125Z" />
+</vector>
+AERIUM_IC_BACKUP_TABS_XML
+
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_backup_bookmarks.xml <<'AERIUM_IC_BACKUP_BOOKMARKS_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M7 4h10v16l-5-4-5 4z" />
+</vector>
+AERIUM_IC_BACKUP_BOOKMARKS_XML
+
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_backup_extensions.xml <<'AERIUM_IC_BACKUP_EXTENSIONS_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M10 4H6a2 2 0 0 0-2 2v4" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M14 4h4a2 2 0 0 1 2 2v4" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M10 20H6a2 2 0 0 1-2-2v-4" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M14 20h4a2 2 0 0 0 2-2v-4" />
+</vector>
+AERIUM_IC_BACKUP_EXTENSIONS_XML
+
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_backup_lock.xml <<'AERIUM_IC_BACKUP_LOCK_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M7,11h10a2,2 0,0 1,2,2v5a2,2 0,0 1,-2,2h-10a2,2 0,0 1,-2,-2v-5a2,2 0,0 1,2,-2Z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M8 11V8a4 4 0 0 1 8 0v3" />
+</vector>
+AERIUM_IC_BACKUP_LOCK_XML
+
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_backup_reinstall.xml <<'AERIUM_IC_BACKUP_REINSTALL_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="15dp"
+    android:height="15dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurfaceVariant"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M19.5 12a7.5 7.5 0 1 1-2.2-5.3" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurfaceVariant"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M20 4v4h-4" />
+</vector>
+AERIUM_IC_BACKUP_REINSTALL_XML
+
 cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_update_daily.xml <<'AERIUM_IC_UPDATE_DAILY_XML'
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
@@ -15759,7 +16735,7 @@ cat > $AERIUM_CANVAS_DRAWABLES/aerium_settings_find.xml <<'AERIUM_SETTINGS_FIND_
 </vector>
 AERIUM_SETTINGS_FIND_XML
 
-sed_i 's|^  "java/res/drawable/acute_24dp.xml",$|  "java/res/drawable/aerium_about_logo.xml",\n  "java/res/drawable/aerium_ic_about.xml",\n  "java/res/drawable/aerium_ic_accessibility.xml",\n  "java/res/drawable/aerium_ic_aerogel.xml",\n  "java/res/drawable/aerium_ic_aerogel_lock.xml",\n  "java/res/drawable/aerium_ic_appearance.xml",\n  "java/res/drawable/aerium_ic_backup.xml",\n  "java/res/drawable/aerium_ic_build_changes.xml",\n  "java/res/drawable/aerium_ic_clear_browsing.xml",\n  "java/res/drawable/aerium_ic_clear_site.xml",\n  "java/res/drawable/aerium_ic_close_tabs.xml",\n  "java/res/drawable/aerium_ic_cookies.xml",\n  "java/res/drawable/aerium_ic_default_browser.xml",\n  "java/res/drawable/aerium_ic_delete_on_exit.xml",\n  "java/res/drawable/aerium_ic_developer.xml",\n  "java/res/drawable/aerium_ic_do_not_track.xml",\n  "java/res/drawable/aerium_ic_downloads.xml",\n  "java/res/drawable/aerium_ic_extensions.xml",\n  "java/res/drawable/aerium_ic_fingerprint.xml",\n  "java/res/drawable/aerium_ic_gpc.xml",\n  "java/res/drawable/aerium_ic_guard.xml",\n  "java/res/drawable/aerium_ic_guard_import.xml",\n  "java/res/drawable/aerium_ic_guard_paste.xml",\n  "java/res/drawable/aerium_ic_guard_performance.xml",\n  "java/res/drawable/aerium_ic_guard_privacy.xml",\n  "java/res/drawable/aerium_ic_guard_profile.xml",\n  "java/res/drawable/aerium_ic_guard_recommended.xml",\n  "java/res/drawable/aerium_ic_guard_save.xml",\n  "java/res/drawable/aerium_ic_guard_security.xml",\n  "java/res/drawable/aerium_ic_guard_status.xml",\n  "java/res/drawable/aerium_ic_https_first.xml",\n  "java/res/drawable/aerium_ic_languages.xml",\n  "java/res/drawable/aerium_ic_legal.xml",\n  "java/res/drawable/aerium_ic_media.xml",\n  "java/res/drawable/aerium_ic_notifications.xml",\n  "java/res/drawable/aerium_ic_obtainium.xml",\n  "java/res/drawable/aerium_ic_open_in_apps.xml",\n  "java/res/drawable/aerium_ic_privacy.xml",\n  "java/res/drawable/aerium_ic_project.xml",\n  "java/res/drawable/aerium_ic_referrer.xml",\n  "java/res/drawable/aerium_ic_safe_browsing.xml",\n  "java/res/drawable/aerium_ic_search.xml",\n  "java/res/drawable/aerium_ic_secure_dns.xml",\n  "java/res/drawable/aerium_ic_share_aerium.xml",\n  "java/res/drawable/aerium_ic_site_rules.xml",\n  "java/res/drawable/aerium_ic_sites.xml",\n  "java/res/drawable/aerium_ic_support.xml",\n  "java/res/drawable/aerium_ic_tabs.xml",\n  "java/res/drawable/aerium_ic_toolbar.xml",\n  "java/res/drawable/aerium_ic_up_to_date.xml",\n  "java/res/drawable/aerium_ic_update_daily.xml",\n  "java/res/drawable/aerium_ic_web_apps.xml",\n  "java/res/drawable/aerium_ic_webrtc.xml",\n  "java/res/drawable/aerium_ic_what_to_delete.xml",\n  "java/res/drawable/aerium_settings_find.xml",\n&|' \
+sed_i 's|^  "java/res/drawable/acute_24dp.xml",$|  "java/res/drawable/aerium_about_logo.xml",\n  "java/res/drawable/aerium_ic_about.xml",\n  "java/res/drawable/aerium_ic_accessibility.xml",\n  "java/res/drawable/aerium_ic_aerogel.xml",\n  "java/res/drawable/aerium_ic_aerogel_lock.xml",\n  "java/res/drawable/aerium_ic_appearance.xml",\n  "java/res/drawable/aerium_ic_backup.xml",\n  "java/res/drawable/aerium_ic_backup_bookmarks.xml",\n  "java/res/drawable/aerium_ic_backup_extensions.xml",\n  "java/res/drawable/aerium_ic_backup_lock.xml",\n  "java/res/drawable/aerium_ic_backup_reinstall.xml",\n  "java/res/drawable/aerium_ic_backup_restore.xml",\n  "java/res/drawable/aerium_ic_backup_settings.xml",\n  "java/res/drawable/aerium_ic_backup_sites.xml",\n  "java/res/drawable/aerium_ic_backup_tabs.xml",\n  "java/res/drawable/aerium_ic_backup_up.xml",\n  "java/res/drawable/aerium_ic_build_changes.xml",\n  "java/res/drawable/aerium_ic_clear_browsing.xml",\n  "java/res/drawable/aerium_ic_clear_site.xml",\n  "java/res/drawable/aerium_ic_close_tabs.xml",\n  "java/res/drawable/aerium_ic_cookies.xml",\n  "java/res/drawable/aerium_ic_default_browser.xml",\n  "java/res/drawable/aerium_ic_delete_on_exit.xml",\n  "java/res/drawable/aerium_ic_developer.xml",\n  "java/res/drawable/aerium_ic_do_not_track.xml",\n  "java/res/drawable/aerium_ic_downloads.xml",\n  "java/res/drawable/aerium_ic_extensions.xml",\n  "java/res/drawable/aerium_ic_fingerprint.xml",\n  "java/res/drawable/aerium_ic_gpc.xml",\n  "java/res/drawable/aerium_ic_guard.xml",\n  "java/res/drawable/aerium_ic_guard_import.xml",\n  "java/res/drawable/aerium_ic_guard_paste.xml",\n  "java/res/drawable/aerium_ic_guard_performance.xml",\n  "java/res/drawable/aerium_ic_guard_privacy.xml",\n  "java/res/drawable/aerium_ic_guard_profile.xml",\n  "java/res/drawable/aerium_ic_guard_recommended.xml",\n  "java/res/drawable/aerium_ic_guard_save.xml",\n  "java/res/drawable/aerium_ic_guard_security.xml",\n  "java/res/drawable/aerium_ic_guard_status.xml",\n  "java/res/drawable/aerium_ic_https_first.xml",\n  "java/res/drawable/aerium_ic_languages.xml",\n  "java/res/drawable/aerium_ic_legal.xml",\n  "java/res/drawable/aerium_ic_media.xml",\n  "java/res/drawable/aerium_ic_notifications.xml",\n  "java/res/drawable/aerium_ic_obtainium.xml",\n  "java/res/drawable/aerium_ic_open_in_apps.xml",\n  "java/res/drawable/aerium_ic_privacy.xml",\n  "java/res/drawable/aerium_ic_project.xml",\n  "java/res/drawable/aerium_ic_referrer.xml",\n  "java/res/drawable/aerium_ic_safe_browsing.xml",\n  "java/res/drawable/aerium_ic_search.xml",\n  "java/res/drawable/aerium_ic_secure_dns.xml",\n  "java/res/drawable/aerium_ic_share_aerium.xml",\n  "java/res/drawable/aerium_ic_site_rules.xml",\n  "java/res/drawable/aerium_ic_sites.xml",\n  "java/res/drawable/aerium_ic_support.xml",\n  "java/res/drawable/aerium_ic_tabs.xml",\n  "java/res/drawable/aerium_ic_toolbar.xml",\n  "java/res/drawable/aerium_ic_up_to_date.xml",\n  "java/res/drawable/aerium_ic_update_daily.xml",\n  "java/res/drawable/aerium_ic_web_apps.xml",\n  "java/res/drawable/aerium_ic_webrtc.xml",\n  "java/res/drawable/aerium_ic_what_to_delete.xml",\n  "java/res/drawable/aerium_settings_find.xml",\n&|' \
     chrome/android/chrome_java_resources.gni
 
 cat > $AERIUM_SETTINGS_RES/drawable/aerium_row_chevron.xml <<'AERIUM_ROW_CHEVRON_XML'
@@ -17195,6 +18171,624 @@ AERIUM_ABOUT_JAVA="$AERIUM_ABOUT_JAVA" perl -0777 -pi -e '
     s{(import org\.chromium\.components\.browser_ui\.settings\.ChromeSwitchPreference;\n)}{import org.chromium.components.browser_ui.settings.ChromeBasePreference;\n$1}
         or die "[aerium] FATAL: AboutChromeSettings imports moved\n";
 ' chrome/android/java/src/org/chromium/chrome/browser/about_settings/AboutChromeSettings.java || return 1
+cat > chrome/android/java/res/drawable/aerium_backup_tile_primary.xml <<'AERIUM_BACKUP_TILE_PRIMARY_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="?attr/colorControlHighlight">
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="22dp" />
+            <solid android:color="?attr/aeriumAcc" />
+        </shape>
+    </item>
+</ripple>
+AERIUM_BACKUP_TILE_PRIMARY_XML
+cat > chrome/android/java/res/drawable/aerium_backup_tile_outline.xml <<'AERIUM_BACKUP_TILE_OUTLINE_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="?attr/colorControlHighlight">
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="22dp" />
+            <solid android:color="?attr/aeriumSf" />
+            <stroke android:width="1dp" android:color="?attr/aeriumLine" />
+        </shape>
+    </item>
+</ripple>
+AERIUM_BACKUP_TILE_OUTLINE_XML
+cat > chrome/android/java/res/drawable/aerium_backup_group.xml <<'AERIUM_BACKUP_GROUP_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="20dp" />
+    <solid android:color="?attr/aeriumSf" />
+</shape>
+AERIUM_BACKUP_GROUP_XML
+cat > chrome/android/java/res/drawable/aerium_backup_row.xml <<'AERIUM_BACKUP_ROW_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="?attr/colorControlHighlight">
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="20dp" />
+            <solid android:color="?attr/aeriumSf" />
+        </shape>
+    </item>
+</ripple>
+AERIUM_BACKUP_ROW_XML
+cat > chrome/android/java/res/drawable/aerium_backup_card_on.xml <<'AERIUM_BACKUP_CARD_ON_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="22dp" />
+    <solid android:color="?attr/aeriumAccSoft" />
+    <stroke android:width="1dp" android:color="?attr/aeriumAcc" />
+</shape>
+AERIUM_BACKUP_CARD_ON_XML
+cat > chrome/android/java/res/drawable/aerium_backup_card_off.xml <<'AERIUM_BACKUP_CARD_OFF_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="22dp" />
+    <solid android:color="?attr/aeriumSf" />
+    <stroke android:width="1dp" android:color="?attr/aeriumLine" />
+</shape>
+AERIUM_BACKUP_CARD_OFF_XML
+cat > chrome/android/java/res/drawable/aerium_backup_ext_tile.xml <<'AERIUM_BACKUP_EXT_TILE_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="9dp" />
+    <solid android:color="@android:color/white" />
+</shape>
+AERIUM_BACKUP_EXT_TILE_XML
+cat > chrome/android/java/res/layout/aerium_backup_panel.xml <<'AERIUM_BACKUP_PANEL_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="16dp"
+    android:orientation="vertical"
+    android:paddingStart="16dp"
+    android:paddingEnd="16dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="96dp"
+        android:orientation="horizontal">
+
+        <LinearLayout
+            android:id="@+id/aerium_backup_up"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_marginEnd="5dp"
+            android:layout_weight="1"
+            android:background="@drawable/aerium_backup_tile_primary"
+            android:clickable="true"
+            android:focusable="true"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:importantForAccessibility="no"
+                android:src="@drawable/aerium_ic_backup_up" />
+
+            <Space
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:layout_weight="1" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:fontFamily="@font/aerium_sans_semibold"
+                android:singleLine="true"
+                android:text="@string/aerium_backup_up"
+                android:textColor="?attr/aeriumOnAcc"
+                android:textFontWeight="600"
+                android:textSize="17sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/aerium_backup_restore"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_marginStart="5dp"
+            android:layout_weight="1"
+            android:background="@drawable/aerium_backup_tile_outline"
+            android:clickable="true"
+            android:focusable="true"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:importantForAccessibility="no"
+                android:src="@drawable/aerium_ic_backup_restore" />
+
+            <Space
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:layout_weight="1" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:fontFamily="@font/aerium_sans_semibold"
+                android:singleLine="true"
+                android:text="@string/aerium_backup_restore"
+                android:textColor="?attr/colorOnSurface"
+                android:textFontWeight="600"
+                android:textSize="17sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/aerium_backup_last"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:paddingStart="4dp"
+        android:paddingEnd="4dp"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        android:textSize="14sp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:accessibilityHeading="true"
+        android:text="@string/aerium_backup_include"
+        android:textAppearance="@style/TextAppearance.AeriumSectionLabel" />
+
+    <LinearLayout
+        android:id="@+id/aerium_backup_include"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:background="@drawable/aerium_backup_group"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:id="@+id/aerium_backup_row_settings"
+            android:layout_width="match_parent"
+            android:layout_height="54dp"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp">
+
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:importantForAccessibility="no"
+                android:src="@drawable/aerium_ic_backup_settings" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="14dp"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:singleLine="true"
+                android:text="@string/aerium_backup_settings"
+                android:textColor="?attr/colorOnSurface"
+                android:textSize="16sp" />
+
+            <CheckBox
+                android:id="@+id/aerium_backup_check_settings"
+                style="@style/Widget.BrowserUI.CheckBox"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="14dp"
+                android:background="@null"
+                android:clickable="false"
+                android:focusable="false"
+                android:importantForAccessibility="no" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="?attr/aeriumLine" />
+
+        <LinearLayout
+            android:id="@+id/aerium_backup_row_sites"
+            android:layout_width="match_parent"
+            android:layout_height="54dp"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp">
+
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:importantForAccessibility="no"
+                android:src="@drawable/aerium_ic_backup_sites" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="14dp"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:singleLine="true"
+                android:text="@string/aerium_backup_sites"
+                android:textColor="?attr/colorOnSurface"
+                android:textSize="16sp" />
+
+            <CheckBox
+                android:id="@+id/aerium_backup_check_sites"
+                style="@style/Widget.BrowserUI.CheckBox"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="14dp"
+                android:background="@null"
+                android:clickable="false"
+                android:focusable="false"
+                android:importantForAccessibility="no" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="?attr/aeriumLine" />
+
+        <LinearLayout
+            android:id="@+id/aerium_backup_row_tabs"
+            android:layout_width="match_parent"
+            android:layout_height="54dp"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp">
+
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:importantForAccessibility="no"
+                android:src="@drawable/aerium_ic_backup_tabs" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="14dp"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:singleLine="true"
+                android:text="@string/aerium_backup_tabs"
+                android:textColor="?attr/colorOnSurface"
+                android:textSize="16sp" />
+
+            <CheckBox
+                android:id="@+id/aerium_backup_check_tabs"
+                style="@style/Widget.BrowserUI.CheckBox"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="14dp"
+                android:background="@null"
+                android:clickable="false"
+                android:focusable="false"
+                android:importantForAccessibility="no" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="?attr/aeriumLine" />
+
+        <LinearLayout
+            android:id="@+id/aerium_backup_row_bookmarks"
+            android:layout_width="match_parent"
+            android:layout_height="54dp"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp">
+
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:importantForAccessibility="no"
+                android:src="@drawable/aerium_ic_backup_bookmarks" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="14dp"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:singleLine="true"
+                android:text="@string/aerium_backup_bookmarks"
+                android:textColor="?attr/colorOnSurface"
+                android:textSize="16sp" />
+
+            <CheckBox
+                android:id="@+id/aerium_backup_check_bookmarks"
+                style="@style/Widget.BrowserUI.CheckBox"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="14dp"
+                android:background="@null"
+                android:clickable="false"
+                android:focusable="false"
+                android:importantForAccessibility="no" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/aerium_backup_extensions"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:background="@drawable/aerium_backup_card_on"
+        android:orientation="vertical"
+        android:paddingStart="14dp"
+        android:paddingTop="14dp"
+        android:paddingEnd="14dp"
+        android:paddingBottom="12dp">
+
+        <LinearLayout
+            android:id="@+id/aerium_backup_row_extensions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:importantForAccessibility="no"
+                android:src="@drawable/aerium_ic_backup_extensions" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="14dp"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:fontFamily="@font/aerium_sans_semibold"
+                android:singleLine="true"
+                android:text="@string/aerium_backup_extensions"
+                android:textColor="?attr/colorOnSurface"
+                android:textFontWeight="600"
+                android:textSize="16sp" />
+
+            <CheckBox
+                android:id="@+id/aerium_backup_check_extensions"
+                style="@style/Widget.BrowserUI.CheckBox"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="14dp"
+                android:background="@null"
+                android:clickable="false"
+                android:focusable="false"
+                android:importantForAccessibility="no" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/aerium_backup_extension_list"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="vertical"
+            android:paddingStart="34dp" />
+
+        <TextView
+            android:id="@+id/aerium_backup_extension_empty"
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:layout_marginTop="8dp"
+            android:gravity="center_vertical"
+            android:paddingStart="34dp"
+            android:text="@string/aerium_backup_no_extensions"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:textSize="15sp"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:id="@+id/aerium_backup_extension_note"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="34dp"
+            android:paddingTop="4dp">
+
+            <ImageView
+                android:layout_width="15dp"
+                android:layout_height="15dp"
+                android:importantForAccessibility="no"
+                android:src="@drawable/aerium_ic_backup_reinstall" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:text="@string/aerium_backup_ext_footer"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:textSize="13sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/aerium_backup_row_lock"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:layout_marginTop="16dp"
+        android:background="@drawable/aerium_backup_row"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="14dp"
+        android:paddingEnd="14dp">
+
+        <ImageView
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:importantForAccessibility="no"
+            android:src="@drawable/aerium_ic_backup_lock" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="14dp"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:singleLine="true"
+            android:text="@string/aerium_backup_lock"
+            android:textColor="?attr/colorOnSurface"
+            android:textSize="16sp" />
+
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/aerium_backup_lock_switch"
+            style="@style/Widget.BrowserUI.Switch"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="14dp"
+            android:layout_marginEnd="-2dp"
+            android:background="@null"
+            android:clickable="false"
+            android:focusable="false"
+            android:importantForAccessibility="no" />
+    </LinearLayout>
+</LinearLayout>
+AERIUM_BACKUP_PANEL_XML
+cat > chrome/android/java/res/layout/aerium_backup_extension_row.xml <<'AERIUM_BACKUP_EXTENSION_ROW_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="40dp"
+    android:gravity="center_vertical"
+    android:orientation="horizontal">
+
+    <TextView
+        android:id="@+id/aerium_backup_ext_mark"
+        android:layout_width="28dp"
+        android:layout_height="28dp"
+        android:background="@drawable/aerium_backup_ext_tile"
+        android:gravity="center"
+        android:importantForAccessibility="no"
+        android:includeFontPadding="false"
+        android:singleLine="true"
+        android:textColor="@android:color/white"
+        android:textFontWeight="700"
+        android:textSize="12sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/aerium_backup_ext_name"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="10dp"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:singleLine="true"
+        android:textColor="?attr/colorOnSurface"
+        android:textSize="15sp" />
+
+    <TextView
+        android:id="@+id/aerium_backup_ext_note"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="10dp"
+        android:maxWidth="160dp"
+        android:ellipsize="end"
+        android:singleLine="true"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        android:textSize="13sp" />
+</LinearLayout>
+AERIUM_BACKUP_EXTENSION_ROW_XML
+cat > chrome/android/java/src/org/chromium/chrome/browser/settings/AeriumBackupPanelPreference.java <<'AERIUM_BACKUP_PANEL_JAVA'
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+package org.chromium.chrome.browser.settings;
+
+import android.content.Context;
+import android.util.AttributeSet;
+import android.view.View;
+
+import androidx.preference.PreferenceViewHolder;
+
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
+import org.chromium.chrome.R;
+import org.chromium.components.browser_ui.settings.ChromeBasePreference;
+
+@NullMarked
+public class AeriumBackupPanelPreference extends ChromeBasePreference {
+    public interface Binder {
+        void bind(View root);
+    }
+
+    private @Nullable Binder mBinder;
+
+    public AeriumBackupPanelPreference(Context context) {
+        this(context, null);
+    }
+
+    public AeriumBackupPanelPreference(Context context, @Nullable AttributeSet attrs) {
+        super(context, attrs);
+        setLayoutResource(R.layout.aerium_backup_panel);
+        setSelectable(false);
+        setPersistent(false);
+    }
+
+    @Override
+    public @BackgroundStyle int getCustomBackgroundStyle() {
+        return BackgroundStyle.NONE;
+    }
+
+    public void setBinder(Binder binder) {
+        mBinder = binder;
+        notifyChanged();
+    }
+
+    public void refresh() {
+        notifyChanged();
+    }
+
+    @Override
+    public void onBindViewHolder(PreferenceViewHolder holder) {
+        super.onBindViewHolder(holder);
+        holder.setDividerAllowedAbove(false);
+        holder.setDividerAllowedBelow(false);
+        Binder binder = mBinder;
+        if (binder != null) binder.bind(holder.itemView);
+    }
+}
+AERIUM_BACKUP_PANEL_JAVA
+sed_i 's|^  "java/src/org/chromium/chrome/browser/browsing_data/BrowsingDataCounterBridge.java",$|  "java/src/org/chromium/chrome/browser/settings/AeriumBackupPanelPreference.java",\n&|' \
+    chrome/android/chrome_java_sources.gni
+sed_i 's|^  "java/res/drawable/acute_24dp.xml",$|  "java/res/drawable/aerium_backup_card_off.xml",\n  "java/res/drawable/aerium_backup_card_on.xml",\n  "java/res/drawable/aerium_backup_ext_tile.xml",\n  "java/res/drawable/aerium_backup_group.xml",\n  "java/res/drawable/aerium_backup_row.xml",\n  "java/res/drawable/aerium_backup_tile_outline.xml",\n  "java/res/drawable/aerium_backup_tile_primary.xml",\n&|' \
+    chrome/android/chrome_java_resources.gni
+sed_i 's|^  "java/res/layout/account_chooser_dialog_item.xml",$|  "java/res/layout/aerium_backup_extension_row.xml",\n  "java/res/layout/aerium_backup_panel.xml",\n&|' \
+    chrome/android/chrome_java_resources.gni
 AERIUM_CANVAS_GRD=$(cat <<'AERIUM_CANVAS_GRD_XML'
       <message name="IDS_AERIUM_SETTINGS_FIND" desc="Placeholder in the search box at the top of Settings.">
         Find a setting
@@ -17336,6 +18930,81 @@ AERIUM_CANVAS_GRD=$(cat <<'AERIUM_CANVAS_GRD_XML'
       </message>
       <message name="IDS_AERIUM_ABOUT_NAME" desc="Product name shown under the logo on the About Aerium screen. Do not translate.">
         Aerium
+      </message>
+      <message name="IDS_AERIUM_BACKUP_SCREEN" desc="Title at the top of the Backup and restore screen.">
+        Backup
+      </message>
+      <message name="IDS_AERIUM_BACKUP_UP" desc="Large button on the Backup screen that saves a backup file.">
+        Back up
+      </message>
+      <message name="IDS_AERIUM_BACKUP_RESTORE" desc="Large button on the Backup screen that reads a saved backup file.">
+        Restore
+      </message>
+      <message name="IDS_AERIUM_BACKUP_LAST" desc="Line on the Backup screen about the newest backup: the day it was made, its file size and the folder it was saved in.">
+        Last backup <ph name="DATE">%1$s<ex>Oct 15</ex></ph> · <ph name="SIZE">%2$s<ex>4.2 MB</ex></ph> · <ph name="PLACE">%3$s<ex>Downloads/Aerium</ex></ph>
+      </message>
+      <message name="IDS_AERIUM_BACKUP_NONE" desc="Line on the Backup screen before any backup was made.">
+        No backup yet
+      </message>
+      <message name="IDS_AERIUM_BACKUP_INCLUDE" desc="Section heading above the list of things a backup can hold.">
+        Include
+      </message>
+      <message name="IDS_AERIUM_BACKUP_SETTINGS" desc="Checkbox row on the Backup screen for browser settings and chrome://flags.">
+        Settings and flags
+      </message>
+      <message name="IDS_AERIUM_BACKUP_SITES" desc="Checkbox row on the Backup screen for per site rules and permissions.">
+        Site rules and permissions
+      </message>
+      <message name="IDS_AERIUM_BACKUP_TABS" desc="Checkbox row on the Backup screen for the tabs that are open.">
+        Open tabs
+      </message>
+      <message name="IDS_AERIUM_BACKUP_BOOKMARKS" desc="Checkbox row on the Backup screen for bookmarks.">
+        Bookmarks
+      </message>
+      <message name="IDS_AERIUM_BACKUP_EXTENSIONS" desc="Checkbox row on the Backup screen for installed extensions and what they store.">
+        Extensions and their data
+      </message>
+      <message name="IDS_AERIUM_BACKUP_EXT_FOOTER" desc="Note under the list of extensions on the Backup screen, saying how they come back after a restore.">
+        Reinstalled from the Web Store, keeps updating
+      </message>
+      <message name="IDS_AERIUM_BACKUP_NO_EXTENSIONS" desc="Shown in the extensions card on the Backup screen when no extension is installed.">
+        No extensions added yet
+      </message>
+      <message name="IDS_AERIUM_BACKUP_NOTE_FILTERS" desc="What a backup keeps for a content blocker extension. Lowercase, shown next to its name.">
+        filters, allowlist
+      </message>
+      <message name="IDS_AERIUM_BACKUP_NOTE_SYNC" desc="What a backup keeps for a bookmark sync extension. Lowercase, shown next to its name.">
+        sync setup
+      </message>
+      <message name="IDS_AERIUM_BACKUP_NOTE_SETTINGS" desc="What a backup keeps for most extensions. Lowercase, shown next to its name.">
+        settings
+      </message>
+      <message name="IDS_AERIUM_BACKUP_NOTE_WIDGETS" desc="What a backup keeps for a new tab page extension. Lowercase, shown next to its name.">
+        widgets, background
+      </message>
+      <message name="IDS_AERIUM_BACKUP_LOCK" desc="Switch on the Backup screen that encrypts backup files with a passphrase.">
+        Lock with a passphrase
+      </message>
+      <message name="IDS_AERIUM_BACKUP_PASS_SET" desc="Title of the dialog that asks for a passphrase before a locked backup is saved.">
+        Choose a passphrase
+      </message>
+      <message name="IDS_AERIUM_BACKUP_PASS_NOTE" desc="Text in the dialog that asks for a new backup passphrase.">
+        You need it to restore this backup. Nobody can recover it for you.
+      </message>
+      <message name="IDS_AERIUM_BACKUP_PASS_ENTER" desc="Title of the dialog that asks for the passphrase of a locked backup file.">
+        Enter the passphrase
+      </message>
+      <message name="IDS_AERIUM_BACKUP_PASS_HINT" desc="Hint in the passphrase field.">
+        Passphrase
+      </message>
+      <message name="IDS_AERIUM_BACKUP_PASS_REPEAT" desc="Hint in the field where the new passphrase is typed a second time.">
+        Repeat passphrase
+      </message>
+      <message name="IDS_AERIUM_BACKUP_PASS_MISMATCH" desc="Error when the two passphrase fields differ.">
+        The two entries are not the same
+      </message>
+      <message name="IDS_AERIUM_BACKUP_PASS_WRONG" desc="Message when a locked backup file cannot be opened with the passphrase given.">
+        Wrong passphrase
       </message>
 AERIUM_CANVAS_GRD_XML
 )
