@@ -14228,6 +14228,517 @@ perl -0777 -pi -e '
 echo "[aerium] canvas palette, font and settings look applied"
 
 AERIUM_CANVAS_DRAWABLES=chrome/android/java/res/drawable
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_secure_dns.xml <<'AERIUM_IC_SECURE_DNS_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="19dp"
+    android:height="19dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M3.5,12a8.5,8.5 0,1 0,17,0a8.5,8.5 0,1 0,-17,0Z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M3.5 12h17" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M12 3.5a13 13 0 0 1 0 17a13 13 0 0 1 0-17" />
+</vector>
+AERIUM_IC_SECURE_DNS_XML
+
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_https_first.xml <<'AERIUM_IC_HTTPS_FIRST_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="19dp"
+    android:height="19dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M7,11h10a2,2 0,0 1,2,2v5a2,2 0,0 1,-2,2h-10a2,2 0,0 1,-2,-2v-5a2,2 0,0 1,2,-2Z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M8 11V8a4 4 0 0 1 8 0v3" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M12 14.5v2" />
+</vector>
+AERIUM_IC_HTTPS_FIRST_XML
+
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_safe_browsing.xml <<'AERIUM_IC_SAFE_BROWSING_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="19dp"
+    android:height="19dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M9,12a3,3 0,1 0,6,0a3,3 0,1 0,-6,0Z" />
+</vector>
+AERIUM_IC_SAFE_BROWSING_XML
+
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_delete_on_exit.xml <<'AERIUM_IC_DELETE_ON_EXIT_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="19dp"
+    android:height="19dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M4 7h16" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M9 7V4h6v3" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M6 7l1 13h10l1-13" />
+</vector>
+AERIUM_IC_DELETE_ON_EXIT_XML
+
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_what_to_delete.xml <<'AERIUM_IC_WHAT_TO_DELETE_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="19dp"
+    android:height="19dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M5 6h14M5 12h14M5 18h9" />
+</vector>
+AERIUM_IC_WHAT_TO_DELETE_XML
+
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_clear_site.xml <<'AERIUM_IC_CLEAR_SITE_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="19dp"
+    android:height="19dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M3.5,12a8.5,8.5 0,1 0,17,0a8.5,8.5 0,1 0,-17,0Z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M12 7.5V12l3 2" />
+</vector>
+AERIUM_IC_CLEAR_SITE_XML
+
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_site_rules.xml <<'AERIUM_IC_SITE_RULES_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="19dp"
+    android:height="19dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M3.5,12a8.5,8.5 0,1 0,17,0a8.5,8.5 0,1 0,-17,0Z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M3.5 12h17" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M12 3.5a13 13 0 0 1 0 17a13 13 0 0 1 0-17" />
+</vector>
+AERIUM_IC_SITE_RULES_XML
+
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_open_in_apps.xml <<'AERIUM_IC_OPEN_IN_APPS_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="19dp"
+    android:height="19dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />
+</vector>
+AERIUM_IC_OPEN_IN_APPS_XML
+
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_gpc.xml <<'AERIUM_IC_GPC_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="19dp"
+    android:height="19dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M12 3l7 3v5c0 5-3.5 8.5-7 10-3.5-1.5-7-5-7-10V6z" />
+</vector>
+AERIUM_IC_GPC_XML
+
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_fingerprint.xml <<'AERIUM_IC_FINGERPRINT_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="19dp"
+    android:height="19dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M6.5 5.5A8 8 0 0 1 20 12v1" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M4 9.5A8 8 0 0 0 4 14" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M8 18.5a14 14 0 0 0 1.5-6.5 2.5 2.5 0 0 1 5 0v1" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M12 12a17 17 0 0 1-2 8" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M17 13.5a20 20 0 0 1-1 6" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M8 10a4.5 4.5 0 0 1 8.5 2" />
+</vector>
+AERIUM_IC_FINGERPRINT_XML
+
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_clear_browsing.xml <<'AERIUM_IC_CLEAR_BROWSING_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="19dp"
+    android:height="19dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M4 7h16" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M9 7V4h6v3" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M6 7l1 13h10l1-13" />
+</vector>
+AERIUM_IC_CLEAR_BROWSING_XML
+
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_cookies.xml <<'AERIUM_IC_COOKIES_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="19dp"
+    android:height="19dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M20.5 12.5A8.5 8.5 0 1 1 11.5 3.5a3 3 0 0 0 4 4 3 3 0 0 0 5 5z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M8,10a1,1 0,1 0,2,0a1,1 0,1 0,-2,0Z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M13,15a1,1 0,1 0,2,0a1,1 0,1 0,-2,0Z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M8,15.5a1,1 0,1 0,2,0a1,1 0,1 0,-2,0Z" />
+</vector>
+AERIUM_IC_COOKIES_XML
+
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_do_not_track.xml <<'AERIUM_IC_DO_NOT_TRACK_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="19dp"
+    android:height="19dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M2.5 12S6 5.5 12 5.5c2 0 3.7.7 5.1 1.7" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M21.5 12s-3.5 6.5-9.5 6.5c-2 0-3.7-.7-5.1-1.7" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M4 20L20 4" />
+</vector>
+AERIUM_IC_DO_NOT_TRACK_XML
+
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_aerogel_lock.xml <<'AERIUM_IC_AEROGEL_LOCK_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="19dp"
+    android:height="19dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M7,11h10a2,2 0,0 1,2,2v5a2,2 0,0 1,-2,2h-10a2,2 0,0 1,-2,-2v-5a2,2 0,0 1,2,-2Z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M8 11V8a4 4 0 0 1 8 0v3" />
+</vector>
+AERIUM_IC_AEROGEL_LOCK_XML
+
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_close_tabs.xml <<'AERIUM_IC_CLOSE_TABS_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="19dp"
+    android:height="19dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M7,5h10a3,3 0,0 1,3,3v8a3,3 0,0 1,-3,3h-10a3,3 0,0 1,-3,-3v-8a3,3 0,0 1,3,-3Z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M10 10l4 4M14 10l-4 4" />
+</vector>
+AERIUM_IC_CLOSE_TABS_XML
+
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_aerogel.xml <<'AERIUM_IC_AEROGEL_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="19dp"
+    android:height="19dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z" />
+    <path
+        android:fillColor="?attr/colorOnSurface"
+        android:pathData="M8.4,10a1.1,1.1 0,1 0,2.2,0a1.1,1.1 0,1 0,-2.2,0Z" />
+    <path
+        android:fillColor="?attr/colorOnSurface"
+        android:pathData="M13.4,11.5a1.1,1.1 0,1 0,2.2,0a1.1,1.1 0,1 0,-2.2,0Z" />
+    <path
+        android:fillColor="?attr/colorOnSurface"
+        android:pathData="M9.9,15a1.1,1.1 0,1 0,2.2,0a1.1,1.1 0,1 0,-2.2,0Z" />
+</vector>
+AERIUM_IC_AEROGEL_XML
+
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_webrtc.xml <<'AERIUM_IC_WEBRTC_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="19dp"
+    android:height="19dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M6,6h7a3,3 0,0 1,3,3v6a3,3 0,0 1,-3,3h-7a3,3 0,0 1,-3,-3v-6a3,3 0,0 1,3,-3Z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M16 10.5l5-3v9l-5-3z" />
+</vector>
+AERIUM_IC_WEBRTC_XML
+
+cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_referrer.xml <<'AERIUM_IC_REFERRER_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="19dp"
+    android:height="19dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M14 4h6v6" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M20 4l-9 9" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="?attr/colorOnSurface"
+        android:strokeWidth="1.75"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
+</vector>
+AERIUM_IC_REFERRER_XML
+
 cat > $AERIUM_CANVAS_DRAWABLES/aerium_ic_guard_recommended.xml <<'AERIUM_IC_GUARD_RECOMMENDED_XML'
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
@@ -14988,7 +15499,7 @@ cat > $AERIUM_CANVAS_DRAWABLES/aerium_settings_find.xml <<'AERIUM_SETTINGS_FIND_
 </vector>
 AERIUM_SETTINGS_FIND_XML
 
-sed_i 's|^  "java/res/drawable/acute_24dp.xml",$|  "java/res/drawable/aerium_ic_about.xml",\n  "java/res/drawable/aerium_ic_accessibility.xml",\n  "java/res/drawable/aerium_ic_appearance.xml",\n  "java/res/drawable/aerium_ic_backup.xml",\n  "java/res/drawable/aerium_ic_default_browser.xml",\n  "java/res/drawable/aerium_ic_developer.xml",\n  "java/res/drawable/aerium_ic_downloads.xml",\n  "java/res/drawable/aerium_ic_extensions.xml",\n  "java/res/drawable/aerium_ic_guard.xml",\n  "java/res/drawable/aerium_ic_guard_import.xml",\n  "java/res/drawable/aerium_ic_guard_paste.xml",\n  "java/res/drawable/aerium_ic_guard_performance.xml",\n  "java/res/drawable/aerium_ic_guard_privacy.xml",\n  "java/res/drawable/aerium_ic_guard_profile.xml",\n  "java/res/drawable/aerium_ic_guard_recommended.xml",\n  "java/res/drawable/aerium_ic_guard_save.xml",\n  "java/res/drawable/aerium_ic_guard_security.xml",\n  "java/res/drawable/aerium_ic_guard_status.xml",\n  "java/res/drawable/aerium_ic_languages.xml",\n  "java/res/drawable/aerium_ic_media.xml",\n  "java/res/drawable/aerium_ic_notifications.xml",\n  "java/res/drawable/aerium_ic_privacy.xml",\n  "java/res/drawable/aerium_ic_search.xml",\n  "java/res/drawable/aerium_ic_sites.xml",\n  "java/res/drawable/aerium_ic_tabs.xml",\n  "java/res/drawable/aerium_ic_toolbar.xml",\n  "java/res/drawable/aerium_ic_web_apps.xml",\n  "java/res/drawable/aerium_settings_find.xml",\n&|' \
+sed_i 's|^  "java/res/drawable/acute_24dp.xml",$|  "java/res/drawable/aerium_ic_about.xml",\n  "java/res/drawable/aerium_ic_accessibility.xml",\n  "java/res/drawable/aerium_ic_aerogel.xml",\n  "java/res/drawable/aerium_ic_aerogel_lock.xml",\n  "java/res/drawable/aerium_ic_appearance.xml",\n  "java/res/drawable/aerium_ic_backup.xml",\n  "java/res/drawable/aerium_ic_clear_browsing.xml",\n  "java/res/drawable/aerium_ic_clear_site.xml",\n  "java/res/drawable/aerium_ic_close_tabs.xml",\n  "java/res/drawable/aerium_ic_cookies.xml",\n  "java/res/drawable/aerium_ic_default_browser.xml",\n  "java/res/drawable/aerium_ic_delete_on_exit.xml",\n  "java/res/drawable/aerium_ic_developer.xml",\n  "java/res/drawable/aerium_ic_do_not_track.xml",\n  "java/res/drawable/aerium_ic_downloads.xml",\n  "java/res/drawable/aerium_ic_extensions.xml",\n  "java/res/drawable/aerium_ic_fingerprint.xml",\n  "java/res/drawable/aerium_ic_gpc.xml",\n  "java/res/drawable/aerium_ic_guard.xml",\n  "java/res/drawable/aerium_ic_guard_import.xml",\n  "java/res/drawable/aerium_ic_guard_paste.xml",\n  "java/res/drawable/aerium_ic_guard_performance.xml",\n  "java/res/drawable/aerium_ic_guard_privacy.xml",\n  "java/res/drawable/aerium_ic_guard_profile.xml",\n  "java/res/drawable/aerium_ic_guard_recommended.xml",\n  "java/res/drawable/aerium_ic_guard_save.xml",\n  "java/res/drawable/aerium_ic_guard_security.xml",\n  "java/res/drawable/aerium_ic_guard_status.xml",\n  "java/res/drawable/aerium_ic_https_first.xml",\n  "java/res/drawable/aerium_ic_languages.xml",\n  "java/res/drawable/aerium_ic_media.xml",\n  "java/res/drawable/aerium_ic_notifications.xml",\n  "java/res/drawable/aerium_ic_open_in_apps.xml",\n  "java/res/drawable/aerium_ic_privacy.xml",\n  "java/res/drawable/aerium_ic_referrer.xml",\n  "java/res/drawable/aerium_ic_safe_browsing.xml",\n  "java/res/drawable/aerium_ic_search.xml",\n  "java/res/drawable/aerium_ic_secure_dns.xml",\n  "java/res/drawable/aerium_ic_site_rules.xml",\n  "java/res/drawable/aerium_ic_sites.xml",\n  "java/res/drawable/aerium_ic_tabs.xml",\n  "java/res/drawable/aerium_ic_toolbar.xml",\n  "java/res/drawable/aerium_ic_web_apps.xml",\n  "java/res/drawable/aerium_ic_webrtc.xml",\n  "java/res/drawable/aerium_ic_what_to_delete.xml",\n  "java/res/drawable/aerium_settings_find.xml",\n&|' \
     chrome/android/chrome_java_resources.gni
 
 cat > $AERIUM_SETTINGS_RES/drawable/aerium_row_chevron.xml <<'AERIUM_ROW_CHEVRON_XML'
@@ -15654,6 +16165,353 @@ sed_i 's|^  "java/res/drawable/acute_24dp.xml",$|  "java/res/drawable/aerium_gua
     chrome/android/chrome_java_resources.gni
 sed_i 's|^  "java/res/layout/account_chooser_dialog_item.xml",$|  "java/res/layout/aerium_guard_status.xml",\n&|' \
     chrome/android/chrome_java_resources.gni
+AERIUM_PRIVACY_XML=chrome/android/java/res/xml/privacy_preferences.xml
+_aerium_privacy_keys=$(grep -o 'android:key="[^"]*"' $AERIUM_PRIVACY_XML | sort | tr '\n' ' ')
+if [ "$_aerium_privacy_keys" != 'android:key="advanced_protection_info" android:key="aerium_clear_on_exit" android:key="clear_browsing_data" android:key="do_not_track" android:key="https_first_mode" android:key="https_first_mode_legacy" android:key="incognito_lock" android:key="javascript_optimizer" android:key="password_leak_detection" android:key="preload_pages" android:key="privacy_guide" android:key="privacy_section" android:key="safe_browsing" android:key="secure_dns" android:key="security_section" android:key="sync_and_services_link" android:key="third_party_cookies" android:key="universal_opt_out" ' ]; then
+    echo "[aerium] FATAL: privacy_preferences.xml has a different set of rows than the canvas layout expects: $_aerium_privacy_keys" >&2
+    return 1
+fi
+cat > $AERIUM_PRIVACY_XML <<'AERIUM_PRIVACY_PREFERENCES_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+Copyright 2022 The Chromium Authors
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file.
+-->
+
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <org.chromium.components.browser_ui.settings.AeriumRowPreference
+        android:key="secure_dns"
+        android:order="1"
+        android:icon="@drawable/aerium_ic_secure_dns"
+        android:title="@string/aerium_privacy_secure_dns"
+        android:fragment="org.chromium.chrome.browser.privacy.secure_dns.SecureDnsSettings" />
+    <org.chromium.components.browser_ui.settings.AeriumRowPreference
+        android:key="https_first_mode"
+        android:order="2"
+        android:icon="@drawable/aerium_ic_https_first"
+        android:title="@string/aerium_privacy_https_first"
+        android:fragment="org.chromium.chrome.browser.ssl.HttpsFirstModeSettingsFragment" />
+    <org.chromium.components.browser_ui.settings.ChromeSwitchPreference
+        android:key="https_first_mode_legacy"
+        android:order="3"
+        android:icon="@drawable/aerium_ic_https_first"
+        android:title="@string/aerium_privacy_https_first" />
+    <org.chromium.components.browser_ui.settings.AeriumRowPreference
+        android:key="safe_browsing"
+        android:order="4"
+        android:icon="@drawable/aerium_ic_safe_browsing"
+        android:title="@string/prefs_safe_browsing_title"
+        android:fragment="org.chromium.chrome.browser.safe_browsing.settings.SafeBrowsingSettingsFragment" />
+
+    <PreferenceCategory
+        android:key="aerium_when_you_leave"
+        android:order="10"
+        android:title="@string/aerium_when_you_leave" />
+    <org.chromium.components.browser_ui.settings.ChromeSwitchPreference
+        android:key="aerium_delete_on_exit"
+        android:order="11"
+        android:icon="@drawable/aerium_ic_delete_on_exit"
+        android:title="@string/aerium_delete_on_exit"
+        android:persistent="false" />
+    <org.chromium.components.browser_ui.settings.AeriumRowPreference
+        android:key="aerium_clear_on_exit"
+        android:order="12"
+        android:icon="@drawable/aerium_ic_what_to_delete"
+        android:title="@string/aerium_what_to_delete"
+        android:fragment="org.chromium.chrome.browser.browsing_data.AeriumClearOnExitFragment" />
+    <org.chromium.components.browser_ui.settings.ChromeSwitchPreference
+        android:key="aerium_clear_site_on_close"
+        android:order="13"
+        android:icon="@drawable/aerium_ic_clear_site"
+        android:title="@string/aerium_clear_site_on_close"
+        android:persistent="false" />
+    <org.chromium.components.browser_ui.settings.AeriumRowPreference
+        android:key="aerium_site_rules"
+        android:order="14"
+        android:icon="@drawable/aerium_ic_site_rules"
+        android:title="@string/aerium_site_rules_title"
+        android:fragment="org.chromium.chrome.browser.browsing_data.AeriumSiteRulesFragment" />
+
+    <PreferenceCategory
+        android:key="aerium_built_in"
+        android:order="20"
+        android:title="@string/aerium_built_in" />
+    <org.chromium.components.browser_ui.settings.AeriumRowPreference
+        android:key="aerium_gpc"
+        android:order="22"
+        android:icon="@drawable/aerium_ic_gpc"
+        android:title="@string/aerium_gpc"
+        android:summary="@string/aerium_always_on"
+        android:persistent="false"
+        android:selectable="false" />
+    <org.chromium.components.browser_ui.settings.AeriumRowPreference
+        android:key="aerium_fingerprint"
+        android:order="23"
+        android:icon="@drawable/aerium_ic_fingerprint"
+        android:title="@string/aerium_fingerprint"
+        android:summary="@string/aerium_always_on"
+        android:persistent="false"
+        android:selectable="false" />
+
+    <org.chromium.components.browser_ui.settings.ChromeBasePreference
+        android:key="aerium_privacy_more"
+        android:order="30"
+        android:layout="@layout/aerium_group_break"
+        android:persistent="false"
+        android:selectable="false"
+        app:backgroundStyle="none" />
+    <org.chromium.components.browser_ui.settings.ChromeBasePreference
+        android:key="clear_browsing_data"
+        android:order="31"
+        android:icon="@drawable/aerium_ic_clear_browsing"
+        android:title="@string/clear_browsing_data_title"
+        android:fragment="org.chromium.chrome.browser.browsing_data.ClearBrowsingDataFragment" />
+    <org.chromium.components.browser_ui.settings.ChromeBasePreference
+        android:key="third_party_cookies"
+        android:order="32"
+        android:icon="@drawable/aerium_ic_cookies"
+        android:title="@string/third_party_cookies_link_row_label"
+        android:fragment="org.chromium.components.browser_ui.site_settings.SingleCategorySettings" />
+    <org.chromium.components.browser_ui.settings.AeriumRowPreference
+        android:key="do_not_track"
+        android:order="33"
+        android:icon="@drawable/aerium_ic_do_not_track"
+        android:title="@string/do_not_track_title"
+        android:fragment="org.chromium.chrome.browser.privacy.settings.DoNotTrackSettings" />
+    <org.chromium.chrome.browser.incognito.reauth.IncognitoReauthSettingSwitchPreference
+        android:key="incognito_lock"
+        android:order="34"
+        android:icon="@drawable/aerium_ic_aerogel_lock"
+        android:title="@string/settings_incognito_tab_lock_title"
+        android:summary="@string/settings_incognito_tab_lock_summary_android_setting_off"
+        android:persistent="false" />
+    <org.chromium.chrome.browser.safety_hub.SafetyHubExpandablePreference
+        android:key="advanced_protection_info"
+        android:order="40"
+        android:title="@string/settings_privacy_and_security_advanced_protection_section_title"/>
+    <org.chromium.components.browser_ui.settings.ChromeBasePreference
+        android:key="preload_pages"
+        android:order="41"
+        android:title="@string/preload_pages_title"
+        android:summary="@string/preload_pages_summary"
+        android:fragment="org.chromium.chrome.browser.prefetch.settings.PreloadPagesSettingsFragment" />
+    <org.chromium.components.browser_ui.settings.ChromeBasePreference
+        android:key="privacy_guide"
+        android:order="42"
+        android:title="@string/privacy_guide_pref_title"
+        android:summary="@string/privacy_guide_pref_summary"
+        android:fragment="org.chromium.chrome.browser.privacy_guide.PrivacyGuideFragment" />
+    <org.chromium.components.browser_ui.settings.ChromeBasePreference
+        android:key="universal_opt_out"
+        android:order="43"
+        android:title="@string/universal_opt_out_title"
+        android:fragment="org.chromium.chrome.browser.privacy.settings.UniversalOptOutSettings" />
+    <org.chromium.components.browser_ui.settings.ChromeBasePreference
+        android:key="javascript_optimizer"
+        android:order="44"
+        android:title="@string/website_settings_privacy_and_security_javascript_optimizer_row_label"
+        android:fragment="org.chromium.components.browser_ui.site_settings.SingleCategorySettings" />
+    <org.chromium.components.browser_ui.settings.ChromeSwitchPreference
+        android:key="password_leak_detection"
+        android:order="45"
+        android:title="@string/passwords_leak_detection_switch_title"
+        android:summary="@string/passwords_leak_detection_switch_summary"
+        android:persistent="false" />
+    <org.chromium.components.browser_ui.settings.TextMessagePreference
+        android:key="sync_and_services_link"
+        android:order="46"
+        android:summary="@string/privacy_sync_and_services_link_legacy"
+        app:allowDividerBelow="false" />
+    <org.chromium.components.browser_ui.settings.ChromeBasePreference
+        android:key="privacy_section"
+        android:order="98"
+        android:layout="@layout/aerium_group_break"
+        android:persistent="false"
+        android:selectable="false"
+        app:backgroundStyle="none" />
+    <org.chromium.components.browser_ui.settings.ChromeBasePreference
+        android:key="security_section"
+        android:order="99"
+        android:layout="@layout/aerium_group_break"
+        android:persistent="false"
+        android:selectable="false"
+        app:backgroundStyle="none" />
+</PreferenceScreen>
+AERIUM_PRIVACY_PREFERENCES_XML
+
+AERIUM_PRIVACY_JAVA=$(cat <<'AERIUM_PRIVACY_ROWS_JAVA'
+    private static final String AERIUM_CLEAR_ON_EXIT = "browser.clear_data.aerium_clear_on_exit";
+    private static final String AERIUM_EPHEMERAL_ALL_SITES =
+            "browser.clear_data.aerium_ephemeral_all_sites";
+    private static final String AERIUM_SITE_RULES = "browser.clear_data.aerium_on_exit.site_rules";
+    private static final String[] AERIUM_EXIT_TYPES = {
+        "browsing_history",
+        "download_history",
+        "cookies",
+        "cache",
+        "form_data",
+        "passwords",
+        "site_settings",
+        "hosted_apps_data",
+    };
+    private static final int[] AERIUM_EXIT_LABELS = {
+        R.string.aerium_exit_history,
+        R.string.aerium_exit_downloads,
+        R.string.aerium_exit_cookies,
+        R.string.aerium_exit_cache,
+        R.string.aerium_exit_forms,
+        R.string.aerium_exit_passwords,
+        R.string.aerium_exit_site_settings,
+        R.string.aerium_exit_apps,
+    };
+
+    private void aeriumArrange() {
+        org.chromium.base.settings.SettingsExtUtils.safelyRemovePreference(
+                this, PREF_UNIVERSAL_OPT_OUT);
+        aeriumPlace("aerium_open_app_links", 21, R.drawable.aerium_ic_open_in_apps);
+        aeriumPlace("search_suggestions", 35, R.drawable.aerium_ic_search);
+        aeriumPlace("close_tabs_on_exit", 36, R.drawable.aerium_ic_close_tabs);
+        aeriumPlace("open_links_in_incognito", 37, R.drawable.aerium_ic_aerogel);
+        aeriumPlace("webrtc_policy", 38, R.drawable.aerium_ic_webrtc);
+        aeriumPlace("cross_origin_referrer_policy", 39, R.drawable.aerium_ic_referrer);
+        Preference openApps = findPreference("aerium_open_app_links");
+        if (openApps != null) {
+            openApps.setTitle(R.string.aerium_open_in_apps);
+            openApps.setSummary((CharSequence) null);
+        }
+        ChromeSwitchPreference onExit = findPreference("aerium_delete_on_exit");
+        if (onExit != null) {
+            onExit.setOnPreferenceChangeListener(
+                    (preference, value) -> {
+                        UserPrefs.get(getProfile()).setBoolean(AERIUM_CLEAR_ON_EXIT, (boolean) value);
+                        return true;
+                    });
+        }
+        ChromeSwitchPreference siteOnClose = findPreference("aerium_clear_site_on_close");
+        if (siteOnClose != null) {
+            siteOnClose.setOnPreferenceChangeListener(
+                    (preference, value) -> {
+                        UserPrefs.get(getProfile())
+                                .setBoolean(AERIUM_EPHEMERAL_ALL_SITES, (boolean) value);
+                        return true;
+                    });
+        }
+    }
+
+    private void aeriumPlace(String key, int order, int icon) {
+        Preference pref = findPreference(key);
+        if (pref == null) return;
+        pref.setOrder(order);
+        pref.setIcon(icon);
+    }
+
+    private void aeriumUpdateValues() {
+        org.chromium.components.prefs.PrefService prefs = UserPrefs.get(getProfile());
+        Preference dns = findPreference(PREF_SECURE_DNS);
+        if (dns != null) {
+            int mode = org.chromium.chrome.browser.privacy.secure_dns.SecureDnsBridge.getMode();
+            String value;
+            if (mode == org.chromium.net.SecureDnsMode.OFF) {
+                value = getString(R.string.text_off);
+            } else if (mode == org.chromium.net.SecureDnsMode.AUTOMATIC) {
+                value = getString(R.string.aerium_onb_dns_auto);
+            } else {
+                String summary = SecureDnsSettings.getSummary(getContext());
+                int dash = summary.indexOf(" - ");
+                value = dash >= 0 ? summary.substring(dash + 3) : summary;
+            }
+            dns.setSummary(value);
+        }
+        Preference https = findPreference(PREF_HTTPS_FIRST_MODE);
+        if (https != null && https.isVisible()) {
+            String summary = HttpsFirstModeSettingsFragment.getSummary(getContext(), getProfile());
+            if (summary.equals(getString(R.string.settings_https_first_mode_enabled_balanced_label))) {
+                https.setSummary(R.string.aerium_https_balanced);
+            } else if (summary.equals(
+                    getString(R.string.settings_https_first_mode_enabled_strict_label))) {
+                https.setSummary(R.string.aerium_https_strict);
+            } else {
+                https.setSummary(R.string.text_off);
+            }
+        }
+        Preference safeBrowsing = findPreference(PREF_SAFE_BROWSING);
+        if (safeBrowsing != null && safeBrowsing.isVisible()) {
+            int state =
+                    new org.chromium.chrome.browser.safe_browsing.SafeBrowsingBridge(getProfile())
+                            .getSafeBrowsingState();
+            safeBrowsing.setSummary(
+                    state
+                                    == org.chromium.chrome.browser.safe_browsing.SafeBrowsingState
+                                            .ENHANCED_PROTECTION
+                            ? R.string.aerium_sb_enhanced
+                            : state
+                                            == org.chromium.chrome.browser.safe_browsing
+                                                    .SafeBrowsingState.STANDARD_PROTECTION
+                                    ? R.string.aerium_sb_standard
+                                    : R.string.text_off);
+        }
+        ChromeSwitchPreference onExit = findPreference("aerium_delete_on_exit");
+        if (onExit != null) onExit.setChecked(prefs.getBoolean(AERIUM_CLEAR_ON_EXIT));
+        Preference what = findPreference("aerium_clear_on_exit");
+        if (what != null) what.setSummary(aeriumExitTypes(prefs));
+        ChromeSwitchPreference siteOnClose = findPreference("aerium_clear_site_on_close");
+        if (siteOnClose != null) siteOnClose.setChecked(prefs.getBoolean(AERIUM_EPHEMERAL_ALL_SITES));
+        Preference rules = findPreference("aerium_site_rules");
+        if (rules != null) {
+            int kept = aeriumKeptSites(prefs);
+            rules.setSummary(kept > 0 ? getString(R.string.aerium_site_rules_kept, kept) : null);
+        }
+        Preference openApps = findPreference("aerium_open_app_links");
+        if (openApps != null) openApps.setSummary((CharSequence) null);
+    }
+
+    private String aeriumExitTypes(org.chromium.components.prefs.PrefService prefs) {
+        java.util.Locale locale = getResources().getConfiguration().getLocales().get(0);
+        boolean lower = !"de".equals(locale.getLanguage());
+        StringBuilder out = new StringBuilder();
+        for (int i = 0; i < AERIUM_EXIT_TYPES.length; i++) {
+            if (!prefs.getBoolean("browser.clear_data.aerium_on_exit." + AERIUM_EXIT_TYPES[i])) {
+                continue;
+            }
+            String label = getString(AERIUM_EXIT_LABELS[i]);
+            if (out.length() > 0) {
+                out.append(", ");
+                if (lower) label = label.toLowerCase(locale);
+            }
+            out.append(label);
+        }
+        return out.toString();
+    }
+
+    private int aeriumKeptSites(org.chromium.components.prefs.PrefService prefs) {
+        try {
+            org.json.JSONArray rules = new org.json.JSONArray(prefs.getString(AERIUM_SITE_RULES));
+            int kept = 0;
+            for (int i = 0; i < rules.length(); i++) {
+                org.json.JSONObject rule = rules.optJSONObject(i);
+                if (rule == null) continue;
+                String mode = rule.optString("mode", "keep");
+                if (mode.isEmpty() || "keep".equals(mode)) kept++;
+            }
+            return kept;
+        } catch (org.json.JSONException e) {
+            return 0;
+        }
+    }
+
+AERIUM_PRIVACY_ROWS_JAVA
+)
+AERIUM_PRIVACY_JAVA="$AERIUM_PRIVACY_JAVA" perl -0777 -pi -e '
+    s{(        PrivacySettingsExt\.removePreferences\(this\);\n)}{$1        aeriumArrange();\n}
+        or die "[aerium] FATAL: PrivacySettings no longer calls PrivacySettingsExt.removePreferences()\n";
+    s{(        PrivacySettingsExt\.updatePreferences\(this, getProfile\(\)\);\n)}{$1        aeriumUpdateValues();\n}
+        or die "[aerium] FATAL: PrivacySettings no longer calls PrivacySettingsExt.updatePreferences()\n";
+    s{(    /\*\* Shows the advanced-protection-section if needed\. \*/\n)}{$ENV{AERIUM_PRIVACY_JAVA}$1}
+        or die "[aerium] FATAL: PrivacySettings.maybeShowAdvancedProtectionSection() moved\n";
+' chrome/android/java/src/org/chromium/chrome/browser/privacy/settings/PrivacySettings.java || return 1
 AERIUM_CANVAS_GRD=$(cat <<'AERIUM_CANVAS_GRD_XML'
       <message name="IDS_AERIUM_SETTINGS_FIND" desc="Placeholder in the search box at the top of Settings.">
         Find a setting
@@ -15696,6 +16554,78 @@ AERIUM_CANVAS_GRD=$(cat <<'AERIUM_CANVAS_GRD_XML'
       </message>
       <message name="IDS_AERIUM_GUARD_IMPORT_CLIPBOARD" desc="Row on the Aerium Guard screen that adds a profile copied to the clipboard.">
         Import from clipboard
+      </message>
+      <message name="IDS_AERIUM_PRIVACY_SECURE_DNS" desc="Row on the Privacy and security screen that opens the secure DNS settings.">
+        Secure DNS
+      </message>
+      <message name="IDS_AERIUM_PRIVACY_HTTPS_FIRST" desc="Row on the Privacy and security screen that opens the HTTPS-First Mode settings.">
+        HTTPS first
+      </message>
+      <message name="IDS_AERIUM_HTTPS_BALANCED" desc="Value next to HTTPS first when the balanced mode is on.">
+        Balanced
+      </message>
+      <message name="IDS_AERIUM_HTTPS_STRICT" desc="Value next to HTTPS first when the strict mode is on.">
+        Strict
+      </message>
+      <message name="IDS_AERIUM_SB_STANDARD" desc="Value next to Safe Browsing when standard protection is on.">
+        Standard
+      </message>
+      <message name="IDS_AERIUM_SB_ENHANCED" desc="Value next to Safe Browsing when enhanced protection is on.">
+        Enhanced
+      </message>
+      <message name="IDS_AERIUM_WHEN_YOU_LEAVE" desc="Section heading on the Privacy and security screen for what happens when you close Aerium or a site.">
+        When you leave
+      </message>
+      <message name="IDS_AERIUM_DELETE_ON_EXIT" desc="Switch that deletes browsing data each time Aerium closes.">
+        Delete data on exit
+      </message>
+      <message name="IDS_AERIUM_WHAT_TO_DELETE" desc="Row that opens the choice of which kinds of data are deleted when Aerium closes.">
+        What to delete
+      </message>
+      <message name="IDS_AERIUM_CLEAR_SITE_ON_CLOSE" desc="Switch that deletes a site's cookies and storage once its last tab is closed.">
+        Clear a site when its tabs close
+      </message>
+      <message name="IDS_AERIUM_SITE_RULES_KEPT" desc="Value next to Site rules. COUNT is how many sites keep their data.">
+        <ph name="COUNT">%1$d<ex>3</ex></ph> kept
+      </message>
+      <message name="IDS_AERIUM_BUILT_IN" desc="Section heading on the Privacy and security screen for protections that are always on.">
+        Built in
+      </message>
+      <message name="IDS_AERIUM_OPEN_IN_APPS" desc="Switch that lets installed apps open links they support.">
+        Open links in apps
+      </message>
+      <message name="IDS_AERIUM_GPC" desc="Name of the Global Privacy Control signal. Usually left as is.">
+        Global Privacy Control
+      </message>
+      <message name="IDS_AERIUM_FINGERPRINT" desc="Row naming the protection against browser fingerprinting.">
+        Fingerprint protection
+      </message>
+      <message name="IDS_AERIUM_ALWAYS_ON" desc="Value next to a protection that cannot be turned off.">
+        Always on
+      </message>
+      <message name="IDS_AERIUM_EXIT_HISTORY" desc="Short name of browsing history, shown in the list of data deleted on exit.">
+        History
+      </message>
+      <message name="IDS_AERIUM_EXIT_DOWNLOADS" desc="Short name of download history, shown in the list of data deleted on exit.">
+        Downloads
+      </message>
+      <message name="IDS_AERIUM_EXIT_COOKIES" desc="Short name of cookies and site data, shown in the list of data deleted on exit.">
+        Cookies
+      </message>
+      <message name="IDS_AERIUM_EXIT_CACHE" desc="Short name of cached images and files, shown in the list of data deleted on exit.">
+        Cache
+      </message>
+      <message name="IDS_AERIUM_EXIT_FORMS" desc="Short name of saved form data, shown in the list of data deleted on exit.">
+        Forms
+      </message>
+      <message name="IDS_AERIUM_EXIT_PASSWORDS" desc="Short name of saved passwords, shown in the list of data deleted on exit.">
+        Passwords
+      </message>
+      <message name="IDS_AERIUM_EXIT_SITE_SETTINGS" desc="Short name of site permissions, shown in the list of data deleted on exit.">
+        Site settings
+      </message>
+      <message name="IDS_AERIUM_EXIT_APPS" desc="Short name of hosted app data, shown in the list of data deleted on exit.">
+        App data
       </message>
 AERIUM_CANVAS_GRD_XML
 )
