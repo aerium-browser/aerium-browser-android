@@ -264,1243 +264,76 @@ sed_i 's|^    ChromeAutofillClient::CreateForWebContents(web_contents);$|&\n#if 
 # Java with treat_warnings_as_errors while errorprone maps UnusedMethod to a
 # warning, so dead private methods fail the build. Returning false keeps every
 # call site in place and simply never reaches them.
-cat > chrome/browser/ui/webui/aerium_first_run.h <<'AERIUM_FIRST_RUN_H'
-#ifndef CHROME_BROWSER_UI_WEBUI_AERIUM_FIRST_RUN_H_
-#define CHROME_BROWSER_UI_WEBUI_AERIUM_FIRST_RUN_H_
-
-#include <memory>
-#include <optional>
-#include <string>
-#include <string_view>
-#include <utility>
-#include <vector>
-
-#include "base/android/shared_preferences/shared_preferences_manager.h"
-#include "base/files/file_path.h"
-#include "base/files/file_util.h"
-#include "base/functional/bind.h"
-#include "base/i18n/rtl.h"
-#include "base/json/json_reader.h"
-#include "base/json/json_writer.h"
-#include "base/memory/raw_ptr.h"
-#include "base/memory/ref_counted_memory.h"
-#include "base/memory/weak_ptr.h"
-#include "base/scoped_observation.h"
-#include "base/strings/escape.h"
-#include "base/strings/string_util.h"
-#include "base/strings/utf_string_conversions.h"
-#include "base/task/sequenced_task_runner.h"
-#include "base/task/thread_pool.h"
-#include "base/time/time.h"
-#include "base/timer/timer.h"
-#include "base/values.h"
-#include "base/version_info/version_info.h"
-#include "chrome/browser/browser_process.h"
-#include "chrome/browser/extensions/chrome_zipfile_installer.h"
-#include "chrome/browser/extensions/extension_install_prompt.h"
-#include "chrome/browser/extensions/extension_util.h"
-#include "chrome/browser/net/secure_dns_config.h"
-#include "chrome/browser/net/secure_dns_util.h"
-#include "chrome/browser/preferences/android/chrome_shared_preferences.h"
-#include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/search_engines/template_url_service_factory.h"
-#include "chrome/common/pref_names.h"
-#include "chrome/grit/generated_resources.h"
-#include "components/browsing_data/core/pref_names.h"
-#include "components/country_codes/country_codes.h"
-#include "components/crx_file/id_util.h"
-#include "components/prefs/pref_service.h"
-#include "components/search_engines/template_url.h"
-#include "components/search_engines/template_url_service.h"
-#include "content/public/browser/storage_partition.h"
-#include "content/public/browser/url_data_source.h"
-#include "content/public/browser/web_contents.h"
-#include "content/public/browser/web_ui.h"
-#include "content/public/browser/web_ui_controller.h"
-#include "content/public/browser/webui_config.h"
-#include "extensions/browser/crx_installer.h"
-#include "extensions/browser/extension_file_task_runner.h"
-#include "extensions/browser/extension_registrar.h"
-#include "extensions/browser/extension_registry.h"
-#include "extensions/browser/extension_registry_observer.h"
-#include "extensions/browser/install/crx_install_error.h"
-#include "extensions/browser/install_prompt_data.h"
-#include "extensions/browser/zipfile_installer.h"
-#include "extensions/common/extension.h"
-#include "extensions/common/mojom/manifest.mojom-shared.h"
-#include "net/base/load_flags.h"
-#include "net/dns/public/dns_over_https_config.h"
-#include "net/dns/public/doh_provider_entry.h"
-#include "net/http/http_request_headers.h"
-#include "net/traffic_annotation/network_traffic_annotation.h"
-#include "services/network/public/cpp/resource_request.h"
-#include "services/network/public/cpp/simple_url_loader.h"
-#include "services/network/public/mojom/content_security_policy.mojom.h"
-#include "services/network/public/mojom/url_loader_factory.mojom.h"
-#include "ui/base/l10n/l10n_util.h"
-#include "url/gurl.h"
-
-inline constexpr char kAeriumOnboardingRequestKey[] =
-    "Chrome.Aerium.OnboardingRequest";
-
-inline void AeriumOnboardingRequest(const std::string& value) {
-  base::android::SharedPreferencesManager prefs =
-      android::shared_preferences::GetChromeSharedPreferences();
-  prefs.WriteString(kAeriumOnboardingRequestKey, value);
-}
-
-inline constexpr char kAeriumUboGithubKey[] =
-    "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqyTdDTMXfZ/EbpM+rAHvNb/+CFb/9mTu9eB9hgr67RvqL4A8jh5JGlhepDKeKGbFfrFc9gT3sd3OgZEzhFU+eTGxGBeVaverTJBKkMRW414lirw/hDg5uWbDDkGJfoG8B3y0GhhCsopJqajO/yL4olt1/5/dVKuYZvunenkKWEGRgPyDAJX9auMuydjJ5G4lKZa8P03PeZxYEvlr/c6RDviiFwshmazHDJJP9XrLX4uqy6a0Tx4lXUvYVGvSt7nKgMHsoy68eJps5lANpGpEIAOyJDTKCyjPzLmghvWJTqcxyCqijIgZAz58gQZWYDy9lM7zbjySiwkj7PDarYzQ2QIDAQAB";
-
-inline void AeriumPinUnpackedId(const base::FilePath& dir) {
-  const base::FilePath manifest = dir.AppendASCII("manifest.json");
-  std::string text;
-  if (!base::ReadFileToString(manifest, &text)) {
-    return;
-  }
-  std::optional<base::Value> parsed =
-      base::JSONReader::Read(text, base::JSON_PARSE_RFC);
-  if (!parsed || !parsed->is_dict() || parsed->GetDict().Find("key")) {
-    return;
-  }
-  parsed->GetDict().Set("key", kAeriumUboGithubKey);
-  std::optional<std::string> updated = base::WriteJson(*parsed);
-  if (updated && !base::WriteFile(manifest, *updated)) {
-    return;
-  }
-}
-
-class AeriumFirstRunDataSource : public content::URLDataSource {
- public:
-  explicit AeriumFirstRunDataSource(Profile* profile) : profile_(profile) {}
-  AeriumFirstRunDataSource(const AeriumFirstRunDataSource&) = delete;
-  AeriumFirstRunDataSource& operator=(const AeriumFirstRunDataSource&) = delete;
-  ~AeriumFirstRunDataSource() override = default;
-
-  std::string GetSource() override;
-  std::string GetMimeType(const GURL& url) override;
-  std::string GetContentSecurityPolicy(
-      network::mojom::CSPDirectiveName directive) override;
-
-  void StartDataRequest(const GURL& url,
-                        const content::WebContents::Getter& wc_getter,
-                        GotDataCallback callback) override;
-
- private:
-  raw_ptr<Profile> profile_;
-};
-
-inline std::string AeriumFirstRunDataSource::GetSource() {
-  return "aerium-first-run";
-}
-
-inline std::string AeriumFirstRunDataSource::GetMimeType(const GURL& url) {
-  return "text/html";
-}
-
-inline std::string AeriumFirstRunDataSource::GetContentSecurityPolicy(
-    network::mojom::CSPDirectiveName directive) {
-  if (directive == network::mojom::CSPDirectiveName::ScriptSrc) {
-    return "script-src 'self' 'unsafe-inline';";
-  }
-  return content::URLDataSource::GetContentSecurityPolicy(directive);
-}
-
-inline void AeriumFirstRunDataSource::StartDataRequest(
-    const GURL& url,
-    const content::WebContents::Getter& wc_getter,
-    content::URLDataSource::GotDataCallback callback) {
-  std::string html = R"AERIUMHTML(<!doctype html>
-<html lang="{{LANG}}" dir="{{DIR}}" data-theme="auto">
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="color-scheme" content="light dark">
-<title>{{TITLE}}</title>
-<style>
-:root{--bg:#F4F5F7;--sf:#FFFFFF;--sf2:#ECEEF2;--line:#DDE0E6;--ink:#0F1626;--ink2:#5A6373;--acc:#1B2C5E;--on-acc:#FFFFFF;--acc-soft:#E2E7F3;--haze:#5464E6;--haze-soft:#E7E9FC;--on-haze:#FFFFFF}
-@media (prefers-color-scheme:dark){html[data-theme=auto]{--bg:#000000;--sf:#0B0D11;--sf2:#15181F;--line:#20242E;--ink:#F2F4F8;--ink2:#97A0B0;--acc:#9CB2F0;--on-acc:#05080F;--acc-soft:#141B2D;--haze:#9AA5FF;--haze-soft:#161838;--on-haze:#070A20}}
-html[data-theme=dark]{--bg:#111419;--sf:#1A1E26;--sf2:#242934;--line:#2E3442;--ink:#EEF1F6;--ink2:#A0A8B8;--acc:#9CB2F0;--on-acc:#0D1424;--acc-soft:#232C45;--haze:#9AA5FF;--haze-soft:#23264A;--on-haze:#0D1030;color-scheme:dark}
-html[data-theme=black]{--bg:#000000;--sf:#0B0D11;--sf2:#15181F;--line:#20242E;--ink:#F2F4F8;--ink2:#97A0B0;--acc:#9CB2F0;--on-acc:#05080F;--acc-soft:#141B2D;--haze:#9AA5FF;--haze-soft:#161838;--on-haze:#070A20;color-scheme:dark}
-html[data-theme=light]{color-scheme:light}
-*{box-sizing:border-box}
-html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 system-ui,sans-serif;-webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent}
-button,input{font:inherit;color:inherit}
-button{cursor:pointer;border:0;background:none;padding:0;text-align:start}
-svg{flex-shrink:0}
-.step{display:none;min-height:100vh;min-height:100dvh;max-width:560px;margin:0 auto;padding:calc(env(safe-area-inset-top) + 16px) 20px 0;flex-direction:column;gap:22px}
-.step.on{display:flex;animation:in .22s ease-out}
-@keyframes in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-@media (prefers-reduced-motion:reduce){.step.on{animation:none}}
-.top{display:flex;align-items:center;justify-content:space-between;min-height:44px}
-.icon-btn{width:44px;height:44px;border-radius:22px;display:flex;align-items:center;justify-content:center}
-[dir=rtl] .flip{transform:scaleX(-1)}
-.text-btn{min-height:44px;padding:0 12px;border-radius:22px;font-size:15px;font-weight:500;color:var(--ink2)}
-.dots{display:flex;gap:6px}
-.dots span{width:6px;height:6px;border-radius:3px;background:var(--line)}
-.dots span.done{background:var(--acc)}
-.dots span.now{width:22px;background:var(--acc)}
-.head{display:flex;flex-direction:column;gap:8px;padding:0 4px}
-.eyebrow{font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--acc)}
-h1{margin:0;font-size:30px;line-height:1.1;font-weight:600;letter-spacing:-.015em}
-.sub{margin:0;font-size:15px;color:var(--ink2)}
-.label{font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink2);padding:0 4px}
-.grow{flex-grow:1}
-.foot{position:sticky;bottom:0;display:flex;flex-direction:column;gap:12px;padding:16px 0 calc(env(safe-area-inset-bottom) + 24px);background:linear-gradient(to bottom,transparent,var(--bg) 16px)}
-.primary{min-height:56px;border-radius:28px;background:var(--acc);color:var(--on-acc);display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:600;padding:0 24px;text-align:center}
-.primary[aria-disabled=true]{opacity:.5;cursor:default}
-.secondary{min-height:52px;border-radius:26px;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;gap:10px;font-size:16px;font-weight:500;padding:0 20px;text-align:center}
-.hero{flex-grow:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;text-align:center}
-.hero h1{font-size:40px;letter-spacing:-.02em}
-.hero .sub{font-size:17px}
-.welcome-dots{display:flex;justify-content:center;padding-bottom:4px}
-.opts{display:flex;flex-direction:column;gap:10px}
-.opt{display:flex;align-items:center;gap:14px;padding:15px;border-radius:20px;border:1px solid var(--line);background:var(--sf);width:100%}
-.opt[aria-checked=true]{border:2px solid var(--acc);padding:14px;background:var(--acc-soft)}
-.opt .oi{width:44px;height:44px;border-radius:14px;background:var(--sf2);display:flex;align-items:center;justify-content:center}
-.opt[aria-checked=true] .oi{background:var(--acc);color:var(--on-acc)}
-.opt .ot{flex-grow:1;display:flex;flex-direction:column;gap:2px;min-width:0}
-.opt .on{font-size:17px;font-weight:600}
-.opt .od{font-size:14px;color:var(--ink2)}
-.radio{width:22px;height:22px;border-radius:11px;border:2px solid var(--line);display:flex;align-items:center;justify-content:center;flex-shrink:0}
-[aria-checked=true]>.radio,[aria-checked=true] .radio{border-color:var(--acc)}
-[aria-checked=true]>.radio::after,[aria-checked=true] .radio::after{content:"";width:12px;height:12px;border-radius:6px;background:var(--acc)}
-.card{border-radius:20px;background:var(--sf);border:1px solid var(--line);overflow:hidden}
-.row{display:flex;align-items:center;gap:14px;min-height:56px;padding:8px 16px;width:100%;border-bottom:1px solid var(--line)}
-.card>:last-child,.card>:last-child .row{border-bottom:0}
-.row .nm{flex-grow:1;font-size:16px;min-width:0}
-.row .tg{font-size:13px;color:var(--ink2);text-align:end;white-space:nowrap}
-.row[aria-checked=true]{background:var(--acc-soft)}
-.row[aria-checked=true] .nm{font-weight:600}
-.custom{display:none;padding:0 16px 14px;padding-inline-start:52px;background:var(--acc-soft)}
-.custom.show{display:block}
-.custom input{width:100%;min-height:44px;border-radius:14px;border:1px solid var(--line);background:var(--sf);padding:0 14px;font-size:15px}
-.custom input:focus{outline:2px solid var(--acc);outline-offset:0}
-.custom .err{font-size:13px;color:#C2410C;padding-top:6px;display:none}
-.custom.bad .err{display:block}
-.tiles3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-.tiles2{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
-.tile{display:flex;flex-direction:column;gap:10px;align-items:center;padding:10px 10px 12px;border-radius:20px;border:1px solid var(--line);background:var(--sf);font-size:15px;font-weight:500}
-.tile[aria-checked=true]{border:2px solid var(--acc);padding:9px 9px 11px;background:var(--acc-soft);font-weight:600}
-.pv{width:100%;height:108px;border-radius:12px;padding:10px 8px;display:flex;flex-direction:column;gap:6px;border:1px solid}
-.pv i{display:block;border-radius:4px}
-.pv-light{background:#F4F5F7;border-color:#DDE0E6}.pv-light i{background:#DDE0E6}.pv-light i.s{background:#FFFFFF}
-.pv-dark{background:#111419;border-color:#2E3442}.pv-dark i{background:#2E3442}.pv-dark i.s{background:#1A1E26}
-.pv-black{background:#000000;border-color:#20242E}.pv-black i{background:#20242E}.pv-black i.s{background:#0B0D11}
-.phone{width:92px;height:150px;border-radius:16px;border:1.5px solid var(--line);padding:8px;display:flex;flex-direction:column;gap:6px;background:var(--bg)}
-.phone i{display:block;height:5px;border-radius:3px;background:var(--sf2)}
-.phone b{display:flex;align-items:center;height:16px;border-radius:8px;background:var(--sf2);padding:0 6px}
-.phone b::after{content:"";height:4px;width:60%;border-radius:2px;background:var(--line)}
-.tile[aria-checked=true] .phone b{background:var(--acc)}
-.tile[aria-checked=true] .phone b::after{background:var(--on-acc);opacity:.6}
-.cat{display:flex;flex-direction:column;gap:8px}
-.cat-head{display:flex;align-items:baseline;justify-content:space-between;padding:0 4px}
-.cat-head .hint{font-size:13px;color:var(--ink2)}
-.ext{display:flex;align-items:center;gap:12px;min-height:64px;padding:10px 14px;width:100%}
-.ext-wrap{border-bottom:1px solid var(--line)}
-.ext-wrap.sel{background:var(--acc-soft)}
-.tl{width:40px;height:40px;border-radius:13px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;font-weight:700;flex-shrink:0}
-.ext .tx{flex-grow:1;min-width:0;display:flex;flex-direction:column;gap:2px}
-.ext .nm{font-size:16px;font-weight:600}
-.ext .ds{font-size:13px;color:var(--ink2)}
-.lic{height:20px;padding:0 6px;border-radius:6px;font-size:10px;font-weight:700;letter-spacing:.05em;display:flex;align-items:center;border:1px solid var(--line);color:var(--ink2);flex-shrink:0}
-.check{width:24px;height:24px;border-radius:8px;border:1.75px solid var(--line);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--on-acc)}
-.check svg{display:none}
-[aria-checked=true] .check{background:var(--acc);border-color:var(--acc)}
-[aria-checked=true] .check svg{display:block}
-.ag{display:none;align-items:center;gap:10px;min-height:44px;padding:0 14px;padding-inline-start:66px;width:100%}
-.ext-wrap.sel .ag{display:flex}
-.ag span{flex-grow:1;font-size:14px;color:var(--ink2)}
-.sw{width:40px;height:24px;border-radius:12px;position:relative;flex-shrink:0;background:var(--sf2);border:1px solid var(--line)}
-.sw::after{content:"";position:absolute;top:2px;inset-inline-start:2px;width:18px;height:18px;border-radius:9px;background:var(--ink2);transition:inset-inline-start .15s}
-.ag[aria-checked=true] .sw{background:var(--haze);border-color:var(--haze)}
-.ag[aria-checked=true] .sw::after{inset-inline-start:18px;background:var(--on-haze)}
-.ready{flex-grow:1;display:flex;flex-direction:column;justify-content:center;gap:24px}
-.ready-head{display:flex;align-items:center;gap:16px}
-.badge{width:60px;height:60px;border-radius:30px;background:var(--acc-soft);color:var(--acc);display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.li{display:flex;align-items:center;gap:14px;min-height:54px;padding:8px 16px;border-bottom:1px solid var(--line);color:var(--ink)}
-.li svg{color:var(--acc)}
-.li .lt{flex-grow:1;font-size:16px}
-.li .lk{font-size:14px;color:var(--ink2)}
-.li.progress{flex-wrap:wrap;row-gap:8px}
-.bar{flex-basis:100%;height:4px;border-radius:2px;background:var(--sf2);margin-inline-start:36px;overflow:hidden;display:none}
-.bar i{display:block;height:4px;width:0;border-radius:2px;background:var(--acc);transition:width .3s}
-.li.progress.busy .bar{display:block}
-[hidden]{display:none!important}
-:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
-h1:focus{outline:none}
-</style>
-<body>
-
-<section class="step" id="welcome">
-  <div class="top"><span></span><button class="text-btn" id="skip-all" type="button">{{SKIP}}</button></div>
-  <div class="hero">
-    <svg width="96" height="96" viewBox="0 0 512 512" aria-hidden="true"><path d="M330 384.17 149.1 488.61A256 256 0 0 1 108 47.12L108 256A148 148 0 0 0 330 384.17Z" fill="#1B2C5E"/><path d="M108 256 108 47.12A256 256 0 0 1 510.9 232.27L330 127.83A148 148 0 0 0 108 256Z" fill="#2A4485"/><path d="M330 127.83 510.9 232.27A256 256 0 0 1 149.1 488.61L330 384.17A148 148 0 0 0 330 127.83Z" fill="#111C42"/><circle cx="388" cy="96" r="7" fill="#FFFFFF" opacity=".9"/><circle cx="96" cy="132" r="6" fill="#FFFFFF" opacity=".55"/><circle cx="402" cy="360" r="6" fill="#FFFFFF" opacity=".9"/><circle cx="150" cy="400" r="6" fill="#FFFFFF" opacity=".55"/></svg>
-    <div class="head" style="align-items:center"><h1>Aerium</h1><p class="sub">{{TAGLINE}}</p></div>
-  </div>
-  <div class="foot">
-    <div class="welcome-dots"><div class="dots"></div></div>
-    <button class="primary" type="button" data-go="guard">{{START}}</button>
-    <button class="secondary" id="restore" type="button"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20V9"/><path d="M7 13l5-5 5 5"/><path d="M5 4h14"/></svg>{{RESTORE}}</button>
-  </div>
-</section>
-
-<section class="step" id="guard">
-  <div class="top"><button class="icon-btn back" type="button" aria-label="{{BACK}}"><svg class="flip" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button><div class="dots"></div><span style="width:44px"></span></div>
-  <div class="head"><span class="eyebrow">Aerium Guard</span><h1>{{GUARD_TITLE}}</h1><p class="sub">{{GUARD_SUB}}</p></div>
-  <div class="opts" role="radiogroup" aria-label="Aerium Guard" data-group="guard">
-    <button class="opt" type="button" role="radio" data-value="recommended"><span class="oi"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 5-3.5 8.5-7 10-3.5-1.5-7-5-7-10V6z"/><path d="M9 12l2 2 4-4"/></svg></span><span class="ot"><span class="on">{{MODE_RECOMMENDED}}</span><span class="od">{{MODE_RECOMMENDED_SUB}}</span></span><span class="radio"></span></button>
-    <button class="opt" type="button" role="radio" data-value="privacy"><span class="oi"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13h10l1-13"/></svg></span><span class="ot"><span class="on">{{MODE_PRIVACY}}</span><span class="od">{{MODE_PRIVACY_SUB}}</span></span><span class="radio"></span></button>
-    <button class="opt" type="button" role="radio" data-value="performance"><span class="oi"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 3L5 13h6l-1 8 8-10h-6z"/></svg></span><span class="ot"><span class="on">{{MODE_PERFORMANCE}}</span><span class="od">{{MODE_PERFORMANCE_SUB}}</span></span><span class="radio"></span></button>
-    <button class="opt" type="button" role="radio" data-value="security"><span class="oi"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></span><span class="ot"><span class="on">{{MODE_SECURITY}}</span><span class="od">{{MODE_SECURITY_SUB}}</span></span><span class="radio"></span></button>
-  </div>
-  <div class="grow"></div>
-  <div class="foot"><button class="primary" type="button" data-go="dns">{{CONTINUE}}</button></div>
-</section>
-
-<section class="step" id="dns">
-  <div class="top"><button class="icon-btn back" type="button" aria-label="{{BACK}}"><svg class="flip" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button><div class="dots"></div><span style="width:44px"></span></div>
-  <div class="head"><h1>{{DNS_TITLE}}</h1><p class="sub">{{DNS_SUB}}</p></div>
-  <div class="card" role="radiogroup" aria-label="{{DNS_TITLE}}" id="dns-list">
-    <div id="dns-custom-wrap">
-      <button class="row" type="button" role="radio" data-dns="custom"><span class="radio"></span><span class="nm">{{DNS_CUSTOM}}</span><span class="tg">{{DNS_CUSTOM_TAG}}</span></button>
-      <div class="custom" id="dns-custom"><input id="dns-input" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://dns.example/dns-query" aria-label="{{DNS_CUSTOM}}"><div class="err">{{DNS_CUSTOM_INVALID}}</div></div>
-    </div>
-    <button class="row" type="button" role="radio" data-dns="automatic"><span class="radio"></span><span class="nm">{{DNS_AUTO}}</span><span class="tg">{{DNS_AUTO_TAG}}</span></button>
-  </div>
-  <div class="grow"></div>
-  <div class="foot"><button class="primary" type="button" id="dns-next">{{CONTINUE}}</button></div>
-</section>
-
-<section class="step" id="look">
-  <div class="top"><button class="icon-btn back" type="button" aria-label="{{BACK}}"><svg class="flip" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button><div class="dots"></div><span style="width:44px"></span></div>
-  <div class="head"><h1>{{LOOK_TITLE}}</h1></div>
-  <span class="label">{{THEME}}</span>
-  <div class="tiles3" role="radiogroup" aria-label="{{THEME}}" data-group="theme">
-    <button class="tile" type="button" role="radio" data-value="light"><span class="pv pv-light"><i style="height:8px;width:70%"></i><i class="s" style="height:34px"></i><i style="height:6px;width:50%"></i><span class="grow"></span><i class="s" style="height:12px;border-radius:6px"></i></span><span class="tn">{{LIGHT}}</span></button>
-    <button class="tile" type="button" role="radio" data-value="dark"><span class="pv pv-dark"><i style="height:8px;width:70%"></i><i class="s" style="height:34px"></i><i style="height:6px;width:50%"></i><span class="grow"></span><i class="s" style="height:12px;border-radius:6px"></i></span><span class="tn">{{DARK}}</span></button>
-    <button class="tile" type="button" role="radio" data-value="black"><span class="pv pv-black"><i style="height:8px;width:70%"></i><i class="s" style="height:34px"></i><i style="height:6px;width:50%"></i><span class="grow"></span><i class="s" style="height:12px;border-radius:6px"></i></span><span class="tn">{{BLACK}}</span></button>
-  </div>
-  <span class="label">{{BAR}}</span>
-  <div class="tiles2" role="radiogroup" aria-label="{{BAR}}" data-group="bar">
-    <button class="tile" type="button" role="radio" data-value="top"><span class="phone"><b></b><i style="width:80%"></i><i style="width:64%"></i><i style="width:72%"></i></span><span class="tn">{{TOP}}</span></button>
-    <button class="tile" type="button" role="radio" data-value="bottom"><span class="phone"><i style="width:80%"></i><i style="width:64%"></i><i style="width:72%"></i><span class="grow"></span><b></b></span><span class="tn">{{BOTTOM}}</span></button>
-  </div>
-  <div class="grow"></div>
-  <div class="foot"><button class="primary" type="button" data-go="extensions">{{CONTINUE}}</button></div>
-</section>
-
-<section class="step" id="extensions">
-  <div class="top"><button class="icon-btn back" type="button" aria-label="{{BACK}}"><svg class="flip" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button><div class="dots"></div><button class="text-btn" type="button" id="ext-skip">{{SKIP}}</button></div>
-  <div class="head"><h1>{{EXT_TITLE}}</h1><p class="sub">{{EXT_SUB}}</p></div>
-  <div class="cat"><div class="cat-head"><span class="label" style="padding:0">{{CAT_ADS}}</span><span class="hint">{{PICK_ONE}}</span></div>
-    <div class="card" role="radiogroup" aria-label="{{CAT_ADS}}">
-      <div class="ext-wrap" data-ext="ddkjiahejlhfcafbddmgiahcphecmpfh" data-src="cws" data-group="ads"><button class="ext" type="button" role="radio"><span class="tl" style="background:#800000">uB</span><span class="tx"><span class="nm">uBlock Origin Lite</span><span class="ds">{{EXT_UBOL}}</span></span><span class="lic">GPL</span><span class="radio"></span></button><button class="ag" type="button" role="switch"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--haze)" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z"/><circle cx="9.5" cy="10" r="1.1" fill="var(--haze)" stroke="none"/><circle cx="14.5" cy="11.5" r="1.1" fill="var(--haze)" stroke="none"/><circle cx="11" cy="15" r="1.1" fill="var(--haze)" stroke="none"/></svg><span>{{AEROGEL_TOO}}</span><i class="sw"></i></button></div>
-      <div class="ext-wrap" data-ext="gorhill/uBlock" data-src="github" data-group="ads"><button class="ext" type="button" role="radio"><span class="tl" style="background:#5A0000">uB</span><span class="tx"><span class="nm">uBlock Origin</span><span class="ds">{{EXT_UBO}}</span></span><span class="lic">GPL</span><span class="radio"></span></button><button class="ag" type="button" role="switch"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--haze)" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z"/><circle cx="9.5" cy="10" r="1.1" fill="var(--haze)" stroke="none"/><circle cx="14.5" cy="11.5" r="1.1" fill="var(--haze)" stroke="none"/><circle cx="11" cy="15" r="1.1" fill="var(--haze)" stroke="none"/></svg><span>{{AEROGEL_TOO}}</span><i class="sw"></i></button></div>
-      <div class="ext-wrap" data-ext="bgnkhhnnamicmpeenaelnjfhikgbkllg" data-src="cws" data-group="ads"><button class="ext" type="button" role="radio"><span class="tl" style="background:#3E8E57">AG</span><span class="tx"><span class="nm">AdGuard</span><span class="ds">{{EXT_ADGUARD}}</span></span><span class="lic">GPL</span><span class="radio"></span></button><button class="ag" type="button" role="switch"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--haze)" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z"/><circle cx="9.5" cy="10" r="1.1" fill="var(--haze)" stroke="none"/><circle cx="14.5" cy="11.5" r="1.1" fill="var(--haze)" stroke="none"/><circle cx="11" cy="15" r="1.1" fill="var(--haze)" stroke="none"/></svg><span>{{AEROGEL_TOO}}</span><i class="sw"></i></button></div>
-    </div>
-  </div>
-  <div class="cat"><div class="cat-head"><span class="label" style="padding:0">{{CAT_SYNC}}</span></div>
-    <div class="card">
-      <div class="ext-wrap" data-ext="fnaicdffflnofjppbagibeoednhnbjhg" data-src="cws"><button class="ext" type="button" role="checkbox"><span class="tl" style="background:#2563EB">fl</span><span class="tx"><span class="nm">floccus</span><span class="ds">{{EXT_FLOCCUS}}</span></span><span class="lic">MPL</span><span class="check"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span></button><button class="ag" type="button" role="switch"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--haze)" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z"/><circle cx="9.5" cy="10" r="1.1" fill="var(--haze)" stroke="none"/><circle cx="14.5" cy="11.5" r="1.1" fill="var(--haze)" stroke="none"/><circle cx="11" cy="15" r="1.1" fill="var(--haze)" stroke="none"/></svg><span>{{AEROGEL_TOO}}</span><i class="sw"></i></button></div>
-    </div>
-  </div>
-  <div class="cat"><div class="cat-head"><span class="label" style="padding:0">{{MODE_PRIVACY}}</span></div>
-    <div class="card">
-      <div class="ext-wrap" data-ext="ldpochfccmkkmhdbclfhpagapcfdljkj" data-src="cws"><button class="ext" type="button" role="checkbox"><span class="tl" style="background:#14532D">De</span><span class="tx"><span class="nm">Decentraleyes</span><span class="ds">{{EXT_DECENTRALEYES}}</span></span><span class="lic">MPL</span><span class="check"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span></button><button class="ag" type="button" role="switch"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--haze)" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z"/><circle cx="9.5" cy="10" r="1.1" fill="var(--haze)" stroke="none"/><circle cx="14.5" cy="11.5" r="1.1" fill="var(--haze)" stroke="none"/><circle cx="11" cy="15" r="1.1" fill="var(--haze)" stroke="none"/></svg><span>{{AEROGEL_TOO}}</span><i class="sw"></i></button></div>
-      <div class="ext-wrap" data-ext="mdjildafknihdffpkfmmpnpoiajfjnjd" data-src="cws"><button class="ext" type="button" role="checkbox"><span class="tl" style="background:#334155">CM</span><span class="tx"><span class="nm">Consent-O-Matic</span><span class="ds">{{EXT_CONSENT}}</span></span><span class="lic">MIT</span><span class="check"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span></button><button class="ag" type="button" role="switch"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--haze)" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z"/><circle cx="9.5" cy="10" r="1.1" fill="var(--haze)" stroke="none"/><circle cx="14.5" cy="11.5" r="1.1" fill="var(--haze)" stroke="none"/><circle cx="11" cy="15" r="1.1" fill="var(--haze)" stroke="none"/></svg><span>{{AEROGEL_TOO}}</span><i class="sw"></i></button></div>
-    </div>
-  </div>
-  <div class="cat"><div class="cat-head"><span class="label" style="padding:0">{{CAT_NEWTAB}}</span></div>
-    <div class="card">
-      <div class="ext-wrap" data-ext="dlaogejjiafeobgofajdlkkhjlignalk" data-src="cws"><button class="ext" type="button" role="checkbox"><span class="tl" style="background:#6D28D9">Tb</span><span class="tx"><span class="nm">TablissNG</span><span class="ds">{{EXT_TABLISS}}</span></span><span class="lic">GPL</span><span class="check"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span></button><button class="ag" type="button" role="switch"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--haze)" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z"/><circle cx="9.5" cy="10" r="1.1" fill="var(--haze)" stroke="none"/><circle cx="14.5" cy="11.5" r="1.1" fill="var(--haze)" stroke="none"/><circle cx="11" cy="15" r="1.1" fill="var(--haze)" stroke="none"/></svg><span>{{AEROGEL_TOO}}</span><i class="sw"></i></button></div>
-    </div>
-  </div>
-  <div class="cat"><div class="cat-head"><span class="label" style="padding:0">YouTube</span></div>
-    <div class="card">
-      <div class="ext-wrap" data-ext="mnjggcdmjocbbbhaepdhchncahnbgone" data-src="cws"><button class="ext" type="button" role="checkbox"><span class="tl" style="background:#C2410C">SB</span><span class="tx"><span class="nm">SponsorBlock</span><span class="ds">{{EXT_SPONSORBLOCK}}</span></span><span class="lic">GPL</span><span class="check"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span></button><button class="ag" type="button" role="switch"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--haze)" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z"/><circle cx="9.5" cy="10" r="1.1" fill="var(--haze)" stroke="none"/><circle cx="14.5" cy="11.5" r="1.1" fill="var(--haze)" stroke="none"/><circle cx="11" cy="15" r="1.1" fill="var(--haze)" stroke="none"/></svg><span>{{AEROGEL_TOO}}</span><i class="sw"></i></button></div>
-    </div>
-  </div>
-  <div class="foot"><button class="primary" type="button" id="install"></button></div>
-</section>
-
-<section class="step" id="ready">
-  <div class="top"><button class="icon-btn back" type="button" aria-label="{{BACK}}" id="ready-back"><svg class="flip" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button><div class="dots"></div><span style="width:44px"></span></div>
-  <div class="ready">
-    <div class="ready-head"><span class="badge"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span><h1 style="font-size:32px">{{READY_TITLE}}</h1></div>
-    <div class="card">
-      <div class="li"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 5-3.5 8.5-7 10-3.5-1.5-7-5-7-10V6z"/></svg><span class="lt" id="r-guard"></span><span class="lk">Aerium Guard</span></div>
-      <div class="li"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17"/><path d="M12 3.5a13 13 0 0 1 0 17a13 13 0 0 1 0-17"/></svg><span class="lt" id="r-dns"></span><span class="lk">{{DNS_TITLE}}</span></div>
-      <div class="li"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg><span class="lt" id="r-theme"></span><span class="lk">{{THEME}}</span></div>
-      <div class="li"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="3" width="12" height="18" rx="3"/><path d="M9 17h6"/></svg><span class="lt" id="r-bar"></span><span class="lk">{{BAR}}</span></div>
-      <div class="li" id="r-search-row"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg><span class="lt" id="r-search"></span><span class="lk">{{SEARCH}}</span></div>
-      <div class="li progress" id="r-ext-row"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 4H6a2 2 0 0 0-2 2v4"/><path d="M14 4h4a2 2 0 0 1 2 2v4"/><path d="M10 20H6a2 2 0 0 1-2-2v-4"/><path d="M14 20h4a2 2 0 0 0 2-2v-4"/></svg><span class="lt" id="r-ext" aria-live="polite"></span><span class="lk">{{EXTENSIONS}}</span><span class="bar"><i id="r-bar-fill"></i></span></div>
-      <div class="li"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M20 4v4h-4"/></svg><span class="lt">{{UPDATES_DAILY}}</span><span class="lk">{{UPDATES}}</span></div>
-    </div>
-  </div>
-  <div class="foot">
-    <button class="secondary" type="button" id="make-default">{{MAKE_DEFAULT}}</button>
-    <button class="primary" type="button" id="finish">{{START_BROWSING}}</button>
-  </div>
-</section>
-
-<section class="step" id="restoring">
-  <div class="top"><span style="width:44px"></span><span style="width:44px"></span></div>
-  <div class="head"><h1>{{RESTORE_TITLE}}</h1><p class="sub">{{RESTORE_SUB}}</p></div>
-  <div class="card">
-    <div class="li progress" id="rs-row"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 4H6a2 2 0 0 0-2 2v4"/><path d="M14 4h4a2 2 0 0 1 2 2v4"/><path d="M10 20H6a2 2 0 0 1-2-2v-4"/><path d="M14 20h4a2 2 0 0 0 2-2v-4"/></svg><span class="lt" id="rs-text" aria-live="polite"></span><span class="lk">{{EXTENSIONS}}</span><span class="bar"><i id="rs-fill"></i></span></div>
-  </div>
-  <p class="sub" id="rs-manual" hidden></p>
-  <div class="grow"></div>
-  <div class="foot"><button class="primary" type="button" id="rs-finish">{{START_BROWSING}}</button></div>
-</section>
-
-<script id="data" type="application/json">{{DATA}}</script>
-<script>
-(() => {
-  const D = JSON.parse(document.getElementById('data').textContent);
-  const S = D.strings;
-  const STEPS = ['welcome', 'guard', 'dns', 'look', 'extensions', 'ready'];
-  const DNS_ORDER = ['Quad9Secure', 'Mullvad', 'MullvadAdblock', 'NextDns', 'Cloudflare', 'CleanBrowsingFamily', 'OpenDNS'];
-  const DNS_TAGS = {Quad9Secure: S.dnsMalware, Mullvad: S.dnsNoLogs, MullvadAdblock: S.dnsAds, NextDns: S.dnsFilters, Cloudflare: '1.1.1.1', CleanBrowsingFamily: S.dnsFamily, OpenDNS: 'Cisco'};
-  const sysDark = matchMedia('(prefers-color-scheme: dark)').matches;
-  const restoreList = (() => {
-    if (!location.hash.startsWith('#restore=')) return null;
-    try {
-      const v = JSON.parse(decodeURIComponent(location.hash.slice(9)));
-      return Array.isArray(v) ? v : null;
-    } catch (e) {
-      return null;
-    }
-  })();
-  const state = {
-    restoring: !!restoreList,
-    guard: ['recommended', 'privacy', 'performance', 'security'].includes(D.guard) ? D.guard : 'recommended',
-    dns: 'Quad9Secure', custom: '',
-    theme: sysDark ? 'black' : 'light', themeTouched: false,
-    bar: 'bottom',
-    applied: false, busy: false, total: 0,
-  };
-  const $ = (s, r = document) => r.querySelector(s);
-  const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
-  const send = (name, payload) => {
-    if (window.chrome && chrome.send) chrome.send(name, payload === undefined ? [] : [JSON.stringify(payload)]);
-  };
-  const fmt = (t, ...a) => a.reduce((s, v, i) => s.split('$' + (i + 1)).join(String(v)), t);
-
-  function dots() {
-    $$('.step').forEach(sec => {
-      const box = $('.dots', sec);
-      if (!box) return;
-      const idx = STEPS.indexOf(sec.id);
-      box.textContent = '';
-      box.setAttribute('aria-label', fmt(S.step, idx + 1, STEPS.length));
-      box.setAttribute('role', 'img');
-      STEPS.forEach((_, i) => {
-        const d = document.createElement('span');
-        if (i < idx) d.className = 'done';
-        if (i === idx) d.className = 'now';
-        box.appendChild(d);
-      });
-    });
-  }
-
-  function show(id) {
-    if (state.restoring) {
-      id = 'restoring';
-    } else {
-      if (!STEPS.includes(id)) id = 'welcome';
-      if (state.applied && id !== 'ready') {
-        history.replaceState(null, '', '#ready');
-        id = 'ready';
-      }
-    }
-    $$('.step').forEach(s => s.classList.toggle('on', s.id === id));
-    if (id === 'ready') renderReady();
-    if (id === 'restoring') renderRestore();
-    if (id === 'extensions') renderInstall();
-    window.scrollTo(0, 0);
-    const h = $('#' + id + ' h1');
-    if (h) { h.tabIndex = -1; h.focus({preventScroll: true}); }
-  }
-  const go = id => { location.hash = id; };
-  window.addEventListener('hashchange', () => show(location.hash.slice(1)));
-
-  function pick(group, value) {
-    $$('[data-group="' + group + '"] [role=radio]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.value === value)));
-  }
-  function bindGroup(group, onPick) {
-    $$('[data-group="' + group + '"] [role=radio]').forEach(b => b.addEventListener('click', () => {
-      pick(group, b.dataset.value);
-      onPick(b.dataset.value);
-    }));
-  }
-  bindGroup('guard', v => { state.guard = v; });
-  bindGroup('theme', v => { state.theme = v; state.themeTouched = true; document.documentElement.dataset.theme = v; });
-  bindGroup('bar', v => { state.bar = v; });
-  pick('guard', state.guard);
-  pick('theme', state.theme);
-  pick('bar', state.bar);
-
-  const list = $('#dns-list');
-  const anchor = $('#dns-custom-wrap');
-  const providers = (D.dns || []).slice().sort((a, b) => {
-    const ia = DNS_ORDER.indexOf(a.id), ib = DNS_ORDER.indexOf(b.id);
-    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
-  });
-  if (!providers.some(p => p.id === state.dns)) state.dns = providers.length ? providers[0].id : 'automatic';
-  providers.forEach(p => {
-    const b = document.createElement('button');
-    b.className = 'row'; b.type = 'button'; b.setAttribute('role', 'radio'); b.dataset.dns = p.id;
-    const r = document.createElement('span'); r.className = 'radio';
-    const n = document.createElement('span'); n.className = 'nm'; n.textContent = p.name.replace(/\s*\([^)]*\)$/, '').replace(/^Mullvad DNS$/, 'Mullvad');
-    const t = document.createElement('span'); t.className = 'tg'; t.textContent = DNS_TAGS[p.id] || '';
-    b.append(r, n, t);
-    list.insertBefore(b, anchor);
-  });
-  const input = $('#dns-input');
-  const customBox = $('#dns-custom');
-  function pickDns(id) {
-    state.dns = id;
-    $$('[data-dns]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.dns === id)));
-    customBox.classList.toggle('show', id === 'custom');
-    customBox.classList.remove('bad');
-    if (id === 'custom') input.focus();
-  }
-  $$('[data-dns]').forEach(b => b.addEventListener('click', () => pickDns(b.dataset.dns)));
-  pickDns(state.dns);
-  input.addEventListener('input', () => { state.custom = input.value.trim(); customBox.classList.remove('bad'); });
-  const validTemplate = v => /^https:\/\/[^\s/?#]+\.[^\s/?#]+(?:\/\S*)?$/i.test(v);
-  $('#dns-next').addEventListener('click', () => {
-    if (state.dns === 'custom' && !validTemplate(state.custom)) { customBox.classList.add('bad'); input.focus(); return; }
-    go('look');
-  });
-
-  const wraps = $$('.ext-wrap');
-  const DEFAULT_EXT = 'ddkjiahejlhfcafbddmgiahcphecmpfh';
-  function setExt(w, on) {
-    w.classList.toggle('sel', on);
-    $('.ext', w).setAttribute('aria-checked', String(on));
-  }
-  wraps.forEach(w => {
-    const main = $('.ext', w);
-    const ag = $('.ag', w);
-    ag.setAttribute('aria-checked', 'false');
-    setExt(w, w.dataset.ext === DEFAULT_EXT);
-    if (w.dataset.ext === DEFAULT_EXT) ag.setAttribute('aria-checked', 'true');
-    main.addEventListener('click', () => {
-      const on = !w.classList.contains('sel');
-      if (w.dataset.group) {
-        wraps.filter(o => o.dataset.group === w.dataset.group).forEach(o => setExt(o, false));
-        setExt(w, on);
-      } else {
-        setExt(w, on);
-      }
-      renderInstall();
-    });
-    ag.addEventListener('click', () => ag.setAttribute('aria-checked', String(ag.getAttribute('aria-checked') !== 'true')));
-  });
-  const chosen = () => wraps.filter(w => w.classList.contains('sel')).map(w => ({
-    id: w.dataset.ext, source: w.dataset.src, name: $('.nm', w).textContent,
-    aerogel: $('.ag', w).getAttribute('aria-checked') === 'true',
-  }));
-  function renderInstall() {
-    const n = chosen().length;
-    $('#install').textContent = n ? fmt(S.install, n) : S.cont;
-  }
-
-  function apply(withExtensions) {
-    if (state.applied) { go('ready'); return; }
-    const exts = withExtensions ? chosen() : [];
-    let dns;
-    if (state.dns === 'automatic') dns = {mode: 'automatic', template: ''};
-    else if (state.dns === 'custom') dns = {mode: 'secure', template: state.custom};
-    else dns = {mode: 'secure', template: (providers.find(p => p.id === state.dns) || {}).template || ''};
-    state.applied = true;
-    state.total = exts.length;
-    state.busy = exts.length > 0;
-    state.done = 0; state.failed = 0;
-    send('aeriumOnboardingApply', {guard: state.guard, dns, extensions: exts.map(e => ({id: e.id, source: e.source, aerogel: e.aerogel}))});
-    go('ready');
-  }
-  $('#install').addEventListener('click', () => apply(true));
-  $('#ext-skip').addEventListener('click', () => apply(false));
-
-  function label(sel) { const el = $(sel); return el ? el.textContent : ''; }
-  function renderReady() {
-    $('#ready-back').style.visibility = state.applied ? 'hidden' : 'visible';
-    $('#r-guard').textContent = label('[data-group="guard"] [aria-checked=true] .on');
-    const dnsBtn = $('[data-dns][aria-checked=true] .nm');
-    $('#r-dns').textContent = state.dns === 'custom' ? (state.custom.replace(/^https:\/\//, '').split('/')[0] || label('[data-dns="custom"] .nm')) : (dnsBtn ? dnsBtn.textContent : '');
-    $('#r-theme').textContent = state.themeTouched ? label('[data-group="theme"] [aria-checked=true] .tn') : S.auto;
-    $('#r-bar').textContent = label('[data-group="bar"] [aria-checked=true] .tn');
-    $('#r-search').textContent = D.search || '';
-    $('#r-search-row').hidden = !D.search;
-    renderProgress();
-  }
-  function renderProgress() {
-    const row = $('#r-ext-row');
-    const txt = $('#r-ext');
-    row.classList.toggle('busy', state.busy);
-    if (!state.applied || state.total === 0) {
-      txt.textContent = S.none;
-    } else if (state.busy) {
-      txt.textContent = fmt(S.installing, Math.min(state.done + 1, state.total), state.total);
-      $('#r-bar-fill').style.width = Math.round(100 * state.done / state.total) + '%';
-    } else {
-      const ok = state.done - state.failed;
-      txt.textContent = state.failed ? fmt(S.someFailed, ok, state.failed) : fmt(S.installed, ok);
-    }
-    const fin = $('#finish');
-    fin.setAttribute('aria-disabled', String(state.busy));
-  }
-  function renderRestore() {
-    const txt = $('#rs-text');
-    $('#rs-row').classList.toggle('busy', state.busy);
-    if (state.total === 0) {
-      txt.textContent = S.none;
-    } else if (state.busy) {
-      txt.textContent = fmt(S.installing, Math.min(state.done + 1, state.total), state.total);
-      $('#rs-fill').style.width = Math.round(100 * state.done / state.total) + '%';
-    } else {
-      const ok = state.done - state.failed;
-      txt.textContent = state.failed ? fmt(S.someFailed, ok, state.failed) : fmt(S.installed, ok);
-    }
-    $('#rs-finish').setAttribute('aria-disabled', String(state.busy));
-  }
-  window.aeriumOnboardingProgress = (done, failed, finished) => {
-    state.done = done; state.failed = failed; state.busy = !finished;
-    if (state.restoring) renderRestore();
-    else renderProgress();
-  };
-  if (restoreList) {
-    const installs = restoreList.filter(e => e && typeof e.id === 'string' && (e.source === 'cws' || e.source === 'github'));
-    const manual = restoreList.filter(e => e && e.source === 'other' && e.name).map(e => String(e.name));
-    state.applied = true;
-    state.total = installs.length;
-    state.busy = installs.length > 0;
-    state.done = 0; state.failed = 0;
-    if (manual.length) {
-      const note = $('#rs-manual');
-      note.textContent = fmt(S.restoreManual, manual.join(', '));
-      note.hidden = false;
-    }
-    history.replaceState(null, '', '#restoring');
-    if (installs.length) send('aeriumOnboardingApply', {extensions: installs.map(e => ({id: e.id, source: e.source, aerogel: !!e.aerogel}))});
-  }
-  $('#rs-finish').addEventListener('click', () => {
-    if (state.busy) return;
-    send('aeriumOnboardingFinish', {theme: '', top: null});
-  });
-
-  $('#finish').addEventListener('click', () => {
-    if (state.busy) return;
-    if (!state.applied) apply(false);
-    send('aeriumOnboardingFinish', {theme: state.themeTouched ? state.theme : '', top: state.bar === 'top'});
-  });
-  $('#skip-all').addEventListener('click', () => send('aeriumOnboardingFinish', {theme: '', top: null}));
-  $('#restore').addEventListener('click', () => send('aeriumOnboardingRestore'));
-  $('#make-default').addEventListener('click', () => send('aeriumOnboardingDefault'));
-  $$('[data-go]').forEach(b => b.addEventListener('click', () => go(b.dataset.go)));
-  $$('.back').forEach(b => b.addEventListener('click', () => history.back()));
-
-  dots();
-  renderInstall();
-  show(location.hash.slice(1) || 'welcome');
-})();
-</script>
-)AERIUMHTML";
-
-  const std::pair<const char*, int> kStrings[] = {
-      {"{{AEROGEL_TOO}}", IDS_AERIUM_ONB_AEROGEL_TOO},
-      {"{{BACK}}", IDS_AERIUM_ONB_BACK},
-      {"{{BAR}}", IDS_AERIUM_ONB_BAR},
-      {"{{BLACK}}", IDS_AERIUM_ONB_BLACK},
-      {"{{BOTTOM}}", IDS_AERIUM_ONB_BOTTOM},
-      {"{{CAT_ADS}}", IDS_AERIUM_ONB_CAT_ADS},
-      {"{{CAT_NEWTAB}}", IDS_AERIUM_ONB_CAT_NEWTAB},
-      {"{{CAT_SYNC}}", IDS_AERIUM_ONB_CAT_SYNC},
-      {"{{CONTINUE}}", IDS_AERIUM_ONB_CONTINUE},
-      {"{{DARK}}", IDS_AERIUM_ONB_DARK},
-      {"{{DNS_AUTO}}", IDS_AERIUM_ONB_DNS_AUTO},
-      {"{{DNS_AUTO_TAG}}", IDS_AERIUM_ONB_DNS_AUTO_TAG},
-      {"{{DNS_CUSTOM}}", IDS_AERIUM_ONB_DNS_CUSTOM},
-      {"{{DNS_CUSTOM_INVALID}}", IDS_AERIUM_ONB_DNS_CUSTOM_INVALID},
-      {"{{DNS_CUSTOM_TAG}}", IDS_AERIUM_ONB_DNS_CUSTOM_TAG},
-      {"{{DNS_SUB}}", IDS_AERIUM_ONB_DNS_SUB},
-      {"{{DNS_TITLE}}", IDS_AERIUM_ONB_DNS_TITLE},
-      {"{{EXTENSIONS}}", IDS_AERIUM_ONB_EXTENSIONS},
-      {"{{EXT_ADGUARD}}", IDS_AERIUM_ONB_EXT_ADGUARD},
-      {"{{EXT_CONSENT}}", IDS_AERIUM_ONB_EXT_CONSENT},
-      {"{{EXT_DECENTRALEYES}}", IDS_AERIUM_ONB_EXT_DECENTRALEYES},
-      {"{{EXT_FLOCCUS}}", IDS_AERIUM_ONB_EXT_FLOCCUS},
-      {"{{EXT_SPONSORBLOCK}}", IDS_AERIUM_ONB_EXT_SPONSORBLOCK},
-      {"{{EXT_SUB}}", IDS_AERIUM_ONB_EXT_SUB},
-      {"{{EXT_TABLISS}}", IDS_AERIUM_ONB_EXT_TABLISS},
-      {"{{EXT_TITLE}}", IDS_AERIUM_ONB_EXT_TITLE},
-      {"{{EXT_UBO}}", IDS_AERIUM_ONB_EXT_UBO},
-      {"{{EXT_UBOL}}", IDS_AERIUM_ONB_EXT_UBOL},
-      {"{{GUARD_SUB}}", IDS_AERIUM_ONB_GUARD_SUB},
-      {"{{GUARD_TITLE}}", IDS_AERIUM_ONB_GUARD_TITLE},
-      {"{{LIGHT}}", IDS_AERIUM_ONB_LIGHT},
-      {"{{LOOK_TITLE}}", IDS_AERIUM_ONB_LOOK_TITLE},
-      {"{{MAKE_DEFAULT}}", IDS_AERIUM_ONB_MAKE_DEFAULT},
-      {"{{MODE_PERFORMANCE}}", IDS_AERIUM_ONB_MODE_PERFORMANCE},
-      {"{{MODE_PERFORMANCE_SUB}}", IDS_AERIUM_ONB_MODE_PERFORMANCE_SUB},
-      {"{{MODE_PRIVACY}}", IDS_AERIUM_ONB_MODE_PRIVACY},
-      {"{{MODE_PRIVACY_SUB}}", IDS_AERIUM_ONB_MODE_PRIVACY_SUB},
-      {"{{MODE_RECOMMENDED}}", IDS_AERIUM_ONB_MODE_RECOMMENDED},
-      {"{{MODE_RECOMMENDED_SUB}}", IDS_AERIUM_ONB_MODE_RECOMMENDED_SUB},
-      {"{{MODE_SECURITY}}", IDS_AERIUM_ONB_MODE_SECURITY},
-      {"{{MODE_SECURITY_SUB}}", IDS_AERIUM_ONB_MODE_SECURITY_SUB},
-      {"{{PICK_ONE}}", IDS_AERIUM_ONB_PICK_ONE},
-      {"{{READY_TITLE}}", IDS_AERIUM_ONB_READY_TITLE},
-      {"{{RESTORE}}", IDS_AERIUM_ONB_RESTORE},
-      {"{{RESTORE_SUB}}", IDS_AERIUM_ONB_RESTORE_SUB},
-      {"{{RESTORE_TITLE}}", IDS_AERIUM_ONB_RESTORE_TITLE},
-      {"{{SEARCH}}", IDS_AERIUM_ONB_SEARCH},
-      {"{{SKIP}}", IDS_AERIUM_ONB_SKIP},
-      {"{{START}}", IDS_AERIUM_ONB_START},
-      {"{{START_BROWSING}}", IDS_AERIUM_ONB_START_BROWSING},
-      {"{{TAGLINE}}", IDS_AERIUM_ONB_TAGLINE},
-      {"{{THEME}}", IDS_AERIUM_ONB_THEME},
-      {"{{TOP}}", IDS_AERIUM_ONB_TOP},
-      {"{{UPDATES}}", IDS_AERIUM_ONB_UPDATES},
-      {"{{UPDATES_DAILY}}", IDS_AERIUM_ONB_UPDATES_DAILY},
-  };
-  for (const auto& [token, id] : kStrings) {
-    base::ReplaceSubstringsAfterOffset(
-        &html, 0, token, base::EscapeForHTML(l10n_util::GetStringUTF8(id)));
-  }
-
-  const std::pair<const char*, int> kScriptStrings[] = {
-      {"step", IDS_AERIUM_ONB_STEP},
-      {"install", IDS_AERIUM_ONB_INSTALL},
-      {"cont", IDS_AERIUM_ONB_CONTINUE},
-      {"installing", IDS_AERIUM_ONB_INSTALLING},
-      {"installed", IDS_AERIUM_ONB_INSTALLED},
-      {"someFailed", IDS_AERIUM_ONB_SOME_FAILED},
-      {"none", IDS_AERIUM_ONB_NONE},
-      {"auto", IDS_AERIUM_ONB_AUTO},
-      {"dnsMalware", IDS_AERIUM_ONB_DNS_MALWARE},
-      {"dnsNoLogs", IDS_AERIUM_ONB_DNS_NO_LOGS},
-      {"dnsAds", IDS_AERIUM_ONB_DNS_ADS},
-      {"dnsFilters", IDS_AERIUM_ONB_DNS_FILTERS},
-      {"dnsFamily", IDS_AERIUM_ONB_DNS_FAMILY},
-      {"restoreManual", IDS_AERIUM_ONB_RESTORE_MANUAL},
-  };
-  base::DictValue strings;
-  for (const auto& [key, id] : kScriptStrings) {
-    strings.Set(key, l10n_util::GetStringUTF8(id));
-  }
-
-  base::ListValue dns;
-  for (const auto& entry : chrome_browser_net::secure_dns::SelectEnabledProviders(
-           chrome_browser_net::secure_dns::ProvidersForCountry(
-               net::DohProviderEntry::GetList(),
-               country_codes::GetCurrentCountryID()))) {
-    net::DnsOverHttpsConfig config({entry->doh_server_config});
-    base::DictValue item;
-    item.Set("id", std::string(entry->provider));
-    item.Set("name", std::string(entry->ui_name));
-    item.Set("template", config.ToString());
-    dns.Append(std::move(item));
-  }
-
-  std::string guard;
-  std::string search;
-  if (profile_) {
-    guard = profile_->GetPrefs()->GetString(
-        browsing_data::prefs::kAeriumGuardActivePreset);
-    TemplateURLService* service =
-        TemplateURLServiceFactory::GetForProfile(profile_);
-    const TemplateURL* engine =
-        service ? service->GetDefaultSearchProvider() : nullptr;
-    if (engine) {
-      search = base::UTF16ToUTF8(engine->short_name());
-    }
-  }
-
-  base::DictValue data;
-  data.Set("strings", std::move(strings));
-  data.Set("dns", std::move(dns));
-  data.Set("guard", guard);
-  data.Set("search", search);
-  std::string json = base::WriteJson(data).value_or("{}");
-  base::ReplaceSubstringsAfterOffset(&json, 0, "<", "\\u003C");
-  base::ReplaceSubstringsAfterOffset(&html, 0, "{{DATA}}", json);
-
-  base::ReplaceSubstringsAfterOffset(
-      &html, 0, "{{TITLE}}",
-      base::EscapeForHTML(l10n_util::GetStringUTF8(IDS_AERIUM_FIRST_RUN_TITLE)));
-  base::ReplaceSubstringsAfterOffset(
-      &html, 0, "{{LANG}}",
-      base::EscapeForHTML(g_browser_process->GetApplicationLocale()));
-  base::ReplaceSubstringsAfterOffset(&html, 0, "{{DIR}}",
-                                     base::i18n::IsRTL() ? "rtl" : "ltr");
-
-  std::move(callback).Run(
-      base::MakeRefCounted<base::RefCountedString>(std::move(html)));
-}
-
-class AeriumFirstRun;
-
-class AeriumFirstRunUIConfig
-    : public content::DefaultWebUIConfig<AeriumFirstRun> {
- public:
-  AeriumFirstRunUIConfig()
-      : DefaultWebUIConfig("chrome", "aerium-first-run") {}
-};
-
-class AeriumFirstRun : public content::WebUIController,
-                       public extensions::ExtensionRegistryObserver {
- public:
-  explicit AeriumFirstRun(content::WebUI* web_ui);
-  AeriumFirstRun(const AeriumFirstRun&) = delete;
-  AeriumFirstRun& operator=(const AeriumFirstRun&) = delete;
-  ~AeriumFirstRun() override = default;
-
-  void OnExtensionInstalled(content::BrowserContext* browser_context,
-                            const extensions::Extension* extension,
-                            bool is_update) override;
-
- private:
-  struct Item {
-    std::string id;
-    std::string source;
-    bool aerogel = false;
-  };
-
-  Profile* profile() { return Profile::FromWebUI(web_ui()); }
-  void HandleApply(const base::ListValue& args);
-  void HandleFinish(const base::ListValue& args);
-  void HandleRestore(const base::ListValue& args);
-  void HandleDefault(const base::ListValue& args);
-  void Next();
-  void StartStore(const std::string& id);
-  void StartGithub(const std::string& repo);
-  void OnCrxDownloaded(base::FilePath path);
-  void OnCrxInstalled(const std::optional<extensions::CrxInstallError>& error);
-  void OnReleaseFetched(std::optional<std::string> body);
-  void OnZipDownloaded(base::FilePath path);
-  void OnZipUnpacked(extensions::ZipFileInstaller::DoneCallback register_cb,
-                     const base::FilePath& zip_file,
-                     const base::FilePath& unzip_dir,
-                     const std::string& error);
-  void OnUnpackedTimeout();
-  void AllowInAerogel(const std::string& id);
-  void ItemDone(bool ok);
-  void Progress(bool finished);
-  network::mojom::URLLoaderFactory* Factory();
-  std::unique_ptr<network::SimpleURLLoader> MakeLoader(const GURL& url,
-                                                       bool json);
-
-  std::vector<Item> queue_;
-  size_t index_ = 0;
-  size_t failed_ = 0;
-  bool started_ = false;
-  bool waiting_unpacked_ = false;
-  std::unique_ptr<network::SimpleURLLoader> loader_;
-  base::OneShotTimer unpacked_timeout_;
-  base::ScopedObservation<extensions::ExtensionRegistry,
-                          extensions::ExtensionRegistryObserver>
-      registry_observation_{this};
-  base::WeakPtrFactory<AeriumFirstRun> weak_factory_{this};
-};
-
-inline AeriumFirstRun::AeriumFirstRun(content::WebUI* web_ui)
-    : content::WebUIController(web_ui) {
-  Profile* profile = Profile::FromWebUI(web_ui);
-  content::URLDataSource::Add(
-      profile, std::make_unique<AeriumFirstRunDataSource>(profile));
-  web_ui->RegisterMessageCallback(
-      "aeriumOnboardingApply",
-      base::BindRepeating(&AeriumFirstRun::HandleApply,
-                          base::Unretained(this)));
-  web_ui->RegisterMessageCallback(
-      "aeriumOnboardingFinish",
-      base::BindRepeating(&AeriumFirstRun::HandleFinish,
-                          base::Unretained(this)));
-  web_ui->RegisterMessageCallback(
-      "aeriumOnboardingRestore",
-      base::BindRepeating(&AeriumFirstRun::HandleRestore,
-                          base::Unretained(this)));
-  web_ui->RegisterMessageCallback(
-      "aeriumOnboardingDefault",
-      base::BindRepeating(&AeriumFirstRun::HandleDefault,
-                          base::Unretained(this)));
-}
-
-inline network::mojom::URLLoaderFactory* AeriumFirstRun::Factory() {
-  return profile()
-      ->GetDefaultStoragePartition()
-      ->GetURLLoaderFactoryForBrowserProcess()
-      .get();
-}
-
-inline std::unique_ptr<network::SimpleURLLoader> AeriumFirstRun::MakeLoader(
-    const GURL& url,
-    bool json) {
-  constexpr net::NetworkTrafficAnnotationTag kAnnotation =
-      net::DefineNetworkTrafficAnnotation("aerium_onboarding_extensions", R"(
-        semantics {
-          sender: "Aerium onboarding"
-          description:
-            "Downloads the extensions the user picked on the first-run page, "
-            "from the Chrome Web Store update server or from the extension's "
-            "own GitHub releases."
-          trigger:
-            "The user picks one or more extensions on the first-run page and "
-            "taps Install."
-          data: "The extension ID or repository name. No user data."
-          destination: OTHER
-        }
-        policy {
-          cookies_allowed: NO
-          setting: "Only runs when the user asks for it on the first-run page."
-          policy_exception_justification: "Not implemented."
-        })");
-  auto request = std::make_unique<network::ResourceRequest>();
-  request->url = url;
-  request->method = "GET";
-  request->credentials_mode = network::mojom::CredentialsMode::kOmit;
-  request->load_flags = net::LOAD_DISABLE_CACHE | net::LOAD_BYPASS_CACHE;
-  if (json) {
-    request->headers.SetHeader(net::HttpRequestHeaders::kAccept,
-                               "application/vnd.github+json");
-  }
-  request->headers.SetHeader(net::HttpRequestHeaders::kUserAgent, "Aerium");
-  std::unique_ptr<network::SimpleURLLoader> loader =
-      network::SimpleURLLoader::Create(std::move(request), kAnnotation);
-  loader->SetRetryOptions(2,
-                          network::SimpleURLLoader::RETRY_ON_NETWORK_CHANGE |
-                              network::SimpleURLLoader::RETRY_ON_5XX);
-  return loader;
-}
-
-inline void AeriumFirstRun::HandleApply(const base::ListValue& args) {
-  if (started_ || args.empty() || !args[0].is_string()) {
-    return;
-  }
-  std::optional<base::Value> parsed =
-      base::JSONReader::Read(args[0].GetString(), base::JSON_PARSE_RFC);
-  if (!parsed || !parsed->is_dict()) {
-    return;
-  }
-  started_ = true;
-  const base::DictValue& dict = parsed->GetDict();
-
-  if (const std::string* guard = dict.FindString("guard")) {
-    if (*guard == "recommended" || *guard == "privacy" ||
-        *guard == "performance" || *guard == "security") {
-      profile()->GetPrefs()->SetString(
-          browsing_data::prefs::kAeriumGuardRequestedPreset, *guard);
-    }
-  }
-
-  if (const base::DictValue* dns = dict.FindDict("dns")) {
-    const std::string* mode = dns->FindString("mode");
-    const std::string* templates = dns->FindString("template");
-    PrefService* local_state = g_browser_process->local_state();
-    if (mode && *mode == SecureDnsConfig::kModeAutomatic) {
-      local_state->SetString(prefs::kDnsOverHttpsMode,
-                             SecureDnsConfig::kModeAutomatic);
-      local_state->ClearPref(prefs::kDnsOverHttpsTemplates);
-    } else if (mode && *mode == SecureDnsConfig::kModeSecure && templates &&
-               net::DnsOverHttpsConfig::FromString(*templates).has_value()) {
-      local_state->SetString(prefs::kDnsOverHttpsTemplates, *templates);
-      local_state->SetString(prefs::kDnsOverHttpsMode,
-                             SecureDnsConfig::kModeSecure);
-    }
-  }
-
-  if (const base::ListValue* extensions = dict.FindList("extensions")) {
-    for (const base::Value& value : *extensions) {
-      if (!value.is_dict()) {
-        continue;
-      }
-      const base::DictValue& entry = value.GetDict();
-      const std::string* id = entry.FindString("id");
-      const std::string* source = entry.FindString("source");
-      if (!id || !source) {
-        continue;
-      }
-      if (*source == "cws" && crx_file::id_util::IdIsValid(*id)) {
-        queue_.push_back({*id, *source, entry.FindBool("aerogel").value_or(false)});
-      } else if (*source == "github" && *id == "gorhill/uBlock") {
-        queue_.push_back({*id, *source, entry.FindBool("aerogel").value_or(false)});
-      }
-    }
-  }
-
-  registry_observation_.Observe(extensions::ExtensionRegistry::Get(profile()));
-  Next();
-}
-
-inline void AeriumFirstRun::Next() {
-  if (index_ >= queue_.size()) {
-    Progress(true);
-    return;
-  }
-  Progress(false);
-  const Item& item = queue_[index_];
-  if (item.source == "cws") {
-    StartStore(item.id);
-  } else {
-    StartGithub(item.id);
-  }
-}
-
-inline void AeriumFirstRun::StartStore(const std::string& id) {
-  const GURL url(
-      "https://clients2.google.com/service/update2/crx?response=redirect"
-      "&prodversion=" +
-      std::string(version_info::GetVersionNumber()) +
-      "&acceptformat=crx3&x=id%3D" + id + "%26uc");
-  loader_ = MakeLoader(url, false);
-  loader_->DownloadToFile(
-      Factory(),
-      base::BindOnce(&AeriumFirstRun::OnCrxDownloaded,
-                     weak_factory_.GetWeakPtr()),
-      profile()->GetPath().AppendASCII("aerium-onboarding.crx"),
-      64 * 1024 * 1024);
-}
-
-inline void AeriumFirstRun::OnCrxDownloaded(base::FilePath path) {
-  loader_.reset();
-  content::WebContents* contents = web_ui()->GetWebContents();
-  if (path.empty() || !contents) {
-    ItemDone(false);
-    return;
-  }
-  scoped_refptr<extensions::CrxInstaller> installer =
-      extensions::CrxInstaller::Create(
-          profile(),
-          std::make_unique<ExtensionInstallPrompt>(
-              contents,
-              std::make_unique<extensions::InstallPromptData>(
-                  extensions::InstallPromptData::UNSET_PROMPT_TYPE)));
-  installer->set_expected_id(queue_[index_].id);
-  installer->set_delete_source(true);
-  installer->set_error_on_unsupported_requirements(true);
-  installer->AddInstallerCallback(base::BindOnce(
-      &AeriumFirstRun::OnCrxInstalled, weak_factory_.GetWeakPtr()));
-  installer->InstallCrx(path);
-}
-
-inline void AeriumFirstRun::OnCrxInstalled(
-    const std::optional<extensions::CrxInstallError>& error) {
-  if (!error && queue_[index_].aerogel) {
-    AllowInAerogel(queue_[index_].id);
-  }
-  ItemDone(!error);
-}
-
-inline void AeriumFirstRun::StartGithub(const std::string& repo) {
-  loader_ = MakeLoader(
-      GURL("https://api.github.com/repos/" + repo + "/releases/latest"), true);
-  loader_->DownloadToString(
-      Factory(),
-      base::BindOnce(&AeriumFirstRun::OnReleaseFetched,
-                     weak_factory_.GetWeakPtr()),
-      1024 * 1024);
-}
-
-inline void AeriumFirstRun::OnReleaseFetched(std::optional<std::string> body) {
-  loader_.reset();
-  std::optional<base::Value> parsed;
-  if (body) {
-    parsed = base::JSONReader::Read(*body, base::JSON_PARSE_RFC);
-  }
-  std::string asset;
-  if (parsed && parsed->is_dict()) {
-    if (const base::ListValue* assets = parsed->GetDict().FindList("assets")) {
-      for (const base::Value& value : *assets) {
-        if (!value.is_dict()) {
-          continue;
-        }
-        const std::string* name = value.GetDict().FindString("name");
-        const std::string* link =
-            value.GetDict().FindString("browser_download_url");
-        if (name && link && base::EndsWith(*name, ".chromium.zip") &&
-            base::StartsWith(*link, "https://github.com/")) {
-          asset = *link;
-          break;
-        }
-      }
-    }
-  }
-  if (asset.empty()) {
-    ItemDone(false);
-    return;
-  }
-  loader_ = MakeLoader(GURL(asset), false);
-  loader_->DownloadToFile(
-      Factory(),
-      base::BindOnce(&AeriumFirstRun::OnZipDownloaded,
-                     weak_factory_.GetWeakPtr()),
-      profile()->GetPath().AppendASCII("aerium-onboarding.zip"),
-      64 * 1024 * 1024);
-}
-
-inline void AeriumFirstRun::OnZipDownloaded(base::FilePath path) {
-  loader_.reset();
-  if (path.empty()) {
-    ItemDone(false);
-    return;
-  }
-  waiting_unpacked_ = true;
-  unpacked_timeout_.Start(FROM_HERE, base::Seconds(90),
-                          base::BindOnce(&AeriumFirstRun::OnUnpackedTimeout,
-                                         weak_factory_.GetWeakPtr()));
-  extensions::ZipFileInstaller::Create(
-      extensions::GetExtensionFileTaskRunner(),
-      base::BindOnce(&AeriumFirstRun::OnZipUnpacked,
-                     weak_factory_.GetWeakPtr(),
-                     extensions::MakeRegisterInExtensionServiceCallback(
-                         profile())))
-      ->InstallZipFileToUnpackedExtensionsDir(
-          path, extensions::ExtensionRegistrar::Get(profile())
-                    ->unpacked_install_directory());
-}
-
-inline void AeriumFirstRun::OnZipUnpacked(
-    extensions::ZipFileInstaller::DoneCallback register_cb,
-    const base::FilePath& zip_file,
-    const base::FilePath& unzip_dir,
-    const std::string& error) {
-  base::ThreadPool::PostTask(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
-      base::GetDeleteFileCallback(zip_file));
-  if (!error.empty()) {
-    if (waiting_unpacked_) {
-      waiting_unpacked_ = false;
-      unpacked_timeout_.Stop();
-      ItemDone(false);
-    }
-    return;
-  }
-  base::ThreadPool::PostTaskAndReply(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
-      base::BindOnce(&AeriumPinUnpackedId, unzip_dir),
-      base::BindOnce(std::move(register_cb), zip_file, unzip_dir, error));
-}
-
-inline void AeriumFirstRun::OnExtensionInstalled(
-    content::BrowserContext* browser_context,
-    const extensions::Extension* extension,
-    bool is_update) {
-  if (!waiting_unpacked_ || index_ >= queue_.size() ||
-      extension->location() != extensions::mojom::ManifestLocation::kUnpacked) {
-    return;
-  }
-  waiting_unpacked_ = false;
-  unpacked_timeout_.Stop();
-  if (queue_[index_].aerogel) {
-    AllowInAerogel(extension->id());
-  }
-  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-      FROM_HERE, base::BindOnce(&AeriumFirstRun::ItemDone,
-                                weak_factory_.GetWeakPtr(), true));
-}
-
-inline void AeriumFirstRun::OnUnpackedTimeout() {
-  if (!waiting_unpacked_) {
-    return;
-  }
-  waiting_unpacked_ = false;
-  ItemDone(false);
-}
-
-inline void AeriumFirstRun::AllowInAerogel(const std::string& id) {
-  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-      FROM_HERE,
-      base::BindOnce(
-          [](base::WeakPtr<Profile> profile, std::string id) {
-            if (profile) {
-              extensions::util::SetIsIncognitoEnabled(id, profile.get(), true);
-            }
-          },
-          profile()->GetWeakPtr(), id));
-}
-
-inline void AeriumFirstRun::ItemDone(bool ok) {
-  if (!ok) {
-    ++failed_;
-  }
-  ++index_;
-  Next();
-}
-
-inline void AeriumFirstRun::Progress(bool finished) {
-  web_ui()->CallJavascriptFunctionUnsafe(
-      "aeriumOnboardingProgress", base::Value(static_cast<int>(index_)),
-      base::Value(static_cast<int>(failed_)), base::Value(finished));
-}
-
-inline void AeriumFirstRun::HandleFinish(const base::ListValue& args) {
-  std::string theme;
-  std::string top;
-  if (!args.empty() && args[0].is_string()) {
-    std::optional<base::Value> parsed =
-        base::JSONReader::Read(args[0].GetString(), base::JSON_PARSE_RFC);
-    if (parsed && parsed->is_dict()) {
-      const std::string* value = parsed->GetDict().FindString("theme");
-      if (value && (*value == "light" || *value == "dark" ||
-                    *value == "black")) {
-        theme = *value;
-      }
-      std::optional<bool> on_top = parsed->GetDict().FindBool("top");
-      if (on_top.has_value()) {
-        top = *on_top ? "1" : "0";
-      }
-    }
-  }
-  AeriumOnboardingRequest("finish;theme=" + theme + ";top=" + top);
-}
-
-inline void AeriumFirstRun::HandleRestore(const base::ListValue& args) {
-  AeriumOnboardingRequest("restore");
-}
-
-inline void AeriumFirstRun::HandleDefault(const base::ListValue& args) {
-  AeriumOnboardingRequest("default");
-}
-
-#endif  // CHROME_BROWSER_UI_WEBUI_AERIUM_FIRST_RUN_H_
-AERIUM_FIRST_RUN_H
-
-# Registered inside the IS_ANDROID arm of both lists, next to the webapks
-# entries, so it exists only where it is reachable.
-sed_i 's|#include "chrome/browser/ui/webui/webapks/webapks_ui.h"|&\n#include "chrome/browser/ui/webui/aerium_first_run.h"|' \
-    chrome/browser/ui/webui/chrome_web_ui_configs.cc
-sed_i 's|  map.AddWebUIConfig(std::make_unique<WebApksUIConfig>());|&\n  map.AddWebUIConfig(std::make_unique<AeriumFirstRunUIConfig>());|' \
-    chrome/browser/ui/webui/chrome_web_ui_configs.cc
-
-# The "have we greeted this install yet" flag. Chromium keeps its
-# SharedPreferences keys in one registry and validates membership in tests and
-# debug builds, so the key is added to both the constants and getKeysInUse()
-# rather than only where it is read. The Chrome.<Feature>.<Key> shape is the
-# format that validation expects for new keys.
 CPK=chrome/browser/preferences/android/java/src/org/chromium/chrome/browser/preferences/ChromePreferenceKeys.java
-sed_i 's|    public static final String FIRST_RUN_FLOW_COMPLETE = "first_run_flow";|    /** Whether the Aerium first-run page has been shown for this install. */\n    public static final String AERIUM_FIRST_RUN_PAGE_SHOWN =\n            "Chrome.Aerium.FirstRunPageShown";\n\n&|' \
-    $CPK
-sed_i 's|^                ADAPTIVE_TOOLBAR_CUSTOMIZATION_ENABLED,$|                AERIUM_FIRST_RUN_PAGE_SHOWN,\n&|' \
-    $CPK
 
-# The trigger. createInitialTab() is where Android picks the New Tab Page or
-# the homepage for a cold start with no tabs to restore, which is the closest
-# thing here to the desktop AddFirstRunTabs() call. Never in incognito, and the
-# flag is written before the tab is launched so a crash on the way cannot leave
-# it greeting on every launch.
-sed_i 's|        getTabCreator(incognito).launchUrl(url, TabLaunchType.FROM_STARTUP);|        // Aerium: greet once, on the first launch after install.\n        if (!incognito\n                \&\& !ChromeSharedPreferences.getInstance()\n                        .readBoolean(\n                                ChromePreferenceKeys.AERIUM_FIRST_RUN_PAGE_SHOWN, false)) {\n            ChromeSharedPreferences.getInstance()\n                    .writeBoolean(ChromePreferenceKeys.AERIUM_FIRST_RUN_PAGE_SHOWN, true);\n            url = "chrome://aerium-first-run/";\n        }\n&|' \
-    chrome/android/java/src/org/chromium/chrome/browser/ChromeTabbedActivity.java
+AERIUM_SDB=chrome/browser/privacy/java/src/org/chromium/chrome/browser/privacy/secure_dns/SecureDnsBridge.java
+sed_i 's|^class SecureDnsBridge {$|public class SecureDnsBridge {|' $AERIUM_SDB
+sed_i 's|^    static class Entry {$|    public static class Entry {|' $AERIUM_SDB
+sed_i 's|^    static void setMode(@SecureDnsMode int mode) {$|    public static void setMode(@SecureDnsMode int mode) {|' $AERIUM_SDB
+sed_i 's|^    static List<Entry> getProviders() {$|    public static List<Entry> getProviders() {|' $AERIUM_SDB
+sed_i 's|^    static boolean setConfig(String config) {$|    public static boolean setConfig(String config) {|' $AERIUM_SDB
 
-sed_i 's|    public static final String FIRST_RUN_FLOW_COMPLETE = "first_run_flow";|    public static final String AERIUM_ONBOARDING_REQUEST =\n            "Chrome.Aerium.OnboardingRequest";\n\n&|' \
-    $CPK
-sed_i 's|^                ADAPTIVE_TOOLBAR_CUSTOMIZATION_ENABLED,$|                AERIUM_ONBOARDING_REQUEST,\n&|' \
-    $CPK
+AERIUM_ONB_RES=chrome/android/java/res/drawable
+mkdir -p $AERIUM_ONB_RES
+cat > $AERIUM_ONB_RES/aerium_onb_back.xml <<'AERIUM_ONB_BACK_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:autoMirrored="true">
+  <path
+      android:fillColor="#00000000"
+      android:strokeColor="@android:color/white"
+      android:strokeWidth="1.9"
+      android:strokeLineCap="round"
+      android:strokeLineJoin="round"
+      android:pathData="M15,5L8,12L15,19" />
+</vector>
+AERIUM_ONB_BACK_XML
+cat > $AERIUM_ONB_RES/aerium_onb_check.xml <<'AERIUM_ONB_CHECK_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+  <path
+      android:fillColor="#00000000"
+      android:strokeColor="@android:color/white"
+      android:strokeWidth="2.4"
+      android:strokeLineCap="round"
+      android:strokeLineJoin="round"
+      android:pathData="M5,12.5L9.5,17L19,7.5" />
+</vector>
+AERIUM_ONB_CHECK_XML
+cat > $AERIUM_ONB_RES/aerium_drag_handle.xml <<'AERIUM_DRAG_HANDLE_XML'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+  <path
+      android:fillColor="@android:color/white"
+      android:pathData="M9,6m-1.5,0a1.5,1.5 0,1 1,3 0a1.5,1.5 0,1 1,-3 0M15,6m-1.5,0a1.5,1.5 0,1 1,3 0a1.5,1.5 0,1 1,-3 0M9,12m-1.5,0a1.5,1.5 0,1 1,3 0a1.5,1.5 0,1 1,-3 0M15,12m-1.5,0a1.5,1.5 0,1 1,3 0a1.5,1.5 0,1 1,-3 0M9,18m-1.5,0a1.5,1.5 0,1 1,3 0a1.5,1.5 0,1 1,-3 0M15,18m-1.5,0a1.5,1.5 0,1 1,3 0a1.5,1.5 0,1 1,-3 0" />
+</vector>
+AERIUM_DRAG_HANDLE_XML
+sed -e 's|android:width="108dp"|android:width="96dp"|' \
+    -e 's|android:height="108dp"|android:height="96dp"|' \
+    -e '/^  <group$/,/^      android:translateY="133.12">$/d' \
+    -e '/^  <\/group>$/d' \
+    "$SCRIPT_DIR/res/layered_app_icon_foreground.xml" > $AERIUM_ONB_RES/aerium_onb_logo.xml || return 1
+if grep -q 'group' $AERIUM_ONB_RES/aerium_onb_logo.xml \
+        || [ "$(grep -c '<path' $AERIUM_ONB_RES/aerium_onb_logo.xml)" != "$(grep -c '<path' "$SCRIPT_DIR/res/layered_app_icon_foreground.xml")" ]; then
+    echo "[aerium] FATAL: aerium_onb_logo.xml did not come out of layered_app_icon_foreground.xml cleanly" >&2
+    return 1
+fi
+sed_i 's|^  "java/res/drawable/acute_24dp.xml",$|  "java/res/drawable/aerium_drag_handle.xml",\n  "java/res/drawable/aerium_onb_back.xml",\n  "java/res/drawable/aerium_onb_check.xml",\n  "java/res/drawable/aerium_onb_logo.xml",\n&|' \
+    chrome/android/chrome_java_resources.gni
 
-cat > chrome/android/java/src/org/chromium/chrome/browser/AeriumOnboardingRequests.java <<'AERIUM_ONBOARDING_JAVA'
+cat > chrome/android/java/src/org/chromium/chrome/browser/AeriumOnboarding.java <<'AERIUM_ONBOARDING_JAVA'
 // Copyright 2026 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
@@ -1509,157 +342,1308 @@ package org.chromium.chrome.browser;
 
 import android.app.role.RoleManager;
 import android.content.ActivityNotFoundException;
+import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.net.Uri;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+import android.content.res.ColorStateList;
+import android.graphics.Color;
+import android.graphics.Typeface;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.RippleDrawable;
 import android.provider.Settings;
+import android.text.Editable;
+import android.text.InputType;
+import android.text.TextWatcher;
+import android.util.TypedValue;
+import android.view.Gravity;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.Window;
+import android.view.WindowManager;
+import android.view.accessibility.AccessibilityNodeInfo;
+import android.widget.EditText;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.ProgressBar;
+import android.widget.ScrollView;
+import android.widget.Switch;
+import android.widget.TextView;
+
+import androidx.activity.ComponentDialog;
+import androidx.activity.OnBackPressedCallback;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
+
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.IntentUtils;
-import org.chromium.base.task.PostTask;
-import org.chromium.base.task.TaskTraits;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
+import org.chromium.chrome.R;
+import org.chromium.chrome.browser.lifecycle.DestroyObserver;
+import org.chromium.chrome.browser.lifetime.ApplicationLifetime;
 import org.chromium.chrome.browser.night_mode.GlobalNightModeStateProviderHolder;
 import org.chromium.chrome.browser.night_mode.ThemeType;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
+import org.chromium.chrome.browser.privacy.secure_dns.SecureDnsBridge;
+import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.profiles.ProfileManager;
+import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.browser.settings.AeriumBackupFragment;
-import org.chromium.chrome.browser.settings.AeriumExtensionBackup;
+import org.chromium.chrome.browser.settings.AeriumExtensionInstalls;
 import org.chromium.chrome.browser.settings.AeriumToolbarPrefs;
 import org.chromium.chrome.browser.settings.SettingsNavigationFactory;
-import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tab.TabLaunchType;
-import org.chromium.content_public.browser.LoadUrlParams;
-import org.chromium.ui.base.PageTransition;
+import org.chromium.components.browser_ui.site_settings.WebsitePreferenceBridge;
+import org.chromium.components.browser_ui.styles.SemanticColorUtils;
+import org.chromium.components.content_settings.ContentSetting;
+import org.chromium.components.content_settings.ContentSettingsType;
+import org.chromium.components.prefs.PrefService;
+import org.chromium.components.search_engines.TemplateUrl;
+import org.chromium.components.user_prefs.UserPrefs;
+import org.chromium.net.SecureDnsMode;
 
-import java.lang.ref.WeakReference;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 @NullMarked
-public final class AeriumOnboardingRequests {
+public final class AeriumOnboarding {
+    private static final String DONE_KEY = "Chrome.Aerium.OnboardingDone";
+    private static final String OLD_DONE_KEY = "Chrome.Aerium.FirstRunPageShown";
     private static final int REQUEST_DEFAULT_BROWSER = 0x4145;
-    private static final String FIRST_RUN_URL = "chrome://aerium-first-run/";
-    private static final String NEW_TAB_URL = "chrome-native://newtab/";
 
-    private static SharedPreferences.@Nullable OnSharedPreferenceChangeListener sListener;
-    private static WeakReference<ChromeTabbedActivity> sActivity = new WeakReference<>(null);
+    private static final int WELCOME = 0;
+    private static final int GUARD = 1;
+    private static final int DNS = 2;
+    private static final int LOOK = 3;
+    private static final int EXTENSIONS = 4;
+    private static final int READY = 5;
+    private static final int STEP_COUNT = 6;
 
-    private AeriumOnboardingRequests() {}
+    private static final String DNS_AUTOMATIC = "automatic";
+    private static final String DNS_CUSTOM = "custom";
+    private static final String UBOL = "ddkjiahejlhfcafbddmgiahcphecmpfh";
+    private static final Pattern TEMPLATE =
+            Pattern.compile("^https://[^\\s/?#]+\\.[^\\s/?#]+(?:/\\S*)?$", Pattern.CASE_INSENSITIVE);
 
-    static void attach(ChromeTabbedActivity activity) {
-        sActivity = new WeakReference<>(activity);
-        if (sListener != null) return;
+    private static final String[] GUARD_IDS = {"recommended", "privacy", "performance", "security"};
+    private static final int[] GUARD_TITLES = {
+        R.string.aerium_onb_mode_recommended,
+        R.string.aerium_onb_mode_privacy,
+        R.string.aerium_onb_mode_performance,
+        R.string.aerium_onb_mode_security,
+    };
+    private static final int[] GUARD_SUBS = {
+        R.string.aerium_onb_mode_recommended_sub,
+        R.string.aerium_onb_mode_privacy_sub,
+        R.string.aerium_onb_mode_performance_sub,
+        R.string.aerium_onb_mode_security_sub,
+    };
+
+    private static final String[] DNS_HOSTS = {
+        "dns.quad9.net",
+        "//dns.mullvad.net",
+        "adblock.dns.mullvad.net",
+        "nextdns.io",
+        "cloudflare-dns.com",
+        "cleanbrowsing.org",
+        "opendns.com",
+    };
+
+    private static final String[] THEMES = {"light", "dark", "black"};
+    private static final int[] THEME_TITLES = {
+        R.string.aerium_onb_light, R.string.aerium_onb_dark, R.string.aerium_onb_black,
+    };
+
+    private static final int[] LAYOUTS = {
+        AeriumToolbarPrefs.CLASSIC,
+        AeriumToolbarPrefs.SPLIT,
+        AeriumToolbarPrefs.THUMB,
+        AeriumToolbarPrefs.MINIMAL,
+    };
+
+    private static final class Ext {
+        final String id;
+        final String source;
+        final String name;
+        final int desc;
+        final String license;
+        final int color;
+        final String mark;
+        final boolean exclusive;
+
+        Ext(String id, String source, String name, int desc, String license, int color,
+                String mark, boolean exclusive) {
+            this.id = id;
+            this.source = source;
+            this.name = name;
+            this.desc = desc;
+            this.license = license;
+            this.color = color;
+            this.mark = mark;
+            this.exclusive = exclusive;
+        }
+    }
+
+    private static final class Category {
+        final int title;
+        final boolean pickOne;
+        final Ext[] items;
+
+        Category(int title, boolean pickOne, Ext[] items) {
+            this.title = title;
+            this.pickOne = pickOne;
+            this.items = items;
+        }
+    }
+
+    private static Category[] catalog() {
+        return new Category[] {
+            new Category(
+                    R.string.aerium_onb_cat_ads,
+                    true,
+                    new Ext[] {
+                        new Ext(UBOL, "cws", "uBlock Origin Lite", R.string.aerium_onb_ext_ubol,
+                                "GPL", 0xFF800000, "uB", true),
+                        new Ext("gorhill/uBlock", "github", "uBlock Origin",
+                                R.string.aerium_onb_ext_ubo, "GPL", 0xFF5A0000, "uB", true),
+                        new Ext("bgnkhhnnamicmpeenaelnjfhikgbkllg", "cws", "AdGuard",
+                                R.string.aerium_onb_ext_adguard, "GPL", 0xFF3E8E57, "AG", true),
+                    }),
+            new Category(
+                    R.string.aerium_onb_cat_sync,
+                    false,
+                    new Ext[] {
+                        new Ext("fnaicdffflnofjppbagibeoednhnbjhg", "cws", "floccus",
+                                R.string.aerium_onb_ext_floccus, "MPL", 0xFF2563EB, "fl", false),
+                    }),
+            new Category(
+                    R.string.aerium_onb_mode_privacy,
+                    false,
+                    new Ext[] {
+                        new Ext("ldpochfccmkkmhdbclfhpagapcfdljkj", "cws", "Decentraleyes",
+                                R.string.aerium_onb_ext_decentraleyes, "MPL", 0xFF14532D, "De",
+                                false),
+                        new Ext("mdjildafknihdffpkfmmpnpoiajfjnjd", "cws", "Consent-O-Matic",
+                                R.string.aerium_onb_ext_consent, "MIT", 0xFF334155, "CM", false),
+                    }),
+            new Category(
+                    R.string.aerium_onb_cat_newtab,
+                    false,
+                    new Ext[] {
+                        new Ext("dlaogejjiafeobgofajdlkkhjlignalk", "cws", "TablissNG",
+                                R.string.aerium_onb_ext_tabliss, "GPL", 0xFF6D28D9, "Tb", false),
+                    }),
+            new Category(
+                    0,
+                    false,
+                    new Ext[] {
+                        new Ext("mnjggcdmjocbbbhaepdhchncahnbgone", "cws", "SponsorBlock",
+                                R.string.aerium_onb_ext_sponsorblock, "GPL", 0xFFC2410C, "SB",
+                                false),
+                    }),
+        };
+    }
+
+    private static boolean sStarted;
+    private static int sStep = WELCOME;
+    private static String sGuard = "recommended";
+    private static String sDns = "";
+    private static String sCustom = "";
+    private static String sTheme = "";
+    private static int sLayout = AeriumToolbarPrefs.THUMB;
+    private static boolean sApplied;
+    private static boolean sInstalling;
+    private static final Set<String> sPicked = new HashSet<>();
+    private static final Set<String> sAerogel = new HashSet<>();
+    private static @Nullable AeriumOnboarding sCurrent;
+
+    private final ChromeTabbedActivity mActivity;
+    private final Context mContext;
+    private final ComponentDialog mDialog;
+    private final FrameLayout mRoot;
+    private final int mBg;
+    private final int mCard;
+    private final int mText;
+    private final int mText2;
+    private final int mAccent;
+    private final int mOnAccent;
+    private final int mLine;
+    private final int mHaze;
+    private final boolean mDark;
+    private final List<DnsChoice> mDnsChoices = new ArrayList<>();
+    private @Nullable TextView mProgressText;
+    private @Nullable ProgressBar mProgressBar;
+    private SharedPreferences.@Nullable OnSharedPreferenceChangeListener mProgressListener;
+
+    private static final class DnsChoice {
+        final String template;
+        final String name;
+        final String tag;
+
+        DnsChoice(String template, String name, String tag) {
+            this.template = template;
+            this.name = name;
+            this.tag = tag;
+        }
+    }
+
+    private static final class CheckRow extends LinearLayout {
+        private final boolean mRadio;
+        private boolean mChecked;
+
+        CheckRow(Context context, boolean radio) {
+            super(context);
+            mRadio = radio;
+        }
+
+        void setRowChecked(boolean checked) {
+            mChecked = checked;
+            setSelected(checked);
+        }
+
+        @Override
+        public void onInitializeAccessibilityNodeInfo(AccessibilityNodeInfo info) {
+            super.onInitializeAccessibilityNodeInfo(info);
+            info.setClassName(
+                    mRadio ? "android.widget.RadioButton" : "android.widget.CheckBox");
+            info.setCheckable(true);
+            info.setChecked(mChecked);
+        }
+    }
+
+    private AeriumOnboarding(ChromeTabbedActivity activity) {
+        mActivity = activity;
+        mContext = activity;
+        mBg = SemanticColorUtils.getDefaultBgColor(mContext);
+        mCard = SemanticColorUtils.getColorSurfaceContainer(mContext);
+        mText = SemanticColorUtils.getDefaultTextColor(mContext);
+        mText2 = SemanticColorUtils.getDefaultTextColorSecondary(mContext);
+        mAccent = SemanticColorUtils.getColorPrimary(mContext);
+        mOnAccent = SemanticColorUtils.getColorOnPrimary(mContext);
+        mLine = SemanticColorUtils.getDividerColor(mContext);
+        mDark = (Color.red(mBg) * 299 + Color.green(mBg) * 587 + Color.blue(mBg) * 114) / 1000 < 128;
+        mHaze = mDark ? 0xFF9AA5FF : 0xFF5464E6;
+        mRoot = new FrameLayout(mContext);
+        mRoot.setBackgroundColor(mBg);
+        mDialog = new ComponentDialog(mContext, android.R.style.Theme_DeviceDefault_NoActionBar);
+        mDialog.setCancelable(false);
+        mDialog.getOnBackPressedDispatcher()
+                .addCallback(
+                        mDialog,
+                        new OnBackPressedCallback(true) {
+                            @Override
+                            public void handleOnBackPressed() {
+                                back();
+                            }
+                        });
+        loadDnsChoices();
+    }
+
+    public static void attach(ChromeTabbedActivity activity) {
+        if (activity.isIncognitoWindow()) return;
         SharedPreferences prefs = ContextUtils.getAppSharedPreferences();
-        prefs.edit().remove(ChromePreferenceKeys.AERIUM_ONBOARDING_REQUEST).apply();
-        sListener =
-                (sharedPrefs, key) -> {
-                    if (ChromePreferenceKeys.AERIUM_ONBOARDING_REQUEST.equals(key)) handle();
+        if (prefs.getBoolean(DONE_KEY, false) || prefs.getBoolean(OLD_DONE_KEY, false)) return;
+        if (!sStarted) {
+            if (!isFreshInstall(activity)) {
+                prefs.edit().putBoolean(DONE_KEY, true).apply();
+                return;
+            }
+            sStarted = true;
+            sPicked.add(UBOL);
+            sAerogel.add(UBOL);
+            String active = currentGuard();
+            if (!active.isEmpty()) sGuard = active;
+        }
+        AeriumOnboarding current = sCurrent;
+        if (current != null) {
+            if (current.mActivity == activity) return;
+            current.close();
+        }
+        AeriumOnboarding onboarding = new AeriumOnboarding(activity);
+        sCurrent = onboarding;
+        activity.getLifecycleDispatcher()
+                .register(
+                        new DestroyObserver() {
+                            @Override
+                            public void onDestroy() {
+                                if (sCurrent == onboarding) onboarding.close();
+                            }
+                        });
+        onboarding.show();
+    }
+
+    private static boolean isFreshInstall(Context context) {
+        try {
+            PackageInfo info =
+                    context.getPackageManager().getPackageInfo(context.getPackageName(), 0);
+            return info.firstInstallTime == info.lastUpdateTime;
+        } catch (PackageManager.NameNotFoundException e) {
+            return false;
+        }
+    }
+
+    private static @Nullable Profile profile() {
+        if (!ProfileManager.isInitialized()) return null;
+        return ProfileManager.getLastUsedRegularProfile();
+    }
+
+    private static String currentGuard() {
+        Profile profile = profile();
+        if (profile == null) return "";
+        PrefService prefs = UserPrefs.get(profile);
+        if (prefs.getPrefType("aerium_guard.active_preset") < 0) return "";
+        String active = prefs.getString("aerium_guard.active_preset");
+        for (String id : GUARD_IDS) {
+            if (id.equals(active)) return active;
+        }
+        return "";
+    }
+
+    private int dp(float value) {
+        return Math.round(
+                TypedValue.applyDimension(
+                        TypedValue.COMPLEX_UNIT_DIP,
+                        value,
+                        mContext.getResources().getDisplayMetrics()));
+    }
+
+    private String str(int res) {
+        return mContext.getString(res);
+    }
+
+    private void show() {
+        Window window = mDialog.getWindow();
+        mDialog.setContentView(mRoot);
+        if (window != null) {
+            window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+            window.setBackgroundDrawable(new ColorDrawable(mBg));
+            window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+            WindowCompat.setDecorFitsSystemWindows(window, false);
+            WindowCompat.getInsetsController(window, window.getDecorView())
+                    .setAppearanceLightStatusBars(!mDark);
+            WindowCompat.getInsetsController(window, window.getDecorView())
+                    .setAppearanceLightNavigationBars(!mDark);
+        }
+        ViewCompat.setOnApplyWindowInsetsListener(
+                mRoot,
+                (view, insets) -> {
+                    Insets bars =
+                            insets.getInsets(
+                                    WindowInsetsCompat.Type.systemBars()
+                                            | WindowInsetsCompat.Type.displayCutout()
+                                            | WindowInsetsCompat.Type.ime());
+                    view.setPadding(bars.left, bars.top, bars.right, bars.bottom);
+                    return WindowInsetsCompat.CONSUMED;
+                });
+        render();
+        mDialog.show();
+        watchProgress();
+    }
+
+    private void close() {
+        if (mProgressListener != null) {
+            ContextUtils.getAppSharedPreferences()
+                    .unregisterOnSharedPreferenceChangeListener(mProgressListener);
+            mProgressListener = null;
+        }
+        if (sCurrent == this) sCurrent = null;
+        if (mDialog.isShowing()) mDialog.dismiss();
+    }
+
+    private void watchProgress() {
+        mProgressListener =
+                (prefs, key) -> {
+                    if (AeriumExtensionInstalls.PROGRESS_KEY.equals(key)) renderProgress();
                 };
-        prefs.registerOnSharedPreferenceChangeListener(sListener);
-        PostTask.postTask(TaskTraits.UI_DEFAULT, AeriumOnboardingRequests::openPendingRestore);
+        ContextUtils.getAppSharedPreferences()
+                .registerOnSharedPreferenceChangeListener(mProgressListener);
     }
 
-    private static void openPendingRestore() {
-        ChromeTabbedActivity activity = sActivity.get();
-        if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
-        SharedPreferences prefs = ContextUtils.getAppSharedPreferences();
-        String pending = prefs.getString(AeriumExtensionBackup.PENDING_KEY, "");
-        if (pending == null || pending.isEmpty()) return;
-        prefs.edit().remove(AeriumExtensionBackup.PENDING_KEY).apply();
-        activity.getTabCreator(false)
-                .createNewTab(
-                        new LoadUrlParams(
-                                FIRST_RUN_URL + "#restore=" + Uri.encode(pending),
-                                PageTransition.AUTO_TOPLEVEL),
-                        TabLaunchType.FROM_CHROME_UI,
-                        null);
+    private void go(int step) {
+        sStep = step;
+        render();
     }
 
-    private static void handle() {
-        SharedPreferences prefs = ContextUtils.getAppSharedPreferences();
-        String request = prefs.getString(ChromePreferenceKeys.AERIUM_ONBOARDING_REQUEST, "");
-        if (request == null || request.isEmpty()) return;
-        ChromeTabbedActivity activity = sActivity.get();
-        if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
-        prefs.edit().remove(ChromePreferenceKeys.AERIUM_ONBOARDING_REQUEST).apply();
-        String[] parts = request.split(";", -1);
-        switch (parts[0]) {
-            case "restore":
-                SettingsNavigationFactory.createSettingsNavigation()
-                        .startSettings(activity, AeriumBackupFragment.class);
+    private void back() {
+        if (sStep == WELCOME || sStep == READY) return;
+        go(sStep - 1);
+    }
+
+    private void render() {
+        mRoot.removeAllViews();
+        mProgressText = null;
+        mProgressBar = null;
+        LinearLayout page = new LinearLayout(mContext);
+        page.setOrientation(LinearLayout.VERTICAL);
+        mRoot.addView(
+                page,
+                new FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        page.addView(topBar());
+        ScrollView scroll = new ScrollView(mContext);
+        scroll.setFillViewport(true);
+        scroll.setClipToPadding(false);
+        LinearLayout body = new LinearLayout(mContext);
+        body.setOrientation(LinearLayout.VERTICAL);
+        body.setPadding(dp(24), dp(8), dp(24), dp(24));
+        scroll.addView(
+                body,
+                new ScrollView.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        page.addView(scroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        LinearLayout foot = new LinearLayout(mContext);
+        foot.setOrientation(LinearLayout.VERTICAL);
+        foot.setPadding(dp(24), dp(8), dp(24), dp(20));
+        page.addView(foot);
+        switch (sStep) {
+            case GUARD:
+                buildGuard(body, foot);
                 break;
-            case "default":
-                askToBeDefault(activity);
+            case DNS:
+                buildDns(body, foot);
                 break;
-            case "finish":
-                finish(activity, parts);
+            case LOOK:
+                buildLook(body, foot);
+                break;
+            case EXTENSIONS:
+                buildExtensions(body, foot);
+                break;
+            case READY:
+                buildReady(body, foot);
                 break;
             default:
+                buildWelcome(body, foot);
                 break;
         }
     }
 
-    private static void askToBeDefault(ChromeTabbedActivity activity) {
-        RoleManager roleManager = activity.getSystemService(RoleManager.class);
+    private View topBar() {
+        LinearLayout bar = new LinearLayout(mContext);
+        bar.setOrientation(LinearLayout.HORIZONTAL);
+        bar.setGravity(Gravity.CENTER_VERTICAL);
+        bar.setPadding(dp(8), 0, dp(12), 0);
+        bar.setMinimumHeight(dp(56));
+        ImageView backButton = new ImageView(mContext);
+        backButton.setImageResource(R.drawable.aerium_onb_back);
+        backButton.setImageTintList(ColorStateList.valueOf(mText));
+        backButton.setScaleType(ImageView.ScaleType.CENTER);
+        backButton.setContentDescription(str(R.string.aerium_onb_back));
+        backButton.setBackground(ripple(Color.TRANSPARENT, dp(22)));
+        backButton.setOnClickListener(v -> back());
+        boolean canGoBack = sStep > WELCOME && sStep < READY;
+        backButton.setVisibility(canGoBack ? View.VISIBLE : View.INVISIBLE);
+        bar.addView(backButton, new LinearLayout.LayoutParams(dp(44), dp(44)));
+        LinearLayout dots = new LinearLayout(mContext);
+        dots.setGravity(Gravity.CENTER);
+        if (sStep > WELCOME) {
+            dots.setContentDescription(
+                    mContext.getString(R.string.aerium_onb_step, sStep + 1, STEP_COUNT));
+            dots.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
+            for (int i = 0; i < STEP_COUNT; i++) {
+                View dot = new View(mContext);
+                GradientDrawable shape = new GradientDrawable();
+                shape.setCornerRadius(dp(3));
+                shape.setColor(i <= sStep ? mAccent : mLine);
+                dot.setBackground(shape);
+                LinearLayout.LayoutParams params =
+                        new LinearLayout.LayoutParams(i == sStep ? dp(18) : dp(6), dp(6));
+                params.setMargins(dp(3), 0, dp(3), 0);
+                dots.addView(dot, params);
+            }
+        }
+        bar.addView(dots, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        if (sStep == WELCOME || sStep == EXTENSIONS) {
+            TextView skip = text(str(R.string.aerium_onb_skip), 15, mAccent, true);
+            skip.setPadding(dp(12), dp(10), dp(12), dp(10));
+            skip.setBackground(ripple(Color.TRANSPARENT, dp(20)));
+            skip.setOnClickListener(v -> {
+                if (sStep == WELCOME) {
+                    finish(false);
+                } else {
+                    apply(false);
+                }
+            });
+            bar.addView(skip);
+        } else {
+            bar.addView(new View(mContext), new LinearLayout.LayoutParams(dp(44), dp(44)));
+        }
+        return bar;
+    }
+
+    private TextView text(String value, float sp, int color, boolean bold) {
+        TextView view = new TextView(mContext);
+        view.setText(value);
+        view.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp);
+        view.setTextColor(color);
+        view.setTypeface(Typeface.create("sans-serif", bold ? Typeface.BOLD : Typeface.NORMAL));
+        return view;
+    }
+
+    private Drawable ripple(int fill, int radius) {
+        GradientDrawable content = new GradientDrawable();
+        content.setColor(fill);
+        content.setCornerRadius(radius);
+        GradientDrawable mask = new GradientDrawable();
+        mask.setColor(Color.WHITE);
+        mask.setCornerRadius(radius);
+        int rippleColor = (mText & 0x00FFFFFF) | 0x22000000;
+        return new RippleDrawable(ColorStateList.valueOf(rippleColor), content, mask);
+    }
+
+    private void head(LinearLayout body, String title, @Nullable String subtitle) {
+        TextView heading = text(title, 30, mText, true);
+        heading.setPadding(0, dp(16), 0, 0);
+        heading.setAccessibilityHeading(true);
+        body.addView(heading);
+        if (subtitle != null) {
+            TextView sub = text(subtitle, 16, mText2, false);
+            sub.setPadding(0, dp(8), 0, 0);
+            body.addView(sub);
+        }
+        body.addView(space(20));
+    }
+
+    private View space(int height) {
+        View view = new View(mContext);
+        view.setLayoutParams(new LinearLayout.LayoutParams(1, dp(height)));
+        return view;
+    }
+
+    private void label(LinearLayout body, String value, @Nullable String hint) {
+        LinearLayout row = new LinearLayout(mContext);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(4), dp(12), dp(4), dp(8));
+        TextView title = text(value.toUpperCase(Locale.getDefault()), 12, mText2, true);
+        title.setLetterSpacing(0.08f);
+        row.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        if (hint != null) row.addView(text(hint, 12, mText2, false));
+        body.addView(row);
+    }
+
+    private LinearLayout card(LinearLayout body) {
+        LinearLayout card = new LinearLayout(mContext);
+        card.setOrientation(LinearLayout.VERTICAL);
+        GradientDrawable shape = new GradientDrawable();
+        shape.setColor(mCard);
+        shape.setCornerRadius(dp(20));
+        card.setBackground(shape);
+        card.setClipToOutline(true);
+        body.addView(card);
+        return card;
+    }
+
+    private void divider(LinearLayout card) {
+        if (card.getChildCount() == 0) return;
+        View line = new View(mContext);
+        line.setBackgroundColor(mLine);
+        LinearLayout.LayoutParams params =
+                new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1);
+        params.setMargins(dp(16), 0, dp(16), 0);
+        card.addView(line, params);
+    }
+
+    private View indicator(boolean radio, boolean on) {
+        FrameLayout box = new FrameLayout(mContext);
+        GradientDrawable outer = new GradientDrawable();
+        outer.setShape(radio ? GradientDrawable.OVAL : GradientDrawable.RECTANGLE);
+        if (!radio) outer.setCornerRadius(dp(6));
+        outer.setStroke(dp(2), on ? mAccent : mText2);
+        outer.setColor(on && !radio ? mAccent : Color.TRANSPARENT);
+        box.setBackground(outer);
+        if (on) {
+            if (radio) {
+                View dot = new View(mContext);
+                GradientDrawable inner = new GradientDrawable();
+                inner.setShape(GradientDrawable.OVAL);
+                inner.setColor(mAccent);
+                dot.setBackground(inner);
+                box.addView(dot, new FrameLayout.LayoutParams(dp(10), dp(10), Gravity.CENTER));
+            } else {
+                ImageView check = new ImageView(mContext);
+                check.setImageResource(R.drawable.aerium_onb_check);
+                check.setImageTintList(ColorStateList.valueOf(mOnAccent));
+                box.addView(check, new FrameLayout.LayoutParams(dp(16), dp(16), Gravity.CENTER));
+            }
+        }
+        box.setLayoutParams(new LinearLayout.LayoutParams(dp(22), dp(22)));
+        return box;
+    }
+
+    private CheckRow choice(
+            LinearLayout card,
+            boolean radio,
+            boolean on,
+            @Nullable View leading,
+            String title,
+            @Nullable String subtitle,
+            @Nullable String tag,
+            View.OnClickListener onClick) {
+        divider(card);
+        CheckRow row = new CheckRow(mContext, radio);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setMinimumHeight(dp(60));
+        row.setPadding(dp(16), dp(12), dp(16), dp(12));
+        row.setBackground(ripple(Color.TRANSPARENT, 0));
+        row.setClickable(true);
+        row.setFocusable(true);
+        row.setRowChecked(on);
+        if (leading != null) {
+            row.addView(leading);
+            View gap = new View(mContext);
+            row.addView(gap, new LinearLayout.LayoutParams(dp(14), 1));
+        }
+        LinearLayout texts = new LinearLayout(mContext);
+        texts.setOrientation(LinearLayout.VERTICAL);
+        texts.addView(text(title, 16, mText, false));
+        if (subtitle != null && !subtitle.isEmpty()) {
+            TextView sub = text(subtitle, 13, mText2, false);
+            sub.setPadding(0, dp(2), 0, 0);
+            texts.addView(sub);
+        }
+        row.addView(texts, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        if (tag != null && !tag.isEmpty()) {
+            TextView tagView = text(tag, 13, mText2, false);
+            tagView.setPadding(dp(8), 0, dp(12), 0);
+            row.addView(tagView);
+        }
+        row.addView(indicator(radio, on));
+        row.setOnClickListener(onClick);
+        card.addView(row);
+        return row;
+    }
+
+    private TextView primary(LinearLayout foot, String value, View.OnClickListener onClick) {
+        TextView button = text(value, 16, mOnAccent, true);
+        button.setGravity(Gravity.CENTER);
+        button.setBackground(ripple(mAccent, dp(26)));
+        button.setOnClickListener(onClick);
+        LinearLayout.LayoutParams params =
+                new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52));
+        params.setMargins(0, dp(8), 0, 0);
+        foot.addView(button, params);
+        return button;
+    }
+
+    private void secondary(LinearLayout foot, String value, View.OnClickListener onClick) {
+        TextView button = text(value, 16, mAccent, true);
+        button.setGravity(Gravity.CENTER);
+        button.setBackground(ripple(Color.TRANSPARENT, dp(26)));
+        button.setOnClickListener(onClick);
+        LinearLayout.LayoutParams params =
+                new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52));
+        params.setMargins(0, dp(4), 0, 0);
+        foot.addView(button, params);
+    }
+
+    private void buildWelcome(LinearLayout body, LinearLayout foot) {
+        body.setGravity(Gravity.CENTER_HORIZONTAL);
+        body.addView(space(48));
+        ImageView logo = new ImageView(mContext);
+        logo.setImageResource(R.drawable.aerium_onb_logo);
+        logo.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        LinearLayout.LayoutParams logoParams = new LinearLayout.LayoutParams(dp(88), dp(88));
+        logoParams.gravity = Gravity.CENTER_HORIZONTAL;
+        body.addView(logo, logoParams);
+        TextView title = text(str(R.string.aerium_first_run_title), 32, mText, true);
+        title.setGravity(Gravity.CENTER);
+        title.setPadding(0, dp(28), 0, 0);
+        title.setAccessibilityHeading(true);
+        body.addView(title);
+        TextView tagline = text(str(R.string.aerium_onb_tagline), 17, mText2, false);
+        tagline.setGravity(Gravity.CENTER);
+        tagline.setPadding(0, dp(10), 0, 0);
+        body.addView(tagline);
+        primary(foot, str(R.string.aerium_onb_start), v -> go(GUARD));
+        secondary(foot, str(R.string.aerium_onb_restore), v -> openRestore());
+    }
+
+    private void buildGuard(LinearLayout body, LinearLayout foot) {
+        head(body, str(R.string.aerium_onb_guard_title), str(R.string.aerium_onb_guard_sub));
+        LinearLayout card = card(body);
+        for (int i = 0; i < GUARD_IDS.length; i++) {
+            String id = GUARD_IDS[i];
+            choice(card, true, id.equals(sGuard), null, str(GUARD_TITLES[i]), str(GUARD_SUBS[i]),
+                    null, v -> {
+                        sGuard = id;
+                        render();
+                    });
+        }
+        primary(foot, str(R.string.aerium_onb_continue), v -> go(DNS));
+    }
+
+    private void loadDnsChoices() {
+        List<DnsChoice> found = new ArrayList<>();
+        try {
+            for (SecureDnsBridge.Entry entry : SecureDnsBridge.getProviders()) {
+                if (entry.config.isEmpty()) continue;
+                found.add(new DnsChoice(entry.config, cleanName(entry.name), tagFor(entry.config)));
+            }
+        } catch (RuntimeException e) {
+            found.clear();
+        }
+        for (String host : DNS_HOSTS) {
+            for (int i = 0; i < found.size(); i++) {
+                if (found.get(i).template.contains(host)) {
+                    mDnsChoices.add(found.remove(i));
+                    break;
+                }
+            }
+        }
+        mDnsChoices.addAll(found);
+        if (sDns.isEmpty()) {
+            sDns = mDnsChoices.isEmpty() ? DNS_AUTOMATIC : mDnsChoices.get(0).template;
+        }
+    }
+
+    private static String cleanName(String name) {
+        String clean = name.replaceAll("\\s*\\([^)]*\\)$", "");
+        return clean.equals("Mullvad DNS") ? "Mullvad" : clean;
+    }
+
+    private String tagFor(String template) {
+        if (template.contains("adblock.dns.mullvad.net")) return str(R.string.aerium_onb_dns_ads);
+        if (template.contains("dns.mullvad.net")) return str(R.string.aerium_onb_dns_no_logs);
+        if (template.contains("quad9")) return str(R.string.aerium_onb_dns_malware);
+        if (template.contains("nextdns")) return str(R.string.aerium_onb_dns_filters);
+        if (template.contains("cloudflare")) return "1.1.1.1";
+        if (template.contains("cleanbrowsing")) return str(R.string.aerium_onb_dns_family);
+        if (template.contains("opendns")) return "Cisco";
+        return "";
+    }
+
+    private void buildDns(LinearLayout body, LinearLayout foot) {
+        head(body, str(R.string.aerium_onb_dns_title), str(R.string.aerium_onb_dns_sub));
+        LinearLayout card = card(body);
+        for (DnsChoice choice : mDnsChoices) {
+            choice(card, true, choice.template.equals(sDns), null, choice.name, null, choice.tag,
+                    v -> {
+                        sDns = choice.template;
+                        render();
+                    });
+        }
+        boolean custom = DNS_CUSTOM.equals(sDns);
+        choice(card, true, custom, null, str(R.string.aerium_onb_dns_custom), null,
+                str(R.string.aerium_onb_dns_custom_tag), v -> {
+                    sDns = DNS_CUSTOM;
+                    render();
+                });
+        TextView error = text(str(R.string.aerium_onb_dns_custom_invalid), 13, 0xFFD93025, false);
+        EditText input = null;
+        if (custom) {
+            EditText field = new EditText(mContext);
+            input = field;
+            field.setSingleLine(true);
+            field.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
+            field.setHint("https://dns.example/dns-query");
+            field.setText(sCustom);
+            field.setTextColor(mText);
+            field.setHintTextColor(mText2);
+            field.setContentDescription(str(R.string.aerium_onb_dns_custom));
+            field.addTextChangedListener(
+                    new TextWatcher() {
+                        @Override
+                        public void beforeTextChanged(CharSequence s, int a, int b, int c) {}
+
+                        @Override
+                        public void onTextChanged(CharSequence s, int a, int b, int c) {}
+
+                        @Override
+                        public void afterTextChanged(Editable s) {
+                            sCustom = s.toString().trim();
+                            error.setVisibility(View.GONE);
+                        }
+                    });
+            LinearLayout.LayoutParams params =
+                    new LinearLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            params.setMargins(dp(16), 0, dp(16), 0);
+            card.addView(field, params);
+            error.setPadding(dp(20), 0, dp(16), dp(10));
+            error.setVisibility(View.GONE);
+            card.addView(error);
+            field.requestFocus();
+        }
+        choice(card, true, DNS_AUTOMATIC.equals(sDns), null, str(R.string.aerium_onb_dns_auto), null,
+                str(R.string.aerium_onb_dns_auto_tag), v -> {
+                    sDns = DNS_AUTOMATIC;
+                    render();
+                });
+        EditText field = input;
+        primary(foot, str(R.string.aerium_onb_continue), v -> {
+            if (DNS_CUSTOM.equals(sDns) && !TEMPLATE.matcher(sCustom).matches()) {
+                error.setVisibility(View.VISIBLE);
+                if (field != null) field.requestFocus();
+                return;
+            }
+            go(LOOK);
+        });
+    }
+
+    private View tile(View preview, String title, boolean on, View.OnClickListener onClick) {
+        CheckRow box = new CheckRow(mContext, true);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setGravity(Gravity.CENTER_HORIZONTAL);
+        box.setPadding(dp(8), dp(10), dp(8), dp(10));
+        box.setClickable(true);
+        box.setFocusable(true);
+        box.setRowChecked(on);
+        GradientDrawable content = new GradientDrawable();
+        content.setColor(mCard);
+        content.setCornerRadius(dp(18));
+        content.setStroke(on ? dp(2) : dp(1), on ? mAccent : mLine);
+        GradientDrawable mask = new GradientDrawable();
+        mask.setColor(Color.WHITE);
+        mask.setCornerRadius(dp(18));
+        box.setBackground(
+                new RippleDrawable(
+                        ColorStateList.valueOf((mText & 0x00FFFFFF) | 0x22000000), content, mask));
+        box.addView(preview);
+        TextView name = text(title, 14, on ? mText : mText2, on);
+        name.setGravity(Gravity.CENTER);
+        name.setPadding(0, dp(8), 0, 0);
+        box.addView(name);
+        box.setOnClickListener(onClick);
+        return box;
+    }
+
+    private View themePreview(String theme) {
+        int bg = "light".equals(theme) ? 0xFFF4F5F8 : "dark".equals(theme) ? 0xFF1B1E26 : 0xFF000000;
+        int fg = "light".equals(theme) ? 0xFFD9DCE3 : "dark".equals(theme) ? 0xFF343947 : 0xFF22252D;
+        LinearLayout preview = new LinearLayout(mContext);
+        preview.setOrientation(LinearLayout.VERTICAL);
+        preview.setPadding(dp(8), dp(8), dp(8), dp(8));
+        GradientDrawable shape = new GradientDrawable();
+        shape.setColor(bg);
+        shape.setCornerRadius(dp(10));
+        shape.setStroke(1, mLine);
+        preview.setBackground(shape);
+        int[] heights = {8, 26, 6};
+        float[] widths = {0.7f, 1f, 0.5f};
+        for (int i = 0; i < heights.length; i++) {
+            View bar = new View(mContext);
+            GradientDrawable barShape = new GradientDrawable();
+            barShape.setColor(fg);
+            barShape.setCornerRadius(dp(3));
+            bar.setBackground(barShape);
+            LinearLayout.LayoutParams params =
+                    new LinearLayout.LayoutParams(Math.round(dp(64) * widths[i]), dp(heights[i]));
+            params.setMargins(0, 0, 0, dp(5));
+            preview.addView(bar, params);
+        }
+        preview.setLayoutParams(new LinearLayout.LayoutParams(dp(80), dp(84)));
+        return preview;
+    }
+
+    private View layoutPreview(int layout) {
+        ImageView icon = new ImageView(mContext);
+        int res =
+                layout == AeriumToolbarPrefs.SPLIT
+                        ? R.drawable.aerium_layout_split
+                        : layout == AeriumToolbarPrefs.THUMB
+                                ? R.drawable.aerium_layout_thumb
+                                : layout == AeriumToolbarPrefs.MINIMAL
+                                        ? R.drawable.aerium_layout_minimal
+                                        : R.drawable.aerium_layout_classic;
+        icon.setImageResource(res);
+        icon.setImageTintList(ColorStateList.valueOf(layout == sLayout ? mAccent : mText2));
+        icon.setLayoutParams(new LinearLayout.LayoutParams(dp(48), dp(48)));
+        return icon;
+    }
+
+    private void row(LinearLayout body, List<View> tiles) {
+        LinearLayout row = new LinearLayout(mContext);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        for (int i = 0; i < tiles.size(); i++) {
+            LinearLayout.LayoutParams params =
+                    new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+            if (i > 0) params.setMarginStart(dp(10));
+            row.addView(tiles.get(i), params);
+        }
+        body.addView(row);
+    }
+
+    private void buildLook(LinearLayout body, LinearLayout foot) {
+        head(body, str(R.string.aerium_onb_look_title), null);
+        label(body, str(R.string.aerium_onb_theme), null);
+        List<View> themes = new ArrayList<>();
+        for (int i = 0; i < THEMES.length; i++) {
+            String theme = THEMES[i];
+            themes.add(tile(themePreview(theme), str(THEME_TITLES[i]), theme.equals(sTheme), v -> {
+                sTheme = theme.equals(sTheme) ? "" : theme;
+                render();
+            }));
+        }
+        row(body, themes);
+        body.addView(space(8));
+        label(body, str(R.string.aerium_toolbar_layout), null);
+        List<View> first = new ArrayList<>();
+        List<View> second = new ArrayList<>();
+        for (int i = 0; i < LAYOUTS.length; i++) {
+            int layout = LAYOUTS[i];
+            View view = tile(layoutPreview(layout), str(AeriumToolbarPrefs.getLayoutTitle(layout)),
+                    layout == sLayout, v -> {
+                        sLayout = layout;
+                        render();
+                    });
+            (i < 2 ? first : second).add(view);
+        }
+        row(body, first);
+        body.addView(space(10));
+        row(body, second);
+        primary(foot, str(R.string.aerium_onb_continue), v -> go(EXTENSIONS));
+    }
+
+    private View extTile(Ext ext) {
+        TextView mark = text(ext.mark, 15, Color.WHITE, true);
+        mark.setGravity(Gravity.CENTER);
+        GradientDrawable shape = new GradientDrawable();
+        shape.setColor(ext.color);
+        shape.setCornerRadius(dp(12));
+        mark.setBackground(shape);
+        mark.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        mark.setLayoutParams(new LinearLayout.LayoutParams(dp(40), dp(40)));
+        return mark;
+    }
+
+    private void pick(Category category, Ext ext) {
+        boolean on = !sPicked.contains(ext.id);
+        if (ext.exclusive) {
+            for (Ext other : category.items) sPicked.remove(other.id);
+        }
+        if (on) {
+            sPicked.add(ext.id);
+        } else {
+            sPicked.remove(ext.id);
+        }
+        render();
+    }
+
+    private void buildExtensions(LinearLayout body, LinearLayout foot) {
+        head(body, str(R.string.aerium_onb_ext_title), str(R.string.aerium_onb_ext_sub));
+        for (Category category : catalog()) {
+            label(body, category.title == 0 ? "YouTube" : str(category.title),
+                    category.pickOne ? str(R.string.aerium_onb_pick_one) : null);
+            LinearLayout card = card(body);
+            for (Ext ext : category.items) {
+                boolean on = sPicked.contains(ext.id);
+                choice(card, category.pickOne, on, extTile(ext), ext.name, str(ext.desc),
+                        ext.license, v -> pick(category, ext));
+                if (on) card.addView(aerogelSwitch(ext));
+            }
+            body.addView(space(8));
+        }
+        int count = sPicked.size();
+        primary(foot,
+                count > 0
+                        ? mContext.getString(R.string.aerium_onb_install, count)
+                        : str(R.string.aerium_onb_continue),
+                v -> apply(true));
+    }
+
+    private View aerogelSwitch(Ext ext) {
+        LinearLayout row = new LinearLayout(mContext);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(70), 0, dp(16), dp(10));
+        ImageView icon = new ImageView(mContext);
+        icon.setImageResource(R.drawable.ic_incognito_24dp);
+        icon.setImageTintList(ColorStateList.valueOf(mHaze));
+        icon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        row.addView(icon, new LinearLayout.LayoutParams(dp(18), dp(18)));
+        TextView label = text(str(R.string.aerium_onb_aerogel_too), 14, mText2, false);
+        label.setPadding(dp(8), 0, 0, 0);
+        row.addView(label, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        Switch toggle = new Switch(mContext);
+        toggle.setChecked(sAerogel.contains(ext.id));
+        toggle.setContentDescription(ext.name + ", " + str(R.string.aerium_onb_aerogel_too));
+        toggle.setOnCheckedChangeListener((button, checked) -> {
+            if (checked) {
+                sAerogel.add(ext.id);
+            } else {
+                sAerogel.remove(ext.id);
+            }
+        });
+        row.addView(toggle);
+        return row;
+    }
+
+    private void apply(boolean withExtensions) {
+        if (!sApplied) {
+            sApplied = true;
+            Profile profile = profile();
+            if (profile != null) {
+                applyGuard(profile);
+                applyDns();
+                if (withExtensions && !sPicked.isEmpty()) {
+                    JSONArray items = new JSONArray();
+                    try {
+                        for (Category category : catalog()) {
+                            for (Ext ext : category.items) {
+                                if (!sPicked.contains(ext.id)) continue;
+                                JSONObject item = new JSONObject();
+                                item.put("id", ext.id);
+                                item.put("source", ext.source);
+                                item.put("aerogel", sAerogel.contains(ext.id));
+                                items.put(item);
+                            }
+                        }
+                    } catch (JSONException e) {
+                        items = new JSONArray();
+                    }
+                    sInstalling = AeriumExtensionInstalls.enqueue(UserPrefs.get(profile), items);
+                }
+            }
+        }
+        go(READY);
+    }
+
+    private void applyGuard(Profile profile) {
+        if (!WebsitePreferenceBridge.isContentSettingManaged(
+                profile, ContentSettingsType.JAVASCRIPT_JIT)) {
+            WebsitePreferenceBridge.setDefaultContentSetting(
+                    profile,
+                    ContentSettingsType.JAVASCRIPT_JIT,
+                    "security".equals(sGuard) ? ContentSetting.BLOCK : ContentSetting.ALLOW);
+        }
+        PrefService prefs = UserPrefs.get(profile);
+        if (prefs.getPrefType("aerium_guard.requested_preset") >= 0) {
+            prefs.setString("aerium_guard.requested_preset", sGuard);
+        }
+    }
+
+    private void applyDns() {
+        try {
+            if (DNS_AUTOMATIC.equals(sDns)) {
+                SecureDnsBridge.setMode(SecureDnsMode.AUTOMATIC);
+                return;
+            }
+            String template = DNS_CUSTOM.equals(sDns) ? sCustom : sDns;
+            if (!template.isEmpty() && SecureDnsBridge.setConfig(template)) {
+                SecureDnsBridge.setMode(SecureDnsMode.SECURE);
+            }
+        } catch (RuntimeException e) {
+        }
+    }
+
+    private String guardName() {
+        for (int i = 0; i < GUARD_IDS.length; i++) {
+            if (GUARD_IDS[i].equals(sGuard)) return str(GUARD_TITLES[i]);
+        }
+        return "";
+    }
+
+    private String dnsName() {
+        if (DNS_AUTOMATIC.equals(sDns)) return str(R.string.aerium_onb_dns_auto);
+        if (DNS_CUSTOM.equals(sDns)) {
+            String host = sCustom.replaceFirst("^https://", "");
+            int slash = host.indexOf('/');
+            return slash > 0 ? host.substring(0, slash) : host;
+        }
+        for (DnsChoice choice : mDnsChoices) {
+            if (choice.template.equals(sDns)) return choice.name;
+        }
+        return "";
+    }
+
+    private String themeName() {
+        for (int i = 0; i < THEMES.length; i++) {
+            if (THEMES[i].equals(sTheme)) return str(THEME_TITLES[i]);
+        }
+        return str(R.string.aerium_onb_auto);
+    }
+
+    private String searchName() {
+        Profile profile = profile();
+        if (profile == null) return "";
+        try {
+            TemplateUrl engine =
+                    TemplateUrlServiceFactory.getForProfile(profile)
+                            .getDefaultSearchEngineTemplateUrl();
+            return engine == null ? "" : engine.getShortName();
+        } catch (RuntimeException e) {
+            return "";
+        }
+    }
+
+    private void summary(LinearLayout card, String value, String key) {
+        divider(card);
+        LinearLayout row = new LinearLayout(mContext);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setMinimumHeight(dp(56));
+        row.setPadding(dp(16), dp(10), dp(16), dp(10));
+        row.addView(text(value, 16, mText, false),
+                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        row.addView(text(key, 13, mText2, false));
+        card.addView(row);
+    }
+
+    private void buildReady(LinearLayout body, LinearLayout foot) {
+        LinearLayout headRow = new LinearLayout(mContext);
+        headRow.setOrientation(LinearLayout.VERTICAL);
+        headRow.setPadding(0, dp(24), 0, dp(20));
+        ImageView badge = new ImageView(mContext);
+        badge.setImageResource(R.drawable.aerium_onb_check);
+        badge.setImageTintList(ColorStateList.valueOf(mOnAccent));
+        badge.setScaleType(ImageView.ScaleType.CENTER);
+        GradientDrawable circle = new GradientDrawable();
+        circle.setShape(GradientDrawable.OVAL);
+        circle.setColor(mAccent);
+        badge.setBackground(circle);
+        badge.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        headRow.addView(badge, new LinearLayout.LayoutParams(dp(56), dp(56)));
+        TextView title = text(str(R.string.aerium_onb_ready_title), 32, mText, true);
+        title.setPadding(0, dp(16), 0, 0);
+        title.setAccessibilityHeading(true);
+        headRow.addView(title);
+        body.addView(headRow);
+        LinearLayout card = card(body);
+        summary(card, guardName(), "Aerium Guard");
+        summary(card, dnsName(), str(R.string.aerium_onb_dns_title));
+        summary(card, themeName(), str(R.string.aerium_onb_theme));
+        summary(card, str(AeriumToolbarPrefs.getLayoutTitle(sLayout)), str(R.string.aerium_toolbar_layout));
+        String search = searchName();
+        if (!search.isEmpty()) summary(card, search, str(R.string.aerium_onb_search));
+        divider(card);
+        LinearLayout extRow = new LinearLayout(mContext);
+        extRow.setOrientation(LinearLayout.VERTICAL);
+        extRow.setPadding(dp(16), dp(14), dp(16), dp(14));
+        LinearLayout extTop = new LinearLayout(mContext);
+        extTop.setGravity(Gravity.CENTER_VERTICAL);
+        TextView progress = text("", 16, mText, false);
+        progress.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        extTop.addView(progress, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        extTop.addView(text(str(R.string.aerium_onb_extensions), 13, mText2, false));
+        extRow.addView(extTop);
+        ProgressBar bar = new ProgressBar(mContext, null, android.R.attr.progressBarStyleHorizontal);
+        bar.setProgressTintList(ColorStateList.valueOf(mAccent));
+        LinearLayout.LayoutParams barParams =
+                new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(4));
+        barParams.setMargins(0, dp(10), 0, 0);
+        extRow.addView(bar, barParams);
+        card.addView(extRow);
+        mProgressText = progress;
+        mProgressBar = bar;
+        summary(card, str(R.string.aerium_onb_updates_daily), str(R.string.aerium_onb_updates));
+        renderProgress();
+        secondary(foot, str(R.string.aerium_onb_make_default), v -> askToBeDefault());
+        primary(foot, str(R.string.aerium_onb_start_browsing), v -> finish(true));
+    }
+
+    private void renderProgress() {
+        TextView progress = mProgressText;
+        ProgressBar bar = mProgressBar;
+        if (progress == null || bar == null) return;
+        int[] state = AeriumExtensionInstalls.readProgress();
+        int done = state[0];
+        int failed = state[1];
+        int total = state[2];
+        boolean finished = state[3] == 1;
+        if (!sInstalling) {
+            progress.setText(str(R.string.aerium_onb_none));
+            bar.setVisibility(View.GONE);
+            return;
+        }
+        if (total == 0 && finished) {
+            progress.setText(mContext.getString(R.string.aerium_onb_installing, 1, sPicked.size()));
+            bar.setMax(Math.max(1, sPicked.size()));
+            bar.setProgress(0);
+            bar.setVisibility(View.VISIBLE);
+            return;
+        }
+        if (!finished) {
+            progress.setText(
+                    mContext.getString(
+                            R.string.aerium_onb_installing, Math.min(done + failed + 1, total), total));
+            bar.setMax(Math.max(1, total));
+            bar.setProgress(done + failed);
+            bar.setVisibility(View.VISIBLE);
+            return;
+        }
+        bar.setVisibility(View.GONE);
+        progress.setText(
+                failed > 0
+                        ? mContext.getString(R.string.aerium_onb_some_failed, done, failed)
+                        : mContext.getString(R.string.aerium_onb_installed, done));
+    }
+
+    private void openRestore() {
+        SettingsNavigationFactory.createSettingsNavigation()
+                .startSettings(mActivity, AeriumBackupFragment.class);
+    }
+
+    private void askToBeDefault() {
+        RoleManager roleManager = mActivity.getSystemService(RoleManager.class);
         if (roleManager != null
                 && roleManager.isRoleAvailable(RoleManager.ROLE_BROWSER)
                 && !roleManager.isRoleHeld(RoleManager.ROLE_BROWSER)) {
             try {
-                activity.startActivityForResult(
+                mActivity.startActivityForResult(
                         roleManager.createRequestRoleIntent(RoleManager.ROLE_BROWSER),
                         REQUEST_DEFAULT_BROWSER);
                 return;
             } catch (ActivityNotFoundException e) {
-                IntentUtils.safeStartActivity(
-                        activity, new Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS));
-                return;
             }
         }
         IntentUtils.safeStartActivity(
-                activity, new Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS));
+                mActivity, new Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS));
     }
 
-    private static void finish(ChromeTabbedActivity activity, String[] parts) {
-        String theme = "";
-        String top = "";
-        for (String part : parts) {
-            if (part.startsWith("theme=")) theme = part.substring(6);
-            if (part.startsWith("top=")) top = part.substring(4);
-        }
-        var sharedPrefs = ChromeSharedPreferences.getInstance();
+    private void finish(boolean applyLook) {
+        SharedPreferences prefs = ContextUtils.getAppSharedPreferences();
         boolean recreate = false;
-        if (theme.equals("light") || theme.equals("dark") || theme.equals("black")) {
-            boolean black = theme.equals("black");
-            int type = theme.equals("light") ? ThemeType.LIGHT : ThemeType.DARK;
-            boolean nightBefore = GlobalNightModeStateProviderHolder.getInstance().isInNightMode();
-            boolean blackBefore =
-                    sharedPrefs.readBoolean(ChromePreferenceKeys.AERIUM_PURE_BLACK, true);
-            sharedPrefs.writeBoolean(ChromePreferenceKeys.AERIUM_PURE_BLACK, black);
-            sharedPrefs.writeInt(ChromePreferenceKeys.UI_THEME_SETTING, type);
-            boolean nightAfter = GlobalNightModeStateProviderHolder.getInstance().isInNightMode();
-            recreate = nightBefore == nightAfter && nightAfter && blackBefore != black;
+        boolean restart = false;
+        if (applyLook) {
+            if (!sTheme.isEmpty()) {
+                var sharedPrefs = ChromeSharedPreferences.getInstance();
+                boolean black = "black".equals(sTheme);
+                boolean nightBefore =
+                        GlobalNightModeStateProviderHolder.getInstance().isInNightMode();
+                boolean blackBefore =
+                        sharedPrefs.readBoolean(ChromePreferenceKeys.AERIUM_PURE_BLACK, true);
+                sharedPrefs.writeBoolean(ChromePreferenceKeys.AERIUM_PURE_BLACK, black);
+                sharedPrefs.writeInt(
+                        ChromePreferenceKeys.UI_THEME_SETTING,
+                        "light".equals(sTheme) ? ThemeType.LIGHT : ThemeType.DARK);
+                boolean nightAfter =
+                        GlobalNightModeStateProviderHolder.getInstance().isInNightMode();
+                recreate = nightBefore == nightAfter && nightAfter && blackBefore != black;
+            }
+            restart = AeriumToolbarPrefs.setLayout(sLayout);
         }
-        if (top.equals("0") || top.equals("1")) {
-            AeriumToolbarPrefs.setLayout(
-                    top.equals("1") ? AeriumToolbarPrefs.CLASSIC : AeriumToolbarPrefs.THUMB);
+        prefs.edit().putBoolean(DONE_KEY, true).commit();
+        close();
+        if (restart) {
+            ApplicationLifetime.terminate(true);
+            return;
         }
-        Tab tab = activity.getActivityTab();
-        if (tab != null && tab.getUrl().getSpec().startsWith(FIRST_RUN_URL)) {
-            LoadUrlParams params = new LoadUrlParams(NEW_TAB_URL, PageTransition.AUTO_TOPLEVEL);
-            params.setShouldReplaceCurrentEntry(true);
-            tab.loadUrl(params);
-        }
-        if (recreate) activity.recreate();
+        if (recreate) mActivity.recreate();
     }
 }
 AERIUM_ONBOARDING_JAVA
 
-sed_i 's|^  "java/src/org/chromium/chrome/browser/browsing_data/BrowsingDataCounterBridge.java",$|  "java/src/org/chromium/chrome/browser/AeriumOnboardingRequests.java",\n&|' \
+sed_i 's|^  "java/src/org/chromium/chrome/browser/browsing_data/BrowsingDataCounterBridge.java",$|  "java/src/org/chromium/chrome/browser/AeriumOnboarding.java",\n&|' \
     chrome/android/chrome_java_sources.gni
-sed_i 's|^            new NavigationPredictorBridge(profile, getLifecycleDispatcher(), this::isWarmOnResume);$|&\n            AeriumOnboardingRequests.attach(this);|' \
+sed_i 's|^            new NavigationPredictorBridge(profile, getLifecycleDispatcher(), this::isWarmOnResume);$|&\n            AeriumOnboarding.attach(this);|' \
     chrome/android/java/src/org/chromium/chrome/browser/ChromeTabbedActivity.java
 
-echo "[aerium] onboarding page applied"
+echo "[aerium] onboarding applied"
 
 # --- Let the system autofill service win even when it is Google's.
 #
@@ -3501,11 +3485,10 @@ sed_i 's|^      <message name="IDS_AERIUM_PURE_BLACK_TITLE" desc=|      <message
 # heading with no substitutions under it is dropped, while substitutions under
 # no heading are listed as unsectioned rather than disappearing.
 #
-# Header-only, like aerium_first_run.h next to it: a DefaultWebUIConfig plus an
-# inline URLDataSource needs no BUILD.gn entry, no .cc and no TypeScript. The
-# virtual methods are defined below the class for the reason that file records
-# - the chromium-style plugin rejects a virtual method with a non-empty body
-# written inside the class.
+# Header-only: a DefaultWebUIConfig plus an inline URLDataSource needs no
+# BUILD.gn entry, no .cc and no TypeScript. The virtual methods are defined
+# below the class because the chromium-style plugin rejects a virtual method
+# with a non-empty body written inside the class.
 #
 # The generated .inc is included with no fallback on purpose. If the generator
 # did not run, this fails to compile. The alternative - an empty list - would
@@ -4648,8 +4631,8 @@ sed_i 's|^    {"android-adaptive-frame-rate",$|    {"android-surface-control",\n
 # under it. Widening rather than narrowing is the safe direction for a rule
 # whose job is to stop a deletion, and the screen says so in as many words.
 #
-# Header-only, and the same reasoning as aerium_first_run.h and
-# aerium_patches.h: one translation unit includes this, so inline definitions
+# Header-only, and the same reasoning as aerium_patches.h: one translation
+# unit includes this, so inline definitions
 # need no .cc and no BUILD.gn entry, which keeps a hundred lines of parsing out
 # of the resource and build pipeline entirely.
 cat > chrome/browser/browsing_data/aerium_site_rules.h <<'AERIUM_SITE_RULES_H'
@@ -6002,7 +5985,7 @@ class AeriumUpdateCheckerFactory : public ProfileKeyedServiceFactory {
 
   // Definitions are out of line because the chromium-style plugin rejects a
   // virtual method whose non-empty body is written inside the class - the same
-  // reason aerium_first_run.h keeps its bodies below its declaration.
+  // reason aerium_patches.h keeps its bodies below its declaration.
   std::unique_ptr<KeyedService> BuildServiceInstanceForBrowserContext(
       content::BrowserContext* context) const override;
   bool ServiceIsCreatedWithBrowserContext() const override;
@@ -8521,6 +8504,16 @@ cat > chrome/android/java/res/xml/aerium_backup_preferences.xml <<'AERIUM_BACKUP
         android:persistent="false"
         android:title="@string/aerium_backup_restore_title"
         android:summary="@string/aerium_backup_restore_summary" />
+    <Preference
+        android:key="aerium_backup_installs"
+        android:persistent="false"
+        android:selectable="false"
+        android:title="@string/aerium_onb_restore_title" />
+    <Preference
+        android:key="aerium_backup_manual"
+        android:persistent="false"
+        android:selectable="false"
+        android:title="@string/menu_extensions" />
 </PreferenceScreen>
 AERIUM_BACKUP_XML
 
@@ -8600,6 +8593,8 @@ import java.util.Set;
 public class AeriumBackupFragment extends ChromeBaseSettingsFragment {
     private static final String PREF_EXPORT = "aerium_backup_export";
     private static final String PREF_RESTORE = "aerium_backup_restore";
+    private static final String PREF_INSTALLS = "aerium_backup_installs";
+    private static final String PREF_MANUAL = "aerium_backup_manual";
 
     private static final int REQUEST_EXPORT = 4212;
     private static final int REQUEST_RESTORE = 4213;
@@ -8620,6 +8615,13 @@ public class AeriumBackupFragment extends ChromeBaseSettingsFragment {
 
     private final SettableMonotonicObservableSupplier<String> mPageTitle =
             ObservableSuppliers.createMonotonic();
+
+    private boolean mWatchInstalls;
+    private List<String> mManual = new java.util.ArrayList<>();
+    private final SharedPreferences.OnSharedPreferenceChangeListener mInstallListener =
+            (prefs, key) -> {
+                if (AeriumExtensionInstalls.PROGRESS_KEY.equals(key)) updateInstallRows();
+            };
 
     private static final String[] STOCK_SHARED_PREFS = {
         ChromePreferenceKeys.HOMEPAGE_ENABLED,
@@ -8702,6 +8704,46 @@ public class AeriumBackupFragment extends ChromeBaseSettingsFragment {
                         startRestore();
                         return true;
                     });
+        }
+
+        ContextUtils.getAppSharedPreferences()
+                .registerOnSharedPreferenceChangeListener(mInstallListener);
+        updateInstallRows();
+    }
+
+    @Override
+    public void onDestroy() {
+        ContextUtils.getAppSharedPreferences()
+                .unregisterOnSharedPreferenceChangeListener(mInstallListener);
+        super.onDestroy();
+    }
+
+    private void updateInstallRows() {
+        Preference installs = findPreference(PREF_INSTALLS);
+        if (installs != null) {
+            int[] state = AeriumExtensionInstalls.readProgress();
+            boolean active = state[3] == 0 && state[2] > 0;
+            installs.setVisible(active || (mWatchInstalls && state[2] > 0));
+            if (active) {
+                installs.setSummary(
+                        getString(
+                                R.string.aerium_onb_installing,
+                                Math.min(state[0] + state[1] + 1, state[2]),
+                                state[2]));
+            } else if (state[1] > 0) {
+                installs.setSummary(
+                        getString(R.string.aerium_onb_some_failed, state[0], state[1]));
+            } else {
+                installs.setSummary(getString(R.string.aerium_onb_installed, state[0]));
+            }
+        }
+        Preference manual = findPreference(PREF_MANUAL);
+        if (manual != null) {
+            manual.setVisible(!mManual.isEmpty());
+            if (!mManual.isEmpty()) {
+                manual.setSummary(
+                        getString(R.string.aerium_onb_restore_manual, String.join(", ", mManual)));
+            }
         }
     }
 
@@ -8895,7 +8937,11 @@ public class AeriumBackupFragment extends ChromeBaseSettingsFragment {
         if (tabs != null) restoreTabs(tabs);
 
         AeriumToolbarPrefs.refreshCache();
-        AeriumExtensionBackup.queueInstalls(root.optJSONArray("extensions"), getProfilePrefs());
+        mManual =
+                AeriumExtensionBackup.queueInstalls(
+                        root.optJSONArray("extensions"), getProfilePrefs());
+        mWatchInstalls = true;
+        updateInstallRows();
     }
 
     private static boolean isInternalScheme(@Nullable String scheme) {
@@ -10384,16 +10430,16 @@ sed_i 's|      <message name="IDS_AERIUM_BACKUP_TITLE" desc=|      <message name
 echo "[aerium] app links switch applied"
 
 AERIUM_FIRST_RUN_MESSAGES=$(cat <<'AERIUM_FIRST_RUN_GRD'
-      <message name="IDS_AERIUM_FIRST_RUN_TITLE" desc="Title of the first-run page and its heading.">
+      <message name="IDS_AERIUM_FIRST_RUN_TITLE" desc="Heading of the first screen of the setup Aerium shows on its first launch.">
         Welcome to Aerium
       </message>
-      <message name="IDS_AERIUM_ONB_TAGLINE" desc="Line under the Aerium name on the first screen of the first-run page.">
+      <message name="IDS_AERIUM_ONB_TAGLINE" desc="Line under the Aerium name on the first screen of the setup Aerium shows on its first launch.">
         The browser that stays out of the way.
       </message>
       <message name="IDS_AERIUM_ONB_SKIP" desc="Button that skips the rest of the first-run setup, or one of its steps.">
         Skip
       </message>
-      <message name="IDS_AERIUM_ONB_START" desc="Main button on the first screen of the first-run page.">
+      <message name="IDS_AERIUM_ONB_START" desc="Main button on the first screen of the setup Aerium shows on its first launch.">
         Get started
       </message>
       <message name="IDS_AERIUM_ONB_RESTORE" desc="Button on the first screen that opens the backup restore screen.">
@@ -10403,7 +10449,7 @@ AERIUM_FIRST_RUN_MESSAGES=$(cat <<'AERIUM_FIRST_RUN_GRD'
         Back
       </message>
       <message name="IDS_AERIUM_ONB_STEP" desc="Accessible label of the step dots, for example Step 2 of 6.">
-        Step <ph name="CURRENT">$1<ex>2</ex></ph> of <ph name="TOTAL">$2<ex>6</ex></ph>
+        Step <ph name="CURRENT">%1$d<ex>2</ex></ph> of <ph name="TOTAL">%2$d<ex>6</ex></ph>
       </message>
       <message name="IDS_AERIUM_ONB_GUARD_TITLE" desc="Heading of the first-run step that picks an Aerium Guard mode.">
         How private?
@@ -10547,7 +10593,7 @@ AERIUM_FIRST_RUN_MESSAGES=$(cat <<'AERIUM_FIRST_RUN_GRD'
         Also in Aerogel tabs
       </message>
       <message name="IDS_AERIUM_ONB_INSTALL" desc="Button that installs the picked extensions, with how many.">
-        Install <ph name="COUNT">$1<ex>2</ex></ph>
+        Install <ph name="COUNT">%1$d<ex>2</ex></ph>
       </message>
       <message name="IDS_AERIUM_ONB_READY_TITLE" desc="Heading of the last first-run step.">
         You're set.
@@ -10565,13 +10611,13 @@ AERIUM_FIRST_RUN_MESSAGES=$(cat <<'AERIUM_FIRST_RUN_GRD'
         Checked daily
       </message>
       <message name="IDS_AERIUM_ONB_INSTALLING" desc="Progress while the picked extensions install.">
-        Installing <ph name="CURRENT">$1<ex>2</ex></ph> of <ph name="TOTAL">$2<ex>6</ex></ph>
+        Installing <ph name="CURRENT">%1$d<ex>2</ex></ph> of <ph name="TOTAL">%2$d<ex>6</ex></ph>
       </message>
       <message name="IDS_AERIUM_ONB_INSTALLED" desc="Result when the picked extensions installed.">
-        <ph name="COUNT">$1<ex>2</ex></ph> installed
+        <ph name="COUNT">%1$d<ex>2</ex></ph> installed
       </message>
       <message name="IDS_AERIUM_ONB_SOME_FAILED" desc="Result when some picked extensions could not be installed.">
-        <ph name="COUNT">$1<ex>2</ex></ph> installed, <ph name="FAILED">$2<ex>1</ex></ph> failed
+        <ph name="COUNT">%1$d<ex>2</ex></ph> installed, <ph name="FAILED">%2$d<ex>1</ex></ph> failed
       </message>
       <message name="IDS_AERIUM_ONB_NONE" desc="Value of the extensions row when none were picked.">
         None
@@ -10579,7 +10625,7 @@ AERIUM_FIRST_RUN_MESSAGES=$(cat <<'AERIUM_FIRST_RUN_GRD'
       <message name="IDS_AERIUM_ONB_MAKE_DEFAULT" desc="Button that asks Android to make Aerium the default browser.">
         Make Aerium my default
       </message>
-      <message name="IDS_AERIUM_ONB_START_BROWSING" desc="Button that closes the first-run page and opens a new tab.">
+      <message name="IDS_AERIUM_ONB_START_BROWSING" desc="Button that closes the first launch setup and opens the browser.">
         Start browsing
       </message>
       <message name="IDS_AERIUM_ONB_RESTORE_TITLE" desc="Heading of the page that reinstalls the extensions from a restored backup.">
@@ -10589,16 +10635,16 @@ AERIUM_FIRST_RUN_MESSAGES=$(cat <<'AERIUM_FIRST_RUN_GRD'
         Their settings come back with them. Keep this page open until it's done.
       </message>
       <message name="IDS_AERIUM_ONB_RESTORE_MANUAL" desc="Shown when some extensions in the backup did not come from the store, so Aerium can not reinstall them. NAMES is a comma separated list of extension names.">
-        Add these again yourself: <ph name="NAMES">$1<ex>floccus, SponsorBlock</ex></ph>
+        Add these again yourself: <ph name="NAMES">%1$s<ex>floccus, SponsorBlock</ex></ph>
       </message>
 AERIUM_FIRST_RUN_GRD
 )
 AERIUM_FIRST_RUN_MESSAGES="$AERIUM_FIRST_RUN_MESSAGES" perl -0777 -pi -e '
     s{(\n    <messages fallback_to_english="true">\n)}{$1$ENV{AERIUM_FIRST_RUN_MESSAGES}\n}s
-        or die "[aerium] FATAL: no <messages> opening in generated_resources.grd\n";
-' chrome/app/generated_resources.grd
+        or die "[aerium] FATAL: no <messages> opening in android_chrome_strings.grd\n";
+' chrome/browser/ui/android/strings/android_chrome_strings.grd
 
-echo "[aerium] first-run page strings added"
+echo "[aerium] onboarding strings added"
 
 sed_i 's|^      WebappsClient::Get()->InstallWebApk(web_contents, params);$|      WebappsClient::Get()->InstallShortcut(web_contents, params);|' \
     components/webapps/browser/android/add_to_homescreen_installer.cc
@@ -11206,12 +11252,18 @@ import org.chromium.chrome.browser.ui.appmenu.AppMenuItemProperties;
 import org.chromium.ui.modelutil.MVCListAdapter;
 import org.chromium.ui.modelutil.PropertyModel;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 @NullMarked
 public final class AeriumAppMenu {
     public static final String HIDDEN_KEY = "Chrome.Aerium.MenuHidden";
+    public static final String ORDER_KEY = "Chrome.Aerium.MenuOrder";
 
     public static final String[] QUICK_KEYS = {"forward", "bookmark", "download", "info", "reload"};
 
@@ -11339,7 +11391,63 @@ public final class AeriumAppMenu {
     }
 
     public static void reset() {
-        prefs().edit().remove(HIDDEN_KEY).apply();
+        prefs().edit().remove(HIDDEN_KEY).remove(ORDER_KEY).apply();
+    }
+
+    public static int titleFor(String key) {
+        for (int i = 0; i < ITEM_KEYS.length; i++) {
+            if (ITEM_KEYS[i].equals(key)) return ITEM_TITLES[i];
+        }
+        return 0;
+    }
+
+    public static List<String> getOrder() {
+        List<String> order = new ArrayList<>();
+        String stored = prefs().getString(ORDER_KEY, "");
+        List<String> known = Arrays.asList(ITEM_KEYS);
+        if (stored != null && !stored.isEmpty()) {
+            for (String key : stored.split(",")) {
+                if (known.contains(key) && !order.contains(key)) order.add(key);
+            }
+        }
+        for (String key : ITEM_KEYS) {
+            if (!order.contains(key)) order.add(key);
+        }
+        return order;
+    }
+
+    public static void setOrder(List<String> order) {
+        prefs().edit().putString(ORDER_KEY, String.join(",", order)).apply();
+    }
+
+    private static void reorder(MVCListAdapter.ModelList modelList) {
+        String stored = prefs().getString(ORDER_KEY, "");
+        if (stored == null || stored.isEmpty()) return;
+        List<String> order = getOrder();
+        int[] itemIds = itemIds();
+        Map<Integer, Integer> rank = new HashMap<>();
+        for (int i = 0; i < ITEM_KEYS.length; i++) {
+            rank.put(itemIds[i], order.indexOf(ITEM_KEYS[i]));
+        }
+        List<Integer> slots = new ArrayList<>();
+        List<MVCListAdapter.ListItem> items = new ArrayList<>();
+        for (int i = 0; i < modelList.size(); i++) {
+            MVCListAdapter.ListItem item = modelList.get(i);
+            if (item.type == AppMenuHandler.AppMenuItemType.BUTTON_ROW) continue;
+            if (!rank.containsKey(idOf(item.model))) continue;
+            slots.add(i);
+            items.add(item);
+        }
+        items.sort(
+                (a, b) -> {
+                    Integer left = rank.get(idOf(a.model));
+                    Integer right = rank.get(idOf(b.model));
+                    return Integer.compare(
+                            left == null ? 0 : left, right == null ? 0 : right);
+                });
+        for (int i = 0; i < slots.size(); i++) {
+            modelList.update(slots.get(i), items.get(i));
+        }
     }
 
     private static int idOf(PropertyModel model) {
@@ -11352,6 +11460,7 @@ public final class AeriumAppMenu {
     }
 
     public static void filter(MVCListAdapter.ModelList modelList) {
+        reorder(modelList);
         Set<String> hidden = getHidden();
         if (hidden.isEmpty()) return;
 
@@ -11420,6 +11529,7 @@ public final class AeriumToolbarPrefs {
     private static final String MENU_IN_BAR = "Chrome.Aerium.BottomBarMenu";
     private static final String HOME_IN_BAR = "Chrome.Aerium.BottomBarHome";
     private static final String KEEP_VISIBLE = "Chrome.Aerium.KeepBarsVisible";
+    private static final String NEW_TAB_IN_BAR = "Chrome.Aerium.BarNewTab";
 
     private static final String CACHED_FLAG = "Chrome.Flags.CachedFlag.AndroidBottomBar";
     private static final String CACHED_PARAM = "Chrome.Flags.FeatureParamCached.AndroidBottomBar:";
@@ -11457,6 +11567,14 @@ public final class AeriumToolbarPrefs {
 
     public static boolean isHomeInBar() {
         return prefs().getBoolean(HOME_IN_BAR, true);
+    }
+
+    public static boolean isNewTabInBar() {
+        return prefs().getBoolean(NEW_TAB_IN_BAR, true);
+    }
+
+    public static void setNewTabInBar(boolean value) {
+        prefs().edit().putBoolean(NEW_TAB_IN_BAR, value).apply();
     }
 
     public static boolean keepsBarsVisible() {
@@ -11622,6 +11740,7 @@ import org.chromium.base.supplier.SettableMonotonicObservableSupplier;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.homepage.HomepageManager;
 import org.chromium.chrome.browser.appearance.settings.AppearanceSettingsFragment;
 import org.chromium.chrome.browser.lifetime.ApplicationLifetime;
 import org.chromium.chrome.browser.settings.search.ChromeBaseSearchIndexProvider;
@@ -11639,6 +11758,8 @@ public class AeriumToolbarFragment extends ChromeBaseSettingsFragment {
     private static final String PREF_LAYOUT = "aerium_toolbar_layout";
     private static final String PREF_MENU_BOTTOM = "aerium_toolbar_menu_bottom";
     private static final String PREF_HOME_BOTTOM = "aerium_toolbar_home_bottom";
+    private static final String PREF_HOME = "aerium_toolbar_home";
+    private static final String PREF_NEW_TAB_BOTTOM = "aerium_toolbar_new_tab_bottom";
     private static final String PREF_SHORTCUT = "aerium_toolbar_shortcut";
     private static final String PREF_HIDE_ON_SCROLL = "aerium_toolbar_hide_on_scroll";
 
@@ -11695,6 +11816,27 @@ public class AeriumToolbarFragment extends ChromeBaseSettingsFragment {
                     });
         }
 
+        ChromeSwitchPreference home = findPreference(PREF_HOME);
+        if (home != null) {
+            home.setChecked(HomepageManager.getInstance().isHomepageEnabled());
+            home.setOnPreferenceChangeListener(
+                    (preference, newValue) -> {
+                        HomepageManager.getInstance().setPrefHomepageEnabled((boolean) newValue);
+                        return true;
+                    });
+        }
+
+        ChromeSwitchPreference newTabBottom = findPreference(PREF_NEW_TAB_BOTTOM);
+        if (newTabBottom != null) {
+            newTabBottom.setChecked(AeriumToolbarPrefs.isNewTabInBar());
+            newTabBottom.setOnPreferenceChangeListener(
+                    (preference, newValue) -> {
+                        AeriumToolbarPrefs.setNewTabInBar((boolean) newValue);
+                        showRestartSnackbar();
+                        return true;
+                    });
+        }
+
         ChromeSwitchPreference hideOnScroll = findPreference(PREF_HIDE_ON_SCROLL);
         if (hideOnScroll != null) {
             hideOnScroll.setChecked(!AeriumToolbarPrefs.keepsBarsVisible());
@@ -11733,6 +11875,10 @@ public class AeriumToolbarFragment extends ChromeBaseSettingsFragment {
         if (menuBottom != null) menuBottom.setEnabled(bar);
         Preference homeBottom = findPreference(PREF_HOME_BOTTOM);
         if (homeBottom != null) homeBottom.setEnabled(bar);
+        Preference newTabBottom = findPreference(PREF_NEW_TAB_BOTTOM);
+        if (newTabBottom != null) newTabBottom.setEnabled(bar);
+        ChromeSwitchPreference home = findPreference(PREF_HOME);
+        if (home != null) home.setChecked(HomepageManager.getInstance().isHomepageEnabled());
     }
 
     private void showRestartSnackbar() {
@@ -11778,10 +11924,22 @@ cat > $AERIUM_TB_SRC/settings/AeriumMenuFragment.java <<'AERIUM_MENU_FRAGMENT_JA
 package org.chromium.chrome.browser.settings;
 
 import android.content.Context;
+import android.content.res.ColorStateList;
 import android.os.Bundle;
+import android.util.TypedValue;
+import android.view.Gravity;
+import android.view.MotionEvent;
+import android.view.ViewGroup;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 
+import androidx.appcompat.app.AlertDialog;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceCategory;
+import androidx.recyclerview.widget.ItemTouchHelper;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
 import org.chromium.base.supplier.MonotonicObservableSupplier;
 import org.chromium.base.supplier.ObservableSuppliers;
@@ -11794,12 +11952,17 @@ import org.chromium.chrome.browser.settings.search.ChromeBaseSearchIndexProvider
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
 import org.chromium.components.browser_ui.settings.SettingsFragment;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
+import org.chromium.components.browser_ui.styles.SemanticColorUtils;
+
+import java.util.Collections;
+import java.util.List;
 
 @NullMarked
 public class AeriumMenuFragment extends ChromeBaseSettingsFragment {
     private static final String PREF_QUICK_SECTION = "aerium_menu_quick_section";
     private static final String PREF_ITEMS_SECTION = "aerium_menu_items_section";
     private static final String PREF_RESET = "aerium_menu_reset";
+    private static final String PREF_REORDER = "aerium_menu_reorder";
 
     private final SettableMonotonicObservableSupplier<String> mPageTitle =
             ObservableSuppliers.createMonotonic();
@@ -11818,6 +11981,14 @@ public class AeriumMenuFragment extends ChromeBaseSettingsFragment {
                         return true;
                     });
         }
+        Preference reorder = findPreference(PREF_REORDER);
+        if (reorder != null) {
+            reorder.setOnPreferenceClickListener(
+                    preference -> {
+                        showReorder();
+                        return true;
+                    });
+        }
         rebuild();
     }
 
@@ -11827,7 +11998,11 @@ public class AeriumMenuFragment extends ChromeBaseSettingsFragment {
 
     private void rebuild() {
         fill(PREF_QUICK_SECTION, AeriumAppMenu.QUICK_KEYS, AeriumAppMenu.QUICK_TITLES);
-        fill(PREF_ITEMS_SECTION, AeriumAppMenu.ITEM_KEYS, AeriumAppMenu.ITEM_TITLES);
+        List<String> order = AeriumAppMenu.getOrder();
+        String[] keys = order.toArray(new String[0]);
+        int[] titles = new int[keys.length];
+        for (int i = 0; i < keys.length; i++) titles[i] = AeriumAppMenu.titleFor(keys[i]);
+        fill(PREF_ITEMS_SECTION, keys, titles);
         notifyPreferencesUpdated();
     }
 
@@ -11849,6 +12024,135 @@ public class AeriumMenuFragment extends ChromeBaseSettingsFragment {
                     });
             section.addPreference(row);
         }
+    }
+
+    private static final class OrderAdapter extends RecyclerView.Adapter<OrderAdapter.Holder> {
+        static final class Holder extends RecyclerView.ViewHolder {
+            final TextView mTitle;
+            final ImageView mHandle;
+
+            Holder(LinearLayout row, TextView title, ImageView handle) {
+                super(row);
+                mTitle = title;
+                mHandle = handle;
+            }
+        }
+
+        private final Context mContext;
+        private final List<String> mKeys;
+        private @Nullable ItemTouchHelper mHelper;
+
+        OrderAdapter(Context context, List<String> keys) {
+            mContext = context;
+            mKeys = keys;
+        }
+
+        void setHelper(ItemTouchHelper helper) {
+            mHelper = helper;
+        }
+
+        void move(int from, int to) {
+            if (from < to) {
+                for (int i = from; i < to; i++) Collections.swap(mKeys, i, i + 1);
+            } else {
+                for (int i = from; i > to; i--) Collections.swap(mKeys, i, i - 1);
+            }
+            notifyItemMoved(from, to);
+        }
+
+        private int dp(float value) {
+            return Math.round(
+                    TypedValue.applyDimension(
+                            TypedValue.COMPLEX_UNIT_DIP,
+                            value,
+                            mContext.getResources().getDisplayMetrics()));
+        }
+
+        @Override
+        public Holder onCreateViewHolder(ViewGroup parent, int viewType) {
+            LinearLayout row = new LinearLayout(mContext);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setMinimumHeight(dp(52));
+            row.setPadding(dp(20), 0, dp(20), 0);
+            row.setLayoutParams(
+                    new RecyclerView.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.WRAP_CONTENT));
+            ImageView handle = new ImageView(mContext);
+            handle.setImageResource(R.drawable.aerium_drag_handle);
+            handle.setImageTintList(
+                    ColorStateList.valueOf(SemanticColorUtils.getDefaultIconColor(mContext)));
+            handle.setImportantForAccessibility(ImageView.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            row.addView(handle, new LinearLayout.LayoutParams(dp(24), dp(24)));
+            TextView title = new TextView(mContext);
+            title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+            title.setTextColor(SemanticColorUtils.getDefaultTextColor(mContext));
+            title.setPadding(dp(16), 0, 0, 0);
+            row.addView(
+                    title,
+                    new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+            return new Holder(row, title, handle);
+        }
+
+        @Override
+        public void onBindViewHolder(Holder holder, int position) {
+            int title = AeriumAppMenu.titleFor(mKeys.get(position));
+            holder.mTitle.setText(title == 0 ? "" : mContext.getString(title));
+            holder.mHandle.setOnTouchListener(
+                    (view, event) -> {
+                        ItemTouchHelper helper = mHelper;
+                        if (event.getActionMasked() == MotionEvent.ACTION_DOWN && helper != null) {
+                            helper.startDrag(holder);
+                        }
+                        return false;
+                    });
+        }
+
+        @Override
+        public int getItemCount() {
+            return mKeys.size();
+        }
+    }
+
+    private void showReorder() {
+        Context context = getStyledContext();
+        List<String> keys = AeriumAppMenu.getOrder();
+        OrderAdapter adapter = new OrderAdapter(context, keys);
+        RecyclerView list = new RecyclerView(context);
+        list.setLayoutManager(new LinearLayoutManager(context));
+        list.setAdapter(adapter);
+        ItemTouchHelper helper =
+                new ItemTouchHelper(
+                        new ItemTouchHelper.SimpleCallback(
+                                ItemTouchHelper.UP | ItemTouchHelper.DOWN, 0) {
+                            @Override
+                            public boolean onMove(
+                                    RecyclerView recyclerView,
+                                    RecyclerView.ViewHolder from,
+                                    RecyclerView.ViewHolder to) {
+                                adapter.move(
+                                        from.getBindingAdapterPosition(),
+                                        to.getBindingAdapterPosition());
+                                return true;
+                            }
+
+                            @Override
+                            public void onSwiped(RecyclerView.ViewHolder holder, int direction) {}
+                        });
+        helper.attachToRecyclerView(list);
+        adapter.setHelper(helper);
+        new AlertDialog.Builder(context, R.style.ThemeOverlay_BrowserUI_AlertDialog)
+                .setTitle(R.string.aerium_menu_reorder)
+                .setView(list)
+                .setPositiveButton(
+                        android.R.string.ok,
+                        (dialog, which) -> {
+                            AeriumAppMenu.setOrder(keys);
+                            rebuild();
+                        })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
     }
 
     @Override
@@ -11951,6 +12255,11 @@ cat > $AERIUM_TB_RES/xml/aerium_toolbar_preferences.xml <<'AERIUM_TOOLBAR_PREFS_
         android:key="aerium_toolbar_buttons_section"
         android:title="@string/aerium_toolbar_buttons">
         <org.chromium.components.browser_ui.settings.ChromeSwitchPreference
+            android:key="aerium_toolbar_home"
+            android:persistent="false"
+            android:title="@string/aerium_toolbar_home"
+            android:summary="@string/aerium_toolbar_home_summary" />
+        <org.chromium.components.browser_ui.settings.ChromeSwitchPreference
             android:key="aerium_toolbar_menu_bottom"
             android:persistent="false"
             android:title="@string/aerium_toolbar_menu_bottom"
@@ -11960,6 +12269,11 @@ cat > $AERIUM_TB_RES/xml/aerium_toolbar_preferences.xml <<'AERIUM_TOOLBAR_PREFS_
             android:persistent="false"
             android:title="@string/aerium_toolbar_home_bottom"
             android:summary="@string/aerium_toolbar_home_bottom_summary" />
+        <org.chromium.components.browser_ui.settings.ChromeSwitchPreference
+            android:key="aerium_toolbar_new_tab_bottom"
+            android:persistent="false"
+            android:title="@string/aerium_toolbar_new_tab_bottom"
+            android:summary="@string/aerium_toolbar_new_tab_bottom_summary" />
         <org.chromium.components.browser_ui.settings.ChromeBasePreference
             android:key="aerium_toolbar_shortcut"
             android:fragment="org.chromium.chrome.browser.toolbar.adaptive.settings.AdaptiveToolbarSettingsFragment"
@@ -11999,6 +12313,11 @@ cat > $AERIUM_TB_RES/xml/aerium_menu_preferences.xml <<'AERIUM_MENU_PREFS_XML'
     <PreferenceCategory
         android:key="aerium_menu_items_section"
         android:title="@string/aerium_menu_items_section" />
+    <org.chromium.components.browser_ui.settings.ChromeBasePreference
+        android:key="aerium_menu_reorder"
+        android:persistent="false"
+        android:title="@string/aerium_menu_reorder"
+        android:summary="@string/aerium_menu_reorder_summary" />
     <org.chromium.components.browser_ui.settings.ChromeBasePreference
         android:key="aerium_menu_reset"
         android:persistent="false"
@@ -12116,7 +12435,7 @@ sed_i 's|^import org.chromium.chrome.browser.browsing_data.ClearBrowsingDataFrag
 sed_i 's|^                    AboutChromeSettings.SEARCH_INDEX_DATA_PROVIDER,$|&\n                    AeriumToolbarFragment.SEARCH_INDEX_DATA_PROVIDER,\n                    AeriumMenuFragment.SEARCH_INDEX_DATA_PROVIDER,|' \
     $SIPR
 
-sed_i 's|      <message name="IDS_AERIUM_MEDIA_TITLE" desc=|      <message name="IDS_AERIUM_TOOLBAR_TITLE" desc="Title of the settings screen that sets the toolbar layout, its buttons and the menu items, and its row in the main Settings list.">\n        Toolbar and menu\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_LAYOUT" desc="Header above the four toolbar layout choices.">\n        Layout\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_CLASSIC" desc="Name of the layout with the address bar at the top and no bar at the bottom.">\n        Classic\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_CLASSIC_SUMMARY" desc="Description under the Classic layout choice.">\n        Address bar at the top\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_SPLIT" desc="Name of the layout with the address bar at the top and a bar of buttons at the bottom.">\n        Split\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_SPLIT_SUMMARY" desc="Description under the Split layout choice.">\n        Address bar at the top, buttons at the bottom\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_THUMB" desc="Name of the layout with the address bar and a bar of buttons both at the bottom, where the thumb reaches.">\n        Thumb\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_THUMB_SUMMARY" desc="Description under the Thumb layout choice.">\n        Address bar and buttons at the bottom, easy to reach\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_MINIMAL" desc="Name of the layout with only the address bar, at the bottom.">\n        Minimal\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_MINIMAL_SUMMARY" desc="Description under the Minimal layout choice.">\n        Only the address bar, at the bottom\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_BUTTONS" desc="Header above the toolbar button options.">\n        Buttons\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_MENU_BOTTOM" desc="Switch that puts the menu button in the bottom bar.">\n        Menu button at the bottom\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_MENU_BOTTOM_SUMMARY" desc="Summary under that switch. Split and Thumb are the layout names above.">\n        Off keeps it next to the address bar. Works with Split and Thumb.\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_HOME_BOTTOM" desc="Switch that puts the home button in the bottom bar.">\n        Home button at the bottom\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_HOME_BOTTOM_SUMMARY" desc="Summary under that switch. Split and Thumb are the layout names above.">\n        Off keeps it next to the address bar. Works with Split and Thumb.\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_SHORTCUT_SUMMARY" desc="Summary under the row that picks the toolbar shortcut button.">\n        One extra button next to the address bar\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_SCROLLING" desc="Header above the scrolling option.">\n        Scrolling\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_HIDE_ON_SCROLL" desc="Switch that lets the toolbar and bottom bar slide away while a page scrolls.">\n        Hide bars while scrolling\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_HIDE_ON_SCROLL_SUMMARY" desc="Summary under that switch.">\n        Gives pages more room. Turn off to keep the bars in place.\n      </message>\n      <message name="IDS_AERIUM_MENU_TITLE" desc="Header above the row that opens the menu items screen.">\n        Menu\n      </message>\n      <message name="IDS_AERIUM_MENU_ITEMS" desc="Title of the screen with a switch for each item of the main menu, and its row.">\n        Menu items\n      </message>\n      <message name="IDS_AERIUM_MENU_ITEMS_SUMMARY" desc="Summary under the Menu items row.">\n        Choose what the menu shows\n      </message>\n      <message name="IDS_AERIUM_MENU_QUICK_ROW" desc="Header above the switches for the row of icons at the top of the menu.">\n        Quick row\n      </message>\n      <message name="IDS_AERIUM_MENU_ITEMS_SECTION" desc="Header above the switches for the menu list items.">\n        Items\n      </message>\n      <message name="IDS_AERIUM_MENU_RESET" desc="Row that turns every menu item back on.">\n        Show everything again\n      </message>\n      <message name="IDS_AERIUM_MENU_RESET_SUMMARY" desc="Summary under that row. Settings is the name of the menu item that can not be hidden.">\n        Settings always stays in the menu\n      </message>\n      <message name="IDS_AERIUM_MENU_ITEM_FORWARD" desc="Switch for the forward arrow in the quick row of the menu.">\n        Forward\n      </message>\n      <message name="IDS_AERIUM_MENU_ITEM_BOOKMARK" desc="Switch for the star that bookmarks the page, in the quick row of the menu.">\n        Bookmark\n      </message>\n      <message name="IDS_AERIUM_MENU_ITEM_PAGE_INFO" desc="Switch for the page info icon in the quick row of the menu.">\n        Page info\n      </message>\n      <message name="IDS_AERIUM_MENU_ITEM_RELOAD" desc="Switch for the reload icon in the quick row of the menu.">\n        Reload\n      </message>\n&|' \
+sed_i 's|      <message name="IDS_AERIUM_MEDIA_TITLE" desc=|      <message name="IDS_AERIUM_TOOLBAR_TITLE" desc="Title of the settings screen that sets the toolbar layout, its buttons and the menu items, and its row in the main Settings list.">\n        Toolbar and menu\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_LAYOUT" desc="Header above the four toolbar layout choices.">\n        Layout\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_CLASSIC" desc="Name of the layout with the address bar at the top and no bar at the bottom.">\n        Classic\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_CLASSIC_SUMMARY" desc="Description under the Classic layout choice.">\n        Address bar at the top\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_SPLIT" desc="Name of the layout with the address bar at the top and a bar of buttons at the bottom.">\n        Split\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_SPLIT_SUMMARY" desc="Description under the Split layout choice.">\n        Address bar at the top, buttons at the bottom\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_THUMB" desc="Name of the layout with the address bar and a bar of buttons both at the bottom, where the thumb reaches.">\n        Thumb\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_THUMB_SUMMARY" desc="Description under the Thumb layout choice.">\n        Address bar and buttons at the bottom, easy to reach\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_MINIMAL" desc="Name of the layout with only the address bar, at the bottom.">\n        Minimal\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_MINIMAL_SUMMARY" desc="Description under the Minimal layout choice.">\n        Only the address bar, at the bottom\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_BUTTONS" desc="Header above the toolbar button options.">\n        Buttons\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_MENU_BOTTOM" desc="Switch that puts the menu button in the bottom bar.">\n        Menu button at the bottom\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_MENU_BOTTOM_SUMMARY" desc="Summary under that switch. Split and Thumb are the layout names above.">\n        Off keeps it next to the address bar. Works with Split and Thumb.\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_HOME_BOTTOM" desc="Switch that puts the home button in the bottom bar.">\n        Home button at the bottom\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_HOME_BOTTOM_SUMMARY" desc="Summary under that switch. Split and Thumb are the layout names above.">\n        Off keeps it next to the address bar. Works with Split and Thumb.\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_SHORTCUT_SUMMARY" desc="Summary under the row that picks the toolbar shortcut button.">\n        One extra button next to the address bar\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_SCROLLING" desc="Header above the scrolling option.">\n        Scrolling\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_HIDE_ON_SCROLL" desc="Switch that lets the toolbar and bottom bar slide away while a page scrolls.">\n        Hide bars while scrolling\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_HIDE_ON_SCROLL_SUMMARY" desc="Summary under that switch.">\n        Gives pages more room. Turn off to keep the bars in place.\n      </message>\n      <message name="IDS_AERIUM_MENU_TITLE" desc="Header above the row that opens the menu items screen.">\n        Menu\n      </message>\n      <message name="IDS_AERIUM_MENU_ITEMS" desc="Title of the screen with a switch for each item of the main menu, and its row.">\n        Menu items\n      </message>\n      <message name="IDS_AERIUM_MENU_ITEMS_SUMMARY" desc="Summary under the Menu items row.">\n        Choose what the menu shows\n      </message>\n      <message name="IDS_AERIUM_MENU_QUICK_ROW" desc="Header above the switches for the row of icons at the top of the menu.">\n        Quick row\n      </message>\n      <message name="IDS_AERIUM_MENU_ITEMS_SECTION" desc="Header above the switches for the menu list items.">\n        Items\n      </message>\n      <message name="IDS_AERIUM_MENU_RESET" desc="Row that turns every menu item back on.">\n        Show everything again\n      </message>\n      <message name="IDS_AERIUM_MENU_RESET_SUMMARY" desc="Summary under that row. Settings is the name of the menu item that can not be hidden.">\n        Settings always stays in the menu\n      </message>\n      <message name="IDS_AERIUM_MENU_ITEM_FORWARD" desc="Switch for the forward arrow in the quick row of the menu.">\n        Forward\n      </message>\n      <message name="IDS_AERIUM_MENU_ITEM_BOOKMARK" desc="Switch for the star that bookmarks the page, in the quick row of the menu.">\n        Bookmark\n      </message>\n      <message name="IDS_AERIUM_MENU_ITEM_PAGE_INFO" desc="Switch for the page info icon in the quick row of the menu.">\n        Page info\n      </message>\n      <message name="IDS_AERIUM_MENU_ITEM_RELOAD" desc="Switch for the reload icon in the quick row of the menu.">\n        Reload\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_HOME" desc="Switch that shows or hides the home button in the toolbar.">\n        Home button\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_HOME_SUMMARY" desc="Summary under the home button switch.">\n        Opens your homepage from the toolbar\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_NEW_TAB_BOTTOM" desc="Switch that shows or hides the new tab button in the bottom bar.">\n        New tab button at the bottom\n      </message>\n      <message name="IDS_AERIUM_TOOLBAR_NEW_TAB_BOTTOM_SUMMARY" desc="Summary under that switch. Split and Thumb are layout names.">\n        Off hides it. Works with Split and Thumb.\n      </message>\n      <message name="IDS_AERIUM_MENU_REORDER" desc="Row that opens a list where the menu items can be dragged into a new order.">\n        Change the order\n      </message>\n      <message name="IDS_AERIUM_MENU_REORDER_SUMMARY" desc="Summary under that row.">\n        Hold and drag items into the order you like\n      </message>\n&|' \
     chrome/browser/ui/android/strings/android_chrome_strings.grd
 
 cat > $AERIUM_TB_SRC/settings/AeriumExtensionBackup.java <<'AERIUM_EXTENSION_BACKUP_JAVA'
@@ -12150,9 +12469,13 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -12160,23 +12483,26 @@ import java.util.zip.ZipOutputStream;
 
 @NullMarked
 public final class AeriumExtensionBackup {
-    public static final String PENDING_KEY = "aerium_restore_extensions";
     public static final String UBO_GITHUB_ID = "lndecelodlhfnppkffahdhmjmijkoipg";
     public static final String UBO_GITHUB_REPO = "gorhill/uBlock";
 
     public static final String SOURCE_STORE = "cws";
     public static final String SOURCE_GITHUB = "github";
+    public static final String SOURCE_FILE = "file";
     public static final String SOURCE_OTHER = "other";
 
     static final String JSON_ENTRY = "backup.json";
     private static final String DATA_PREFIX = "extensions/";
+    private static final String FILES_PREFIX = "files/";
     private static final String STAGING_DIR = "aerium_restore";
+    private static final String FILES_DIR = "aerium_restore_extensions";
     private static final String PROFILE_DIR = "Default";
     private static final String LOCAL_SETTINGS = "Local Extension Settings";
     private static final String SYNC_SETTINGS = "Sync Extension Settings";
     private static final String INDEXED_DB = "IndexedDB";
     private static final String[] ROOTS = {LOCAL_SETTINGS, SYNC_SETTINGS, INDEXED_DB};
     private static final String STORE_UPDATE_HOST = "clients2.google.com";
+    private static final String UBO_NAME = "uBlock Origin";
     private static final int LOCATION_INTERNAL = 1;
     private static final int LOCATION_UNPACKED = 4;
     private static final int FROM_WEBSTORE = 1 << 3;
@@ -12195,6 +12521,10 @@ public final class AeriumExtensionBackup {
 
     private static File stagingDir() {
         return new File(chromeDir(), STAGING_DIR);
+    }
+
+    private static File filesDir() {
+        return new File(chromeDir(), FILES_DIR);
     }
 
     private static boolean isId(String id) {
@@ -12328,40 +12658,64 @@ public final class AeriumExtensionBackup {
             int flags = entry.optInt("creation_flags", 0);
             File dir = installDir(entry);
             JSONObject manifest = entry.optJSONObject("manifest");
-            if (manifest == null && dir != null) manifest = readJson(new File(dir, "manifest.json"));
+            JSONObject installed = dir == null ? null : readJson(new File(dir, "manifest.json"));
+            if (manifest == null) manifest = installed;
             if (manifest == null) manifest = new JSONObject();
+            String name = localizedName(manifest, dir);
+            String key = installed == null ? "" : installed.optString("key", "");
             String source = SOURCE_OTHER;
-            if (location == LOCATION_INTERNAL) {
-                boolean store =
-                        (flags & FROM_WEBSTORE) != 0
-                                || entry.optBoolean("from_webstore", false)
-                                || manifest.optString("update_url", "").contains(STORE_UPDATE_HOST);
-                if (store) source = SOURCE_STORE;
-            } else if (id.equals(UBO_GITHUB_ID)) {
+            if (location == LOCATION_INTERNAL
+                    && ((flags & FROM_WEBSTORE) != 0
+                            || entry.optBoolean("from_webstore", false)
+                            || manifest.optString("update_url", "").contains(STORE_UPDATE_HOST))) {
+                source = SOURCE_STORE;
+            } else if (location == LOCATION_UNPACKED
+                    && (id.equals(UBO_GITHUB_ID) || name.equals(UBO_NAME))) {
                 source = SOURCE_GITHUB;
+            } else if (!key.isEmpty() && dir != null && dir.isDirectory()) {
+                source = SOURCE_FILE;
             }
             JSONObject item = new JSONObject();
             item.put("id", id);
             item.put("source", source);
-            item.put("name", localizedName(manifest, dir));
+            item.put("name", name);
             item.put("version", manifest.optString("version", ""));
             item.put("aerogel", entry.optBoolean("incognito", false));
+            if (source.equals(SOURCE_FILE)) {
+                item.put("key", key);
+                item.put("dir", dir == null ? "" : dir.getAbsolutePath());
+            }
             result.put(item);
         }
         return result;
     }
 
-    private static Set<String> restorableIds(@Nullable JSONArray extensions) {
-        Set<String> ids = new HashSet<>();
+    private static Map<String, String> restorableIds(@Nullable JSONArray extensions) {
+        Map<String, String> ids = new HashMap<>();
         if (extensions == null) return ids;
         for (int i = 0; i < extensions.length(); i++) {
             JSONObject item = extensions.optJSONObject(i);
             if (item == null) continue;
             String id = item.optString("id", "");
             String source = item.optString("source", "");
-            if (isId(id) && (source.equals(SOURCE_STORE) || source.equals(SOURCE_GITHUB))) {
-                ids.add(id);
+            if (!isId(id)) continue;
+            if (source.equals(SOURCE_GITHUB)) {
+                ids.put(id, UBO_GITHUB_ID);
+            } else if (source.equals(SOURCE_STORE) || source.equals(SOURCE_FILE)) {
+                ids.put(id, id);
             }
+        }
+        return ids;
+    }
+
+    private static Set<String> fileIds(@Nullable JSONArray extensions) {
+        Set<String> ids = new HashSet<>();
+        if (extensions == null) return ids;
+        for (int i = 0; i < extensions.length(); i++) {
+            JSONObject item = extensions.optJSONObject(i);
+            if (item == null) continue;
+            String id = item.optString("id", "");
+            if (isId(id) && item.optString("source", "").equals(SOURCE_FILE)) ids.add(id);
         }
         return ids;
     }
@@ -12382,19 +12736,21 @@ public final class AeriumExtensionBackup {
         return name.equals("LOCK") || name.equals("LOG") || name.equals("LOG.old");
     }
 
-    private static void addTree(ZipOutputStream zip, File file, String name, byte[] buffer)
+    private static void addTree(
+            ZipOutputStream zip, File file, String prefix, String name, byte[] buffer)
             throws IOException {
         if (file.isDirectory()) {
             File[] children = file.listFiles();
             if (children == null) return;
             for (File child : children) {
-                addTree(zip, child, name + "/" + child.getName(), buffer);
+                if (child.getName().equals("_metadata")) continue;
+                addTree(zip, child, prefix, name + "/" + child.getName(), buffer);
             }
             return;
         }
         if (!file.isFile() || skipFile(file.getName())) return;
         try (InputStream in = new FileInputStream(file)) {
-            zip.putNextEntry(new ZipEntry(DATA_PREFIX + name));
+            zip.putNextEntry(new ZipEntry(prefix + name));
             int read;
             while ((read = in.read(buffer)) != -1) {
                 zip.write(buffer, 0, read);
@@ -12413,25 +12769,44 @@ public final class AeriumExtensionBackup {
         zip.closeEntry();
         byte[] buffer = new byte[64 * 1024];
         File profile = profileDir();
-        for (String id : restorableIds(extensions)) {
+        for (String id : restorableIds(extensions).keySet()) {
             for (String path : dataPaths(id)) {
                 File dir = new File(profile, path);
                 if (!dir.isDirectory() || sizeOf(dir) > MAX_DIR_BYTES) continue;
-                addTree(zip, dir, path, buffer);
+                addTree(zip, dir, DATA_PREFIX, path, buffer);
+            }
+        }
+        if (extensions != null) {
+            for (int i = 0; i < extensions.length(); i++) {
+                JSONObject item = extensions.optJSONObject(i);
+                if (item == null || !item.optString("source", "").equals(SOURCE_FILE)) continue;
+                String id = item.optString("id", "");
+                File dir = new File(item.optString("dir", ""));
+                if (!isId(id) || !dir.isDirectory() || sizeOf(dir) > MAX_DIR_BYTES) continue;
+                addTree(zip, dir, FILES_PREFIX, id, buffer);
             }
         }
         zip.finish();
         zip.flush();
     }
 
-    private static boolean allowedDataPath(String path, Set<String> ids) {
-        if (path.contains("..") || path.startsWith("/") || path.contains("\\")) return false;
-        for (String id : ids) {
-            for (String root : dataPaths(id)) {
-                if (path.startsWith(root + "/")) return true;
+    private static @Nullable String mapDataPath(String path, Map<String, String> ids) {
+        if (path.contains("..") || path.startsWith("/") || path.contains("\\")) return null;
+        for (Map.Entry<String, String> id : ids.entrySet()) {
+            String[] from = dataPaths(id.getKey());
+            String[] to = dataPaths(id.getValue());
+            for (int i = 0; i < from.length; i++) {
+                if (path.startsWith(from[i] + "/")) return to[i] + path.substring(from[i].length());
             }
         }
-        return false;
+        return null;
+    }
+
+    private static @Nullable String mapFilePath(String path, Set<String> ids) {
+        if (path.contains("..") || path.startsWith("/") || path.contains("\\")) return null;
+        int slash = path.indexOf('/');
+        if (slash <= 0 || !ids.contains(path.substring(0, slash))) return null;
+        return path;
     }
 
     public static void deleteTree(File file) {
@@ -12442,12 +12817,28 @@ public final class AeriumExtensionBackup {
         file.delete();
     }
 
+    private static void copyEntry(ZipInputStream zip, File root, String path, byte[] buffer)
+            throws IOException {
+        File target = new File(root, path);
+        if (!target.getCanonicalPath().startsWith(root.getCanonicalPath() + File.separator)) return;
+        File parent = target.getParentFile();
+        if (parent == null || (!parent.isDirectory() && !parent.mkdirs())) return;
+        try (OutputStream out = new FileOutputStream(target)) {
+            int read;
+            while ((read = zip.read(buffer)) != -1) {
+                out.write(buffer, 0, read);
+            }
+        }
+    }
+
     public static @Nullable String readZip(InputStream in) throws IOException {
         File staging = stagingDir();
+        File files = filesDir();
         deleteTree(staging);
+        deleteTree(files);
         String json = null;
-        Set<String> ids = new HashSet<>();
-        String stagingPath = staging.getCanonicalPath() + File.separator;
+        Map<String, String> ids = new HashMap<>();
+        Set<String> withFiles = new HashSet<>();
         byte[] buffer = new byte[64 * 1024];
         ZipInputStream zip = new ZipInputStream(in);
         ZipEntry entry;
@@ -12457,24 +12848,22 @@ public final class AeriumExtensionBackup {
             if (name.equals(JSON_ENTRY) && json == null) {
                 json = new String(readAll(zip), StandardCharsets.UTF_8);
                 try {
-                    ids = restorableIds(new JSONObject(json).optJSONArray("extensions"));
+                    JSONArray extensions = new JSONObject(json).optJSONArray("extensions");
+                    ids = restorableIds(extensions);
+                    withFiles = fileIds(extensions);
                 } catch (JSONException e) {
-                    ids = new HashSet<>();
+                    ids = new HashMap<>();
+                    withFiles = new HashSet<>();
                 }
                 continue;
             }
-            if (json == null || !name.startsWith(DATA_PREFIX)) continue;
-            String path = name.substring(DATA_PREFIX.length());
-            if (!allowedDataPath(path, ids)) continue;
-            File target = new File(staging, path);
-            if (!target.getCanonicalPath().startsWith(stagingPath)) continue;
-            File parent = target.getParentFile();
-            if (parent == null || (!parent.isDirectory() && !parent.mkdirs())) continue;
-            try (OutputStream out = new FileOutputStream(target)) {
-                int read;
-                while ((read = zip.read(buffer)) != -1) {
-                    out.write(buffer, 0, read);
-                }
+            if (json == null) continue;
+            if (name.startsWith(DATA_PREFIX)) {
+                String path = mapDataPath(name.substring(DATA_PREFIX.length()), ids);
+                if (path != null) copyEntry(zip, staging, path, buffer);
+            } else if (name.startsWith(FILES_PREFIX)) {
+                String path = mapFilePath(name.substring(FILES_PREFIX.length()), withFiles);
+                if (path != null) copyEntry(zip, files, path, buffer);
             }
         }
         return json;
@@ -12482,6 +12871,7 @@ public final class AeriumExtensionBackup {
 
     public static void discardStaged() {
         deleteTree(stagingDir());
+        deleteTree(filesDir());
     }
 
     public static void applyStaged() {
@@ -12502,8 +12892,10 @@ public final class AeriumExtensionBackup {
         deleteTree(staging);
     }
 
-    public static void queueInstalls(@Nullable JSONArray extensions, @Nullable PrefService prefs) {
-        if (extensions == null || extensions.length() == 0) return;
+    public static List<String> queueInstalls(
+            @Nullable JSONArray extensions, @Nullable PrefService prefs) {
+        List<String> manual = new ArrayList<>();
+        if (extensions == null || extensions.length() == 0) return manual;
         Set<String> installed = new HashSet<>();
         try {
             JSONArray current = collect(prefs);
@@ -12520,29 +12912,38 @@ public final class AeriumExtensionBackup {
                 if (item == null) continue;
                 String id = item.optString("id", "");
                 String source = item.optString("source", "");
-                if (!isId(id) || installed.contains(id)) continue;
+                if (!isId(id)) continue;
+                if (installed.contains(id) && !source.equals(SOURCE_STORE)) {
+                    deleteTree(new File(filesDir(), id));
+                    continue;
+                }
                 JSONObject entry = new JSONObject();
                 if (source.equals(SOURCE_STORE)) {
                     entry.put("id", id);
-                } else if (source.equals(SOURCE_GITHUB) && id.equals(UBO_GITHUB_ID)) {
+                    entry.put("source", "cws");
+                } else if (source.equals(SOURCE_GITHUB)) {
                     entry.put("id", UBO_GITHUB_REPO);
-                } else {
-                    source = SOURCE_OTHER;
+                    entry.put("source", "github");
+                } else if (source.equals(SOURCE_FILE)
+                        && new File(filesDir(), id).isDirectory()
+                        && !item.optString("key", "").isEmpty()) {
                     entry.put("id", id);
+                    entry.put("source", "local");
+                    entry.put("path", new File(filesDir(), id).getAbsolutePath());
+                    entry.put("key", item.optString("key", ""));
+                } else {
+                    String name = item.optString("name", "");
+                    if (!name.isEmpty()) manual.add(name);
+                    continue;
                 }
-                entry.put("source", source);
                 entry.put("aerogel", item.optBoolean("aerogel", false));
-                entry.put("name", item.optString("name", ""));
                 pending.put(entry);
             }
         } catch (JSONException e) {
-            return;
+            return manual;
         }
-        if (pending.length() == 0) return;
-        ContextUtils.getAppSharedPreferences()
-                .edit()
-                .putString(PENDING_KEY, pending.toString())
-                .apply();
+        AeriumExtensionInstalls.enqueue(prefs, pending);
+        return manual;
     }
 }
 AERIUM_EXTENSION_BACKUP_JAVA
@@ -12569,6 +12970,705 @@ sed_i 's|^    private void updateAddressBarPreference() {$|    private void aeri
     $AERIUM_TB_SRC/settings/MainSettings.java
 sed_i 's|      <message name="IDS_AERIUM_MEDIA_TITLE" desc=|      <message name="IDS_AERIUM_PREFS_EXTENSIONS_SUMMARY" desc="Summary under the Extensions row in Settings, shown when no extension is installed.">\n        Add, remove and set up extensions\n      </message>\n      <message name="IDS_AERIUM_PREFS_EXTENSIONS_COUNT" desc="Summary under the Extensions row in Settings. COUNT is the number of installed extensions, always 1 or more.">\n        <ph name="COUNT">%1$d<ex>3</ex></ph> installed\n      </message>\n&|' \
     chrome/browser/ui/android/strings/android_chrome_strings.grd
+
+cat > chrome/browser/aerium/aerium_extension_installer.h <<'AERIUM_EXTENSION_INSTALLER_H'
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#ifndef CHROME_BROWSER_AERIUM_AERIUM_EXTENSION_INSTALLER_H_
+#define CHROME_BROWSER_AERIUM_AERIUM_EXTENSION_INSTALLER_H_
+
+#include <memory>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "base/android/shared_preferences/shared_preferences_manager.h"
+#include "base/files/file_path.h"
+#include "base/files/file_util.h"
+#include "base/functional/bind.h"
+#include "base/json/json_reader.h"
+#include "base/json/json_writer.h"
+#include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
+#include "base/no_destructor.h"
+#include "base/one_shot_event.h"
+#include "base/scoped_observation.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
+#include "base/task/sequenced_task_runner.h"
+#include "base/task/thread_pool.h"
+#include "base/time/time.h"
+#include "base/timer/timer.h"
+#include "base/values.h"
+#include "base/version_info/version_info.h"
+#include "chrome/browser/extensions/chrome_extension_system_factory.h"
+#include "chrome/browser/extensions/chrome_zipfile_installer.h"
+#include "chrome/browser/extensions/extension_util.h"
+#include "chrome/browser/preferences/android/chrome_shared_preferences.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_keyed_service_factory.h"
+#include "components/crx_file/id_util.h"
+#include "components/keyed_service/core/keyed_service.h"
+#include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_change_registrar.h"
+#include "components/prefs/pref_service.h"
+#include "content/public/browser/browser_context.h"
+#include "content/public/browser/storage_partition.h"
+#include "extensions/browser/crx_installer.h"
+#include "extensions/browser/extension_file_task_runner.h"
+#include "extensions/browser/extension_registrar.h"
+#include "extensions/browser/extension_registrar_factory.h"
+#include "extensions/browser/extension_registry.h"
+#include "extensions/browser/extension_registry_factory.h"
+#include "extensions/browser/extension_registry_observer.h"
+#include "extensions/browser/extension_system.h"
+#include "extensions/browser/install/crx_install_error.h"
+#include "extensions/browser/zipfile_installer.h"
+#include "extensions/common/extension.h"
+#include "extensions/common/mojom/manifest.mojom-shared.h"
+#include "net/base/load_flags.h"
+#include "net/http/http_request_headers.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
+#include "services/network/public/cpp/resource_request.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/network/public/cpp/simple_url_loader.h"
+#include "url/gurl.h"
+
+namespace aerium_install {
+
+inline constexpr char kQueuePref[] = "aerium.extension_install_queue";
+inline constexpr char kProgressKey[] = "aerium_extension_install_progress";
+inline constexpr char kUboRepo[] = "gorhill/uBlock";
+inline constexpr char kUboKey[] =
+    "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqyTdDTMXfZ/EbpM+rAHvNb/+CFb/9mTu9eB9hgr67RvqL4A8jh5JGlhepDKeKGbFfrFc9gT3sd3OgZEzhFU+eTGxGBeVaverTJBKkMRW414lirw/hDg5uWbDDkGJfoG8B3y0GhhCsopJqajO/yL4olt1/5/dVKuYZvunenkKWEGRgPyDAJX9auMuydjJ5G4lKZa8P03PeZxYEvlr/c6RDviiFwshmazHDJJP9XrLX4uqy6a0Tx4lXUvYVGvSt7nKgMHsoy68eJps5lANpGpEIAOyJDTKCyjPzLmghvWJTqcxyCqijIgZAz58gQZWYDy9lM7zbjySiwkj7PDarYzQ2QIDAQAB";
+inline constexpr char kLocalRoot[] = "aerium_restore_extensions";
+
+inline void PinUnpackedId(const base::FilePath& dir) {
+  const base::FilePath manifest = dir.AppendASCII("manifest.json");
+  std::string text;
+  if (!base::ReadFileToString(manifest, &text)) {
+    return;
+  }
+  std::optional<base::Value> parsed =
+      base::JSONReader::Read(text, base::JSON_PARSE_RFC);
+  if (!parsed || !parsed->is_dict() || parsed->GetDict().Find("key")) {
+    return;
+  }
+  parsed->GetDict().Set("key", kUboKey);
+  std::optional<std::string> updated = base::WriteJson(*parsed);
+  if (updated && !base::WriteFile(manifest, *updated)) {
+    return;
+  }
+}
+
+class AeriumExtensionInstaller : public KeyedService,
+                                 public extensions::ExtensionRegistryObserver {
+ public:
+  explicit AeriumExtensionInstaller(Profile* profile);
+  AeriumExtensionInstaller(const AeriumExtensionInstaller&) = delete;
+  AeriumExtensionInstaller& operator=(const AeriumExtensionInstaller&) =
+      delete;
+  ~AeriumExtensionInstaller() override;
+
+  void Shutdown() override;
+
+  void OnExtensionInstalled(content::BrowserContext* browser_context,
+                            const extensions::Extension* extension,
+                            bool is_update) override;
+
+ private:
+  struct Item {
+    std::string id;
+    std::string source;
+    std::string path;
+    std::string key;
+    bool aerogel = false;
+  };
+
+  void OnReady();
+  void OnQueueChanged();
+  std::vector<Item> ReadQueue();
+  void RemoveHead();
+  void Next();
+  void ItemDone(bool ok);
+  void Report(bool finished);
+  void StartStore();
+  void OnCrxDownloaded(base::FilePath path);
+  void OnCrxInstalled(const std::optional<extensions::CrxInstallError>& error);
+  void StartLocal();
+  void StartGithub();
+  void OnReleaseFetched(std::optional<std::string> body);
+  void OnZipDownloaded(base::FilePath path);
+  void OnZipUnpacked(extensions::ZipFileInstaller::DoneCallback register_cb,
+                     const base::FilePath& zip_file,
+                     const base::FilePath& unzip_dir,
+                     const std::string& error);
+  void OnUnpackedTimeout();
+  void AllowInAerogel(const std::string& id);
+  std::unique_ptr<network::SimpleURLLoader> MakeLoader(const GURL& url,
+                                                       bool json);
+  network::mojom::URLLoaderFactory* Factory();
+
+  const raw_ptr<Profile> profile_;
+  PrefChangeRegistrar registrar_;
+  bool ready_ = false;
+  bool busy_ = false;
+  bool waiting_unpacked_ = false;
+  int done_ = 0;
+  int failed_ = 0;
+  Item current_;
+  std::unique_ptr<network::SimpleURLLoader> loader_;
+  base::OneShotTimer unpacked_timeout_;
+  base::ScopedObservation<extensions::ExtensionRegistry,
+                          extensions::ExtensionRegistryObserver>
+      registry_observation_{this};
+  base::WeakPtrFactory<AeriumExtensionInstaller> weak_factory_{this};
+};
+
+inline AeriumExtensionInstaller::AeriumExtensionInstaller(Profile* profile)
+    : profile_(profile) {
+  registrar_.Init(profile_->GetPrefs());
+  registrar_.Add(kQueuePref,
+                 base::BindRepeating(&AeriumExtensionInstaller::OnQueueChanged,
+                                     base::Unretained(this)));
+  extensions::ExtensionSystem::Get(profile_)->ready().Post(
+      FROM_HERE, base::BindOnce(&AeriumExtensionInstaller::OnReady,
+                                weak_factory_.GetWeakPtr()));
+}
+
+inline AeriumExtensionInstaller::~AeriumExtensionInstaller() = default;
+
+inline void AeriumExtensionInstaller::Shutdown() {
+  registrar_.RemoveAll();
+  registry_observation_.Reset();
+  unpacked_timeout_.Stop();
+  loader_.reset();
+  weak_factory_.InvalidateWeakPtrs();
+}
+
+inline network::mojom::URLLoaderFactory* AeriumExtensionInstaller::Factory() {
+  return profile_->GetDefaultStoragePartition()
+      ->GetURLLoaderFactoryForBrowserProcess()
+      .get();
+}
+
+inline std::unique_ptr<network::SimpleURLLoader>
+AeriumExtensionInstaller::MakeLoader(const GURL& url, bool json) {
+  constexpr net::NetworkTrafficAnnotationTag kAnnotation =
+      net::DefineNetworkTrafficAnnotation("aerium_extension_installs", R"(
+        semantics {
+          sender: "Aerium extension installs"
+          description:
+            "Downloads the extensions the user picked during setup or that a "
+            "restored backup lists, from the Chrome Web Store update server or "
+            "from the extension's own GitHub releases."
+          trigger:
+            "The user picks extensions during setup, or restores a backup "
+            "that contains extensions."
+          data: "The extension ID or repository name. No user data."
+          destination: OTHER
+        }
+        policy {
+          cookies_allowed: NO
+          setting: "Only runs when the user asks for it."
+          policy_exception_justification: "Not implemented."
+        })");
+  auto request = std::make_unique<network::ResourceRequest>();
+  request->url = url;
+  request->method = "GET";
+  request->credentials_mode = network::mojom::CredentialsMode::kOmit;
+  request->load_flags = net::LOAD_DISABLE_CACHE | net::LOAD_BYPASS_CACHE;
+  if (json) {
+    request->headers.SetHeader(net::HttpRequestHeaders::kAccept,
+                               "application/vnd.github+json");
+  }
+  request->headers.SetHeader(net::HttpRequestHeaders::kUserAgent, "Aerium");
+  std::unique_ptr<network::SimpleURLLoader> loader =
+      network::SimpleURLLoader::Create(std::move(request), kAnnotation);
+  loader->SetRetryOptions(2,
+                          network::SimpleURLLoader::RETRY_ON_NETWORK_CHANGE |
+                              network::SimpleURLLoader::RETRY_ON_5XX);
+  return loader;
+}
+
+inline void AeriumExtensionInstaller::OnReady() {
+  ready_ = true;
+  Next();
+}
+
+inline void AeriumExtensionInstaller::OnQueueChanged() {
+  if (ready_ && !busy_) {
+    Next();
+  }
+}
+
+inline std::vector<AeriumExtensionInstaller::Item>
+AeriumExtensionInstaller::ReadQueue() {
+  std::vector<Item> items;
+  std::optional<base::Value> parsed = base::JSONReader::Read(
+      profile_->GetPrefs()->GetString(kQueuePref), base::JSON_PARSE_RFC);
+  if (!parsed || !parsed->is_list()) {
+    return items;
+  }
+  for (const base::Value& value : parsed->GetList()) {
+    if (!value.is_dict()) {
+      continue;
+    }
+    const base::DictValue& dict = value.GetDict();
+    const std::string* id = dict.FindString("id");
+    const std::string* source = dict.FindString("source");
+    if (!id || !source) {
+      continue;
+    }
+    Item item;
+    item.id = *id;
+    item.source = *source;
+    if (const std::string* path = dict.FindString("path")) {
+      item.path = *path;
+    }
+    if (const std::string* key = dict.FindString("key")) {
+      item.key = *key;
+    }
+    item.aerogel = dict.FindBool("aerogel").value_or(false);
+    items.push_back(std::move(item));
+  }
+  return items;
+}
+
+inline void AeriumExtensionInstaller::RemoveHead() {
+  std::optional<base::Value> parsed = base::JSONReader::Read(
+      profile_->GetPrefs()->GetString(kQueuePref), base::JSON_PARSE_RFC);
+  base::ListValue rest;
+  bool removed = false;
+  if (parsed && parsed->is_list()) {
+    for (base::Value& value : parsed->GetList()) {
+      const std::string* id =
+          value.is_dict() ? value.GetDict().FindString("id") : nullptr;
+      if (!removed && id && *id == current_.id) {
+        removed = true;
+        continue;
+      }
+      rest.Append(std::move(value));
+    }
+  }
+  profile_->GetPrefs()->SetString(kQueuePref,
+                                  base::WriteJson(rest).value_or("[]"));
+}
+
+inline void AeriumExtensionInstaller::Report(bool finished) {
+  const size_t pending = ReadQueue().size();
+  const int total = done_ + failed_ + static_cast<int>(pending);
+  base::android::SharedPreferencesManager prefs =
+      android::shared_preferences::GetChromeSharedPreferences();
+  prefs.WriteString(kProgressKey, base::NumberToString(done_) + "," +
+                                      base::NumberToString(failed_) + "," +
+                                      base::NumberToString(total) + "," +
+                                      (finished ? "1" : "0"));
+}
+
+inline void AeriumExtensionInstaller::Next() {
+  if (!ready_ || busy_) {
+    return;
+  }
+  std::vector<Item> queue = ReadQueue();
+  if (queue.empty()) {
+    if (done_ + failed_ > 0) {
+      Report(true);
+      done_ = 0;
+      failed_ = 0;
+    }
+    return;
+  }
+  busy_ = true;
+  current_ = queue.front();
+  Report(false);
+  if (current_.source == "cws" && crx_file::id_util::IdIsValid(current_.id)) {
+    StartStore();
+  } else if (current_.source == "github" && current_.id == kUboRepo) {
+    StartGithub();
+  } else if (current_.source == "local" &&
+             crx_file::id_util::IdIsValid(current_.id) &&
+             !current_.key.empty() &&
+             current_.path.find(kLocalRoot) != std::string::npos) {
+    StartLocal();
+  } else {
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(&AeriumExtensionInstaller::ItemDone,
+                                  weak_factory_.GetWeakPtr(), false));
+  }
+}
+
+inline void AeriumExtensionInstaller::ItemDone(bool ok) {
+  if (ok) {
+    ++done_;
+  } else {
+    ++failed_;
+  }
+  RemoveHead();
+  busy_ = false;
+  Next();
+}
+
+inline void AeriumExtensionInstaller::StartStore() {
+  if (extensions::ExtensionRegistry::Get(profile_)->GetInstalledExtension(
+          current_.id)) {
+    if (current_.aerogel) {
+      AllowInAerogel(current_.id);
+    }
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(&AeriumExtensionInstaller::ItemDone,
+                                  weak_factory_.GetWeakPtr(), true));
+    return;
+  }
+  const GURL url(
+      "https://clients2.google.com/service/update2/crx?response=redirect"
+      "&prodversion=" +
+      std::string(version_info::GetVersionNumber()) +
+      "&acceptformat=crx3&x=id%3D" + current_.id + "%26uc");
+  loader_ = MakeLoader(url, false);
+  loader_->DownloadToFile(
+      Factory(),
+      base::BindOnce(&AeriumExtensionInstaller::OnCrxDownloaded,
+                     weak_factory_.GetWeakPtr()),
+      profile_->GetPath().AppendASCII("aerium-extension.crx"),
+      64 * 1024 * 1024);
+}
+
+inline void AeriumExtensionInstaller::OnCrxDownloaded(base::FilePath path) {
+  loader_.reset();
+  if (path.empty()) {
+    ItemDone(false);
+    return;
+  }
+  scoped_refptr<extensions::CrxInstaller> installer =
+      extensions::CrxInstaller::CreateSilent(profile_);
+  installer->set_expected_id(current_.id);
+  installer->set_delete_source(true);
+  installer->set_allow_silent_install(true);
+  installer->set_is_gallery_install(true);
+  installer->set_error_on_unsupported_requirements(true);
+  installer->AddInstallerCallback(base::BindOnce(
+      &AeriumExtensionInstaller::OnCrxInstalled, weak_factory_.GetWeakPtr()));
+  installer->InstallCrx(path);
+}
+
+inline void AeriumExtensionInstaller::OnCrxInstalled(
+    const std::optional<extensions::CrxInstallError>& error) {
+  if (!error && current_.aerogel) {
+    AllowInAerogel(current_.id);
+  }
+  ItemDone(!error);
+}
+
+inline void AeriumExtensionInstaller::StartLocal() {
+  const base::FilePath dir = base::FilePath::FromUTF8Unsafe(current_.path);
+  if (extensions::ExtensionRegistry::Get(profile_)->GetInstalledExtension(
+          current_.id)) {
+    base::ThreadPool::PostTask(
+        FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
+        base::GetDeletePathRecursivelyCallback(dir));
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(&AeriumExtensionInstaller::ItemDone,
+                                  weak_factory_.GetWeakPtr(), true));
+    return;
+  }
+  scoped_refptr<extensions::CrxInstaller> installer =
+      extensions::CrxInstaller::CreateSilent(profile_);
+  installer->set_expected_id(current_.id);
+  installer->set_delete_source(true);
+  installer->set_allow_silent_install(true);
+  installer->set_error_on_unsupported_requirements(true);
+  installer->AddInstallerCallback(base::BindOnce(
+      &AeriumExtensionInstaller::OnCrxInstalled, weak_factory_.GetWeakPtr()));
+  installer->InstallUnpackedCrx(current_.id, current_.key, dir);
+}
+
+inline void AeriumExtensionInstaller::StartGithub() {
+  loader_ = MakeLoader(
+      GURL(std::string("https://api.github.com/repos/") + kUboRepo +
+           "/releases/latest"),
+      true);
+  loader_->DownloadToString(
+      Factory(),
+      base::BindOnce(&AeriumExtensionInstaller::OnReleaseFetched,
+                     weak_factory_.GetWeakPtr()),
+      1024 * 1024);
+}
+
+inline void AeriumExtensionInstaller::OnReleaseFetched(
+    std::optional<std::string> body) {
+  loader_.reset();
+  std::optional<base::Value> parsed;
+  if (body) {
+    parsed = base::JSONReader::Read(*body, base::JSON_PARSE_RFC);
+  }
+  std::string asset;
+  if (parsed && parsed->is_dict()) {
+    if (const base::ListValue* assets = parsed->GetDict().FindList("assets")) {
+      for (const base::Value& value : *assets) {
+        if (!value.is_dict()) {
+          continue;
+        }
+        const std::string* name = value.GetDict().FindString("name");
+        const std::string* link =
+            value.GetDict().FindString("browser_download_url");
+        if (name && link && base::EndsWith(*name, ".chromium.zip") &&
+            base::StartsWith(*link, "https://github.com/")) {
+          asset = *link;
+          break;
+        }
+      }
+    }
+  }
+  if (asset.empty()) {
+    ItemDone(false);
+    return;
+  }
+  loader_ = MakeLoader(GURL(asset), false);
+  loader_->DownloadToFile(
+      Factory(),
+      base::BindOnce(&AeriumExtensionInstaller::OnZipDownloaded,
+                     weak_factory_.GetWeakPtr()),
+      profile_->GetPath().AppendASCII("aerium-extension.zip"),
+      64 * 1024 * 1024);
+}
+
+inline void AeriumExtensionInstaller::OnZipDownloaded(base::FilePath path) {
+  loader_.reset();
+  if (path.empty()) {
+    ItemDone(false);
+    return;
+  }
+  waiting_unpacked_ = true;
+  registry_observation_.Observe(extensions::ExtensionRegistry::Get(profile_));
+  unpacked_timeout_.Start(
+      FROM_HERE, base::Seconds(90),
+      base::BindOnce(&AeriumExtensionInstaller::OnUnpackedTimeout,
+                     weak_factory_.GetWeakPtr()));
+  extensions::ZipFileInstaller::Create(
+      extensions::GetExtensionFileTaskRunner(),
+      base::BindOnce(
+          &AeriumExtensionInstaller::OnZipUnpacked, weak_factory_.GetWeakPtr(),
+          extensions::MakeRegisterInExtensionServiceCallback(profile_)))
+      ->InstallZipFileToUnpackedExtensionsDir(
+          path, extensions::ExtensionRegistrar::Get(profile_)
+                    ->unpacked_install_directory());
+}
+
+inline void AeriumExtensionInstaller::OnZipUnpacked(
+    extensions::ZipFileInstaller::DoneCallback register_cb,
+    const base::FilePath& zip_file,
+    const base::FilePath& unzip_dir,
+    const std::string& error) {
+  base::ThreadPool::PostTask(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
+      base::GetDeleteFileCallback(zip_file));
+  if (!error.empty()) {
+    if (waiting_unpacked_) {
+      waiting_unpacked_ = false;
+      unpacked_timeout_.Stop();
+      registry_observation_.Reset();
+      ItemDone(false);
+    }
+    return;
+  }
+  base::ThreadPool::PostTaskAndReply(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      base::BindOnce(&PinUnpackedId, unzip_dir),
+      base::BindOnce(std::move(register_cb), zip_file, unzip_dir, error));
+}
+
+inline void AeriumExtensionInstaller::OnExtensionInstalled(
+    content::BrowserContext* browser_context,
+    const extensions::Extension* extension,
+    bool is_update) {
+  if (!waiting_unpacked_ ||
+      extension->location() != extensions::mojom::ManifestLocation::kUnpacked) {
+    return;
+  }
+  waiting_unpacked_ = false;
+  unpacked_timeout_.Stop();
+  registry_observation_.Reset();
+  if (current_.aerogel) {
+    AllowInAerogel(extension->id());
+  }
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(&AeriumExtensionInstaller::ItemDone,
+                                weak_factory_.GetWeakPtr(), true));
+}
+
+inline void AeriumExtensionInstaller::OnUnpackedTimeout() {
+  if (!waiting_unpacked_) {
+    return;
+  }
+  waiting_unpacked_ = false;
+  registry_observation_.Reset();
+  ItemDone(false);
+}
+
+inline void AeriumExtensionInstaller::AllowInAerogel(const std::string& id) {
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          [](base::WeakPtr<Profile> profile, std::string id) {
+            if (profile) {
+              extensions::util::SetIsIncognitoEnabled(id, profile.get(), true);
+            }
+          },
+          profile_->GetWeakPtr(), id));
+}
+
+class AeriumExtensionInstallerFactory : public ProfileKeyedServiceFactory {
+ public:
+  static AeriumExtensionInstallerFactory* GetInstance();
+
+  AeriumExtensionInstallerFactory(const AeriumExtensionInstallerFactory&) =
+      delete;
+  AeriumExtensionInstallerFactory& operator=(
+      const AeriumExtensionInstallerFactory&) = delete;
+
+ private:
+  friend base::NoDestructor<AeriumExtensionInstallerFactory>;
+
+  AeriumExtensionInstallerFactory();
+  ~AeriumExtensionInstallerFactory() override = default;
+
+  std::unique_ptr<KeyedService> BuildServiceInstanceForBrowserContext(
+      content::BrowserContext* context) const override;
+  bool ServiceIsCreatedWithBrowserContext() const override;
+  void RegisterProfilePrefs(
+      user_prefs::PrefRegistrySyncable* registry) override;
+};
+
+inline AeriumExtensionInstallerFactory::AeriumExtensionInstallerFactory()
+    : ProfileKeyedServiceFactory(
+          "AeriumExtensionInstaller",
+          ProfileSelections::Builder()
+              .WithRegular(ProfileSelection::kOriginalOnly)
+              .WithGuest(ProfileSelection::kNone)
+              .WithSystem(ProfileSelection::kNone)
+              .WithAshInternals(ProfileSelection::kNone)
+              .Build()) {
+  DependsOn(extensions::ExtensionRegistryFactory::GetInstance());
+  DependsOn(extensions::ExtensionRegistrarFactory::GetInstance());
+  DependsOn(extensions::ChromeExtensionSystemFactory::GetInstance());
+}
+
+inline AeriumExtensionInstallerFactory*
+AeriumExtensionInstallerFactory::GetInstance() {
+  static base::NoDestructor<AeriumExtensionInstallerFactory> instance;
+  return instance.get();
+}
+
+inline std::unique_ptr<KeyedService>
+AeriumExtensionInstallerFactory::BuildServiceInstanceForBrowserContext(
+    content::BrowserContext* context) const {
+  return std::make_unique<AeriumExtensionInstaller>(
+      Profile::FromBrowserContext(context));
+}
+
+inline bool AeriumExtensionInstallerFactory::ServiceIsCreatedWithBrowserContext()
+    const {
+  return true;
+}
+
+inline void AeriumExtensionInstallerFactory::RegisterProfilePrefs(
+    user_prefs::PrefRegistrySyncable* registry) {
+  registry->RegisterStringPref(kQueuePref, std::string());
+}
+
+}  // namespace aerium_install
+
+#endif  // CHROME_BROWSER_AERIUM_AERIUM_EXTENSION_INSTALLER_H_
+AERIUM_EXTENSION_INSTALLER_H
+sed_i 's|^#include "chrome/browser/aerium/aerium_update_checker.h"$|&\n#include "chrome/browser/aerium/aerium_extension_installer.h"|' \
+    $CBMEPP
+sed_i 's|^  aerium_update::AeriumUpdateCheckerFactory::GetInstance();$|&\n  aerium_install::AeriumExtensionInstallerFactory::GetInstance();|' \
+    $CBMEPP
+
+cat > $AERIUM_TB_SRC/settings/AeriumExtensionInstalls.java <<'AERIUM_EXTENSION_INSTALLS_JAVA'
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+package org.chromium.chrome.browser.settings;
+
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import org.chromium.base.ContextUtils;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
+import org.chromium.components.prefs.PrefService;
+
+import java.util.HashSet;
+import java.util.Set;
+
+@NullMarked
+public final class AeriumExtensionInstalls {
+    public static final String QUEUE_PREF = "aerium.extension_install_queue";
+    public static final String PROGRESS_KEY = "aerium_extension_install_progress";
+
+    private AeriumExtensionInstalls() {}
+
+    public static boolean enqueue(@Nullable PrefService prefs, JSONArray items) {
+        if (prefs == null || items.length() == 0 || prefs.getPrefType(QUEUE_PREF) < 0) {
+            return false;
+        }
+        JSONArray queue;
+        try {
+            String current = prefs.getString(QUEUE_PREF);
+            queue = current.isEmpty() ? new JSONArray() : new JSONArray(current);
+        } catch (JSONException e) {
+            queue = new JSONArray();
+        }
+        Set<String> ids = new HashSet<>();
+        for (int i = 0; i < queue.length(); i++) {
+            JSONObject item = queue.optJSONObject(i);
+            if (item != null) ids.add(item.optString("id", ""));
+        }
+        boolean added = false;
+        for (int i = 0; i < items.length(); i++) {
+            JSONObject item = items.optJSONObject(i);
+            if (item == null) continue;
+            String id = item.optString("id", "");
+            if (id.isEmpty() || ids.contains(id)) continue;
+            ids.add(id);
+            queue.put(item);
+            added = true;
+        }
+        if (!added) return false;
+        ContextUtils.getAppSharedPreferences().edit().remove(PROGRESS_KEY).apply();
+        prefs.setString(QUEUE_PREF, queue.toString());
+        return true;
+    }
+
+    public static int[] readProgress() {
+        String value = ContextUtils.getAppSharedPreferences().getString(PROGRESS_KEY, "");
+        int[] result = new int[] {0, 0, 0, 1};
+        if (value == null || value.isEmpty()) return result;
+        String[] parts = value.split(",", -1);
+        if (parts.length != 4) return result;
+        try {
+            for (int i = 0; i < 4; i++) result[i] = Integer.parseInt(parts[i]);
+        } catch (NumberFormatException e) {
+            return new int[] {0, 0, 0, 1};
+        }
+        return result;
+    }
+}
+AERIUM_EXTENSION_INSTALLS_JAVA
+sed_i 's|^  "java/src/org/chromium/chrome/browser/browsing_data/BrowsingDataCounterBridge.java",$|  "java/src/org/chromium/chrome/browser/settings/AeriumExtensionInstalls.java",\n&|' \
+    chrome/android/chrome_java_sources.gni
+
+perl -0777 -pi -e '
+    s{(BottomBarProperties\.IS_NEW_TAB_BUTTON_VISIBLE,\n                        )/\* initiallyVisible= \*/ true\)\);}{$1org.chromium.base.ContextUtils.getAppSharedPreferences()\n                                .getBoolean("Chrome.Aerium.BarNewTab", true)));}
+        or die "[aerium] FATAL: BottomBarCoordinator no longer registers the new tab button this way\n";
+' chrome/browser/ui/android/bottombar/java/src/org/chromium/chrome/browser/ui/bottombar/BottomBarCoordinator.java || return 1
 
 echo "[aerium] toolbar layouts and menu items applied"
 
