@@ -7,12 +7,12 @@ Subject: [PATCH] Give extensions their own Aerogel window
  .../chromium/chrome/browser/ChromeTabbedActivity.java    | 8 +++++---
  .../MinimizeAppAndCloseTabBackPressHandler.java          | 4 ++++
  chrome/browser/extensions/api/tabs/tabs_api.cc           | 3 +++
- .../chrome/browser/incognito/IncognitoUtils.java         | 8 +-------
+ .../chrome/browser/incognito/IncognitoUtils.java         | 9 +--------
  chrome/browser/profiles/profile_destroyer.cc             | 5 +++++
  content/browser/web_contents/web_contents_impl.cc        | 9 +++++++++
  content/public/browser/web_contents.h                    | 3 +++
  extensions/browser/process_manager.cc                    | 8 +++++++-
- 8 files changed, 37 insertions(+), 11 deletions(-)
+ 8 files changed, 37 insertions(+), 12 deletions(-)
 
 diff --git a/chrome/android/java/src/org/chromium/chrome/browser/ChromeTabbedActivity.java b/chrome/android/java/src/org/chromium/chrome/browser/ChromeTabbedActivity.java
 index fa74541a751674dcc0c3b569cb95a8c487f9e22b..33a52bad0973acf16d7e57337fd4b638b0e5c6ac 100644
@@ -69,10 +69,18 @@ index 0892d1b23ea62ab466d946a787bf6b7197cc4239..ef45f1b97742553e0f8e705686c068aa
        if (tab_index > -1 && i != tab_index) {
          continue;
 diff --git a/chrome/browser/incognito/android/java/src/org/chromium/chrome/browser/incognito/IncognitoUtils.java b/chrome/browser/incognito/android/java/src/org/chromium/chrome/browser/incognito/IncognitoUtils.java
-index 82919be542dab3d77fbc23a16c66f4b37825fa89..fb20d17eb0192cb211f25b12fb17470662b8b646 100644
+index 82919be542dab3d77fbc23a16c66f4b37825fa89..4ecddd966a33a50a4f7a1580519ec6944a9a8ecd 100644
 --- a/chrome/browser/incognito/android/java/src/org/chromium/chrome/browser/incognito/IncognitoUtils.java
 +++ b/chrome/browser/incognito/android/java/src/org/chromium/chrome/browser/incognito/IncognitoUtils.java
-@@ -134,13 +134,7 @@ public class IncognitoUtils {
+@@ -27,7 +27,6 @@ import org.chromium.chrome.browser.profiles.Profile;
+ import org.chromium.chrome.browser.profiles.ProfileKey;
+ import org.chromium.chrome.browser.profiles.ProfileKeyUtil;
+ import org.chromium.chrome.browser.profiles.ProfileManager;
+-import org.chromium.chrome.browser.util.MultiInstanceUtils;
+ import org.chromium.ui.display.DisplayUtil;
+ 
+ /** Utilities for working with incognito tabs spread across multiple activities. */
+@@ -134,13 +133,7 @@ public class IncognitoUtils {
          if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S_V2) {
              return false;
          }
