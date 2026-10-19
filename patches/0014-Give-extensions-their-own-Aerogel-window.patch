@@ -15,7 +15,7 @@ Subject: [PATCH] Give extensions their own Aerogel window
  8 files changed, 37 insertions(+), 11 deletions(-)
 
 diff --git a/chrome/android/java/src/org/chromium/chrome/browser/ChromeTabbedActivity.java b/chrome/android/java/src/org/chromium/chrome/browser/ChromeTabbedActivity.java
-index e69a7be7a4a611c0023c6c98632f2468e5ca4d0d..aad92b940269a752d958a48a6b5f0056a8b26d45 100644
+index fa74541a751674dcc0c3b569cb95a8c487f9e22b..33a52bad0973acf16d7e57337fd4b638b0e5c6ac 100644
 --- a/chrome/android/java/src/org/chromium/chrome/browser/ChromeTabbedActivity.java
 +++ b/chrome/android/java/src/org/chromium/chrome/browser/ChromeTabbedActivity.java
 @@ -1284,15 +1284,17 @@ public class ChromeTabbedActivity extends ChromeActivity implements PreAttachInt
