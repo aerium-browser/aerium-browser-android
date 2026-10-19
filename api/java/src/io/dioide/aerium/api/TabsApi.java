@@ -8,6 +8,8 @@ import androidx.annotation.Nullable;
 import java.util.List;
 
 public interface TabsApi {
+    boolean isReady();
+
     List<TabInfo> list(boolean aerogel);
 
     @Nullable
@@ -22,9 +24,9 @@ public interface TabsApi {
 
     void select(int tabId);
 
-    void close(int tabId);
+    void close(int tabId, boolean remember);
 
-    void closeAll(boolean aerogel);
+    void closeAll(boolean aerogel, boolean remember);
 
     void setDesktopSite(int tabId, boolean desktopSite);
 

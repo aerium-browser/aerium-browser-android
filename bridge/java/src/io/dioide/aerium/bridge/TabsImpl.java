@@ -41,6 +41,12 @@ import java.util.List;
 
 final class TabsImpl implements TabsApi {
     @Override
+    public boolean isReady() {
+        TabModelSelector selector = selector();
+        return selector != null && selector.isTabStateInitialized();
+    }
+
+    @Override
     public List<TabInfo> list(boolean aerogel) {
         List<TabInfo> tabs = new ArrayList<>();
         TabModelSelector selector = selector();
@@ -102,20 +108,32 @@ final class TabsImpl implements TabsApi {
     }
 
     @Override
-    public void close(int tabId) {
+    public void close(int tabId, boolean remember) {
         TabModelSelector selector = selector();
         Tab tab = selector == null ? null : selector.getTabById(tabId);
-        if (tab == null) return;
-        selector.tryCloseTab(TabClosureParams.closeTab(tab).allowUndo(false).build(), false);
+        TabModel model = selector == null ? null : selector.getModelForTabId(tabId);
+        if (tab == null || model == null) return;
+        model.getTabRemover()
+                .closeTabs(
+                        TabClosureParams.closeTabs(List.of(tab))
+                                .allowUndo(false)
+                                .saveToTabRestoreService(remember)
+                                .build(),
+                        false);
     }
 
     @Override
-    public void closeAll(boolean aerogel) {
+    public void closeAll(boolean aerogel, boolean remember) {
         TabModelSelector selector = selector();
         if (selector == null) return;
         selector.getModel(aerogel)
                 .getTabRemover()
-                .closeTabs(TabClosureParams.closeAllTabs().allowUndo(false).build(), false);
+                .closeTabs(
+                        TabClosureParams.closeAllTabs()
+                                .allowUndo(false)
+                                .saveToTabRestoreService(remember)
+                                .build(),
+                        false);
     }
 
     @Override
