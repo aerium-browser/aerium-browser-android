@@ -14,8 +14,7 @@ public final class CoreSettings {
             new Setting<>("webrtc_policy", String.class);
     public static final Setting<String> REFERRER_POLICY =
             new Setting<>("referrer_policy", String.class);
-    public static final Setting<Boolean> HOMEPAGE =
-            new Setting<>("homepage", Boolean.class);
+    public static final Setting<Boolean> HOMEPAGE = new Setting<>("homepage", Boolean.class);
 
     public static final String WEBRTC_DEFAULT = "default";
     public static final String WEBRTC_ALL_INTERFACES = "default_public_and_private_interfaces";

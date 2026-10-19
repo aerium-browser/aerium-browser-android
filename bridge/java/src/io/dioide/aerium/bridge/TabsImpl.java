@@ -86,9 +86,7 @@ final class TabsImpl implements TabsApi {
                 mode == OpenMode.BACKGROUND
                         ? TabLaunchType.FROM_LONGPRESS_BACKGROUND
                         : TabLaunchType.FROM_CHROME_UI;
-        Tab tab =
-                selector.openNewTab(
-                        new LoadUrlParams(url), type, null, mode == OpenMode.AEROGEL);
+        Tab tab = selector.openNewTab(new LoadUrlParams(url), type, null, mode == OpenMode.AEROGEL);
         return tab == null ? Tab.INVALID_TAB_ID : tab.getId();
     }
 
