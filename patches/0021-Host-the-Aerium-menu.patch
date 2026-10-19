@@ -7,8 +7,8 @@ Subject: [PATCH] Host the Aerium menu
  .../TabbedAppMenuPropertiesDelegate.java      |  3 ++
  chrome/browser/ui/android/appmenu/BUILD.gn    |  1 +
  .../ui/appmenu/AppMenuHandlerImpl.java        | 53 ++++++++++++++++++-
- .../browser/ui/appmenu/AppMenuSheet.java      | 41 ++++++++++++++
- 4 files changed, 97 insertions(+), 1 deletion(-)
+ .../browser/ui/appmenu/AppMenuSheet.java      | 42 +++++++++++++++
+ 4 files changed, 98 insertions(+), 1 deletion(-)
  create mode 100644 chrome/browser/ui/android/appmenu/java/src/org/chromium/chrome/browser/ui/appmenu/AppMenuSheet.java
 
 diff --git a/chrome/android/java/src/org/chromium/chrome/browser/tabbed_mode/TabbedAppMenuPropertiesDelegate.java b/chrome/android/java/src/org/chromium/chrome/browser/tabbed_mode/TabbedAppMenuPropertiesDelegate.java
@@ -126,10 +126,10 @@ index 9a1cbc7f512c4a204f6e836fba1abfc55b0f04f4..00a08c0789ea6d059ebf2942acc10ab0
          }
 diff --git a/chrome/browser/ui/android/appmenu/java/src/org/chromium/chrome/browser/ui/appmenu/AppMenuSheet.java b/chrome/browser/ui/android/appmenu/java/src/org/chromium/chrome/browser/ui/appmenu/AppMenuSheet.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..4f66148f35ad259e28f2724d87306ae7028271c8
+index 0000000000000000000000000000000000000000..40afd1d78087f08818002201ba0369993cde0067
 --- /dev/null
 +++ b/chrome/browser/ui/android/appmenu/java/src/org/chromium/chrome/browser/ui/appmenu/AppMenuSheet.java
-@@ -0,0 +1,41 @@
+@@ -0,0 +1,42 @@
 +// Copyright 2026 Dioide
 +// SPDX-License-Identifier: GPL-3.0-only
 +
@@ -156,7 +156,8 @@ index 0000000000000000000000000000000000000000..4f66148f35ad259e28f2724d87306ae7
 +    }
 +
 +    public interface Presenter {
-+        @Nullable Session show(Context context, ModelList items, Host host);
++        @Nullable
++        Session show(Context context, ModelList items, Host host);
 +    }
 +
 +    private static @Nullable Presenter sPresenter;
