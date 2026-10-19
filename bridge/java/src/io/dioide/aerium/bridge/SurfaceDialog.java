@@ -11,11 +11,14 @@ import android.os.Build;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
+import android.view.WindowManager;
 
 import androidx.activity.ComponentDialog;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 
+import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
+import org.chromium.chrome.browser.lifecycle.DestroyObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabUtils;
 
@@ -44,13 +47,32 @@ public final class SurfaceDialog implements SurfaceHost {
         SurfaceDialog host = new SurfaceDialog(activity, tab.getId(), showDefault);
         View view = factory.create(activity, host);
         if (view == null) return false;
-        boolean dark =
-                tab.isIncognitoBranded()
-                        || (activity.getResources().getConfiguration().uiMode
-                                        & Configuration.UI_MODE_NIGHT_MASK)
-                                == Configuration.UI_MODE_NIGHT_YES;
-        host.present(view, dark);
+        host.present(view, tab.isIncognitoBranded() || isNight(activity), false);
         return true;
+    }
+
+    public static boolean show(
+            Activity activity, Slot slot, ActivityLifecycleDispatcher lifecycle) {
+        SurfaceFactory factory = AeriumUi.surface(slot);
+        if (factory == null) return false;
+        SurfaceDialog host = new SurfaceDialog(activity, NO_TAB, () -> {});
+        View view = factory.create(activity, host);
+        if (view == null) return false;
+        lifecycle.register(
+                new DestroyObserver() {
+                    @Override
+                    public void onDestroy() {
+                        host.close();
+                    }
+                });
+        host.present(view, isNight(activity), true);
+        return true;
+    }
+
+    private static boolean isNight(Activity activity) {
+        return (activity.getResources().getConfiguration().uiMode
+                        & Configuration.UI_MODE_NIGHT_MASK)
+                == Configuration.UI_MODE_NIGHT_YES;
     }
 
     @Override
@@ -80,7 +102,7 @@ public final class SurfaceDialog implements SurfaceHost {
         mShowDefault.run();
     }
 
-    private void present(View view, boolean dark) {
+    private void present(View view, boolean dark, boolean fullWindow) {
         mDialog.setContentView(
                 view,
                 new ViewGroup.LayoutParams(
@@ -101,8 +123,11 @@ public final class SurfaceDialog implements SurfaceHost {
             }
             WindowInsetsControllerCompat controller =
                     WindowCompat.getInsetsController(window, window.getDecorView());
-            controller.setAppearanceLightStatusBars(false);
+            controller.setAppearanceLightStatusBars(fullWindow && !dark);
             controller.setAppearanceLightNavigationBars(!dark);
+            if (fullWindow) {
+                window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+            }
         }
         mDialog.show();
     }

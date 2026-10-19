@@ -1,0 +1,24 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: fatih-gh <me@mehmetfatihyaman.me>
+Date: Thu, 1 Jan 2026 00:00:00 +0000
+Subject: [PATCH] Host the Aerium onboarding
+
+---
+ .../src/org/chromium/chrome/browser/ChromeTabbedActivity.java | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/chrome/android/java/src/org/chromium/chrome/browser/ChromeTabbedActivity.java b/chrome/android/java/src/org/chromium/chrome/browser/ChromeTabbedActivity.java
+index aad92b940269a752d958a48a6b5f0056a8b26d45..675ada6d586999e632b5c1c7673f9c80eb794f07 100644
+--- a/chrome/android/java/src/org/chromium/chrome/browser/ChromeTabbedActivity.java
++++ b/chrome/android/java/src/org/chromium/chrome/browser/ChromeTabbedActivity.java
+@@ -1663,6 +1663,10 @@ public class ChromeTabbedActivity extends ChromeActivity implements PreAttachInt
+             var profileProvider = assertNonNull(getProfileProviderSupplier().get());
+             var profile = profileProvider.getOriginalProfile();
+             new NavigationPredictorBridge(profile, getLifecycleDispatcher(), this::isWarmOnResume);
++            if (!isIncognitoWindow()) {
++                io.dioide.aerium.bridge.SurfaceDialog.show(
++                        this, io.dioide.aerium.api.Slot.ONBOARDING, getLifecycleDispatcher());
++            }
+ 
+             if (NtpCustomizationUtils.isNtpThemeCustomizationEnabled() && !isIncognitoWindow()) {
+                 CrossDeviceThemeTracker themeTracker =
