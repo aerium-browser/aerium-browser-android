@@ -12,6 +12,8 @@ android_library("api_java") {
     "java/src/io/dioide/aerium/api/CoreSettings.java",
     "java/src/io/dioide/aerium/api/ExtensionInfo.java",
     "java/src/io/dioide/aerium/api/ExtensionsApi.java",
+    "java/src/io/dioide/aerium/api/MenuHost.java",
+    "java/src/io/dioide/aerium/api/MenuItem.java",
     "java/src/io/dioide/aerium/api/NavigationApi.java",
     "java/src/io/dioide/aerium/api/OpenMode.java",
     "java/src/io/dioide/aerium/api/PrefsApi.java",

@@ -1,0 +1,173 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: fatih-gh <me@mehmetfatihyaman.me>
+Date: Thu, 1 Jan 2026 00:00:00 +0000
+Subject: [PATCH] Host the Aerium menu
+
+---
+ .../TabbedAppMenuPropertiesDelegate.java      |  3 ++
+ chrome/browser/ui/android/appmenu/BUILD.gn    |  1 +
+ .../ui/appmenu/AppMenuHandlerImpl.java        | 53 ++++++++++++++++++-
+ .../browser/ui/appmenu/AppMenuSheet.java      | 41 ++++++++++++++
+ 4 files changed, 97 insertions(+), 1 deletion(-)
+ create mode 100644 chrome/browser/ui/android/appmenu/java/src/org/chromium/chrome/browser/ui/appmenu/AppMenuSheet.java
+
+diff --git a/chrome/android/java/src/org/chromium/chrome/browser/tabbed_mode/TabbedAppMenuPropertiesDelegate.java b/chrome/android/java/src/org/chromium/chrome/browser/tabbed_mode/TabbedAppMenuPropertiesDelegate.java
+index c16621be2e6d350925a7ceb5e05489f15c8a4e84..f5405d36b7601a6f0f29dd86cca0f3c493b46187 100644
+--- a/chrome/android/java/src/org/chromium/chrome/browser/tabbed_mode/TabbedAppMenuPropertiesDelegate.java
++++ b/chrome/android/java/src/org/chromium/chrome/browser/tabbed_mode/TabbedAppMenuPropertiesDelegate.java
+@@ -299,6 +299,9 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
+         } else if (menuGroup == MenuGroup.TABLET_EMPTY_MODE_MENU) {
+             populateTabletEmptyModeMenu(modelList);
+         }
++        if (menuGroup == MenuGroup.PAGE_MENU) {
++            io.dioide.aerium.bridge.MenuSurface.attach(modelList);
++        }
+         return modelList;
+     }
+ 
+diff --git a/chrome/browser/ui/android/appmenu/BUILD.gn b/chrome/browser/ui/android/appmenu/BUILD.gn
+index a9bd2019312240738b2589c1d1d79424efd9bc4f..4b984f87d6b499293df2bacb341112062b9a24bf 100644
+--- a/chrome/browser/ui/android/appmenu/BUILD.gn
++++ b/chrome/browser/ui/android/appmenu/BUILD.gn
+@@ -19,6 +19,7 @@ android_library("java") {
+     "java/src/org/chromium/chrome/browser/ui/appmenu/AppMenuObserver.java",
+     "java/src/org/chromium/chrome/browser/ui/appmenu/AppMenuPropertiesDelegate.java",
+     "java/src/org/chromium/chrome/browser/ui/appmenu/AppMenuRecentEntryItemProperties.java",
++    "java/src/org/chromium/chrome/browser/ui/appmenu/AppMenuSheet.java",
+     "java/src/org/chromium/chrome/browser/ui/appmenu/AppMenuSubmenuHeaderItemProperties.java",
+     "java/src/org/chromium/chrome/browser/ui/appmenu/AppMenuTabGroupItemProperties.java",
+     "java/src/org/chromium/chrome/browser/ui/appmenu/AppMenuTabItemProperties.java",
+diff --git a/chrome/browser/ui/android/appmenu/internal/java/src/org/chromium/chrome/browser/ui/appmenu/AppMenuHandlerImpl.java b/chrome/browser/ui/android/appmenu/internal/java/src/org/chromium/chrome/browser/ui/appmenu/AppMenuHandlerImpl.java
+index 9a1cbc7f512c4a204f6e836fba1abfc55b0f04f4..00a08c0789ea6d059ebf2942acc10ab0546653d9 100644
+--- a/chrome/browser/ui/android/appmenu/internal/java/src/org/chromium/chrome/browser/ui/appmenu/AppMenuHandlerImpl.java
++++ b/chrome/browser/ui/android/appmenu/internal/java/src/org/chromium/chrome/browser/ui/appmenu/AppMenuHandlerImpl.java
+@@ -118,6 +118,29 @@ class AppMenuHandlerImpl
+     private final WindowAndroid mWindowAndroid;
+     private final BrowserControlsStateProvider mBrowserControlsStateProvider;
+     private @Nullable ModelList mModelList;
++    private AppMenuSheet.@Nullable Session mSheetSession;
++    private final AppMenuSheet.Host mSheetHost =
++            new AppMenuSheet.Host() {
++                @Override
++                public void select(int id) {
++                    PropertyModel model = mModelList == null ? null : findItem(mModelList, id);
++                    if (model != null
++                            && model.containsKey(AppMenuItemProperties.ENABLED)
++                            && !model.get(AppMenuItemProperties.ENABLED)) {
++                        return;
++                    }
++                    mAppMenuDelegate.onOptionsItemSelected(
++                            id, model == null ? null : mDelegate.getBundleForMenuItem(model), null);
++                }
++
++                @Override
++                public void dismissed() {
++                    mSheetSession = null;
++                    mDelegate.onMenuDismissed();
++                    if (mModelList != null) mModelList.removeObserver(mListObserver);
++                    onMenuVisibilityChanged(false);
++                }
++            };
+     private @Nullable HierarchicalMenuController<AppMenuPopup> mHierarchicalMenuController;
+     private final SubmenuHeaderFactory mSubmenuHeaderFactory;
+     private final ListObserver<Void> mListObserver;
+@@ -338,6 +361,16 @@ class AppMenuHandlerImpl
+ 
+         mModelList = mDelegate.getMenuItems();
+         mModelList.addObserver(mListObserver);
++        AppMenuSheet.Presenter sheetPresenter = AppMenuSheet.getPresenter();
++        AppMenuSheet.@Nullable Session sheetSession =
++                sheetPresenter == null
++                        ? null
++                        : sheetPresenter.show(mContext, mModelList, mSheetHost);
++        if (sheetSession != null) {
++            mSheetSession = sheetSession;
++            onMenuVisibilityChanged(true);
++            return true;
++        }
+         ContextThemeWrapper wrapper =
+                 new ContextThemeWrapper(mContext, R.style.AppMenuThemeOverlay);
+ 
+@@ -455,9 +488,26 @@ class AppMenuHandlerImpl
+         }
+     }
+ 
++    private static @Nullable PropertyModel findItem(ModelList list, int id) {
++        for (int i = 0; i < list.size(); i++) {
++            PropertyModel model = list.get(i).model;
++            if (model.containsKey(AppMenuItemProperties.MENU_ITEM_ID)
++                    && model.get(AppMenuItemProperties.MENU_ITEM_ID) == id) {
++                return model;
++            }
++            if (!model.containsKey(AppMenuItemProperties.ADDITIONAL_ICONS)) continue;
++            ModelList icons = model.get(AppMenuItemProperties.ADDITIONAL_ICONS);
++            if (icons == null) continue;
++            PropertyModel inner = findItem(icons, id);
++            if (inner != null) return inner;
++        }
++        return null;
++    }
++
+     @Override
+     public boolean isAppMenuShowing() {
+-        return mAppMenu != null && mAppMenu.isShowing();
++        return (mSheetSession != null && mSheetSession.isShowing())
++                || (mAppMenu != null && mAppMenu.isShowing());
+     }
+ 
+     /**
+@@ -473,6 +523,7 @@ class AppMenuHandlerImpl
+ 
+     @Override
+     public void hideAppMenu() {
++        if (mSheetSession != null) mSheetSession.dismiss();
+         if (mAppMenu != null && mAppMenu.isShowing()) {
+             mAppMenu.dismiss();
+         }
+diff --git a/chrome/browser/ui/android/appmenu/java/src/org/chromium/chrome/browser/ui/appmenu/AppMenuSheet.java b/chrome/browser/ui/android/appmenu/java/src/org/chromium/chrome/browser/ui/appmenu/AppMenuSheet.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..4f66148f35ad259e28f2724d87306ae7028271c8
+--- /dev/null
++++ b/chrome/browser/ui/android/appmenu/java/src/org/chromium/chrome/browser/ui/appmenu/AppMenuSheet.java
+@@ -0,0 +1,41 @@
++// Copyright 2026 Dioide
++// SPDX-License-Identifier: GPL-3.0-only
++
++package org.chromium.chrome.browser.ui.appmenu;
++
++import android.content.Context;
++
++import org.chromium.build.annotations.NullMarked;
++import org.chromium.build.annotations.Nullable;
++import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
++
++@NullMarked
++public final class AppMenuSheet {
++    public interface Host {
++        void select(int id);
++
++        void dismissed();
++    }
++
++    public interface Session {
++        boolean isShowing();
++
++        void dismiss();
++    }
++
++    public interface Presenter {
++        @Nullable Session show(Context context, ModelList items, Host host);
++    }
++
++    private static @Nullable Presenter sPresenter;
++
++    private AppMenuSheet() {}
++
++    public static void setPresenter(@Nullable Presenter presenter) {
++        sPresenter = presenter;
++    }
++
++    public static @Nullable Presenter getPresenter() {
++        return sPresenter;
++    }
++}

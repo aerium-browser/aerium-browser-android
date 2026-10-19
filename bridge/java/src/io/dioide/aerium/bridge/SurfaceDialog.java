@@ -27,13 +27,13 @@ import io.dioide.aerium.api.Slot;
 import io.dioide.aerium.api.SurfaceFactory;
 import io.dioide.aerium.api.SurfaceHost;
 
-public final class SurfaceDialog implements SurfaceHost {
+public class SurfaceDialog implements SurfaceHost {
     private final Activity mActivity;
     private final int mTabId;
     private final Runnable mShowDefault;
     private final ComponentDialog mDialog;
 
-    private SurfaceDialog(Activity activity, int tabId, Runnable showDefault) {
+    SurfaceDialog(Activity activity, int tabId, Runnable showDefault) {
         mActivity = activity;
         mTabId = tabId;
         mShowDefault = showDefault;
@@ -69,7 +69,7 @@ public final class SurfaceDialog implements SurfaceHost {
         return true;
     }
 
-    private static boolean isNight(Activity activity) {
+    static boolean isNight(Activity activity) {
         return (activity.getResources().getConfiguration().uiMode
                         & Configuration.UI_MODE_NIGHT_MASK)
                 == Configuration.UI_MODE_NIGHT_YES;
@@ -102,7 +102,11 @@ public final class SurfaceDialog implements SurfaceHost {
         mShowDefault.run();
     }
 
-    private void present(View view, boolean dark, boolean fullWindow) {
+    ComponentDialog dialog() {
+        return mDialog;
+    }
+
+    void present(View view, boolean dark, boolean fullWindow) {
         mDialog.setContentView(
                 view,
                 new ViewGroup.LayoutParams(
