@@ -1,0 +1,32 @@
+# Copyright 2026 Dioide
+# SPDX-License-Identifier: GPL-3.0-only
+
+import("//build/config/android/rules.gni")
+
+android_library("api_java") {
+  sources = [
+    "java/src/io/dioide/aerium/api/AeriumCore.java",
+    "java/src/io/dioide/aerium/api/Branding.java",
+    "java/src/io/dioide/aerium/api/BrowsingDataApi.java",
+    "java/src/io/dioide/aerium/api/CoreSettings.java",
+    "java/src/io/dioide/aerium/api/ExtensionInfo.java",
+    "java/src/io/dioide/aerium/api/ExtensionsApi.java",
+    "java/src/io/dioide/aerium/api/NavigationApi.java",
+    "java/src/io/dioide/aerium/api/OpenMode.java",
+    "java/src/io/dioide/aerium/api/Setting.java",
+    "java/src/io/dioide/aerium/api/SettingsApi.java",
+    "java/src/io/dioide/aerium/api/SiteMode.java",
+    "java/src/io/dioide/aerium/api/SiteRule.java",
+    "java/src/io/dioide/aerium/api/SitesApi.java",
+    "java/src/io/dioide/aerium/api/Slot.java",
+    "java/src/io/dioide/aerium/api/Subscription.java",
+    "java/src/io/dioide/aerium/api/SurfaceFactory.java",
+    "java/src/io/dioide/aerium/api/SurfaceHost.java",
+    "java/src/io/dioide/aerium/api/TabInfo.java",
+    "java/src/io/dioide/aerium/api/TabsApi.java",
+    "java/src/io/dioide/aerium/api/ThemeTokens.java",
+    "java/src/io/dioide/aerium/api/ToolbarSpec.java",
+    "java/src/io/dioide/aerium/api/UiProvider.java",
+  ]
+  deps = [ "//third_party/androidx:androidx_annotation_annotation_java" ]
+}

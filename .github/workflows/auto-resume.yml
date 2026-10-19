@@ -1,0 +1,232 @@
+name: auto-resume
+
+on:
+  workflow_run:
+    workflows: ['Build']
+    types: [completed]
+  schedule:
+    - cron: '0 * * * *'
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: auto-resume
+  cancel-in-progress: false
+
+jobs:
+  resume:
+    if: >-
+      github.event_name == 'schedule' ||
+      ((github.event.workflow_run.conclusion == 'failure' ||
+        github.event.workflow_run.conclusion == 'cancelled') &&
+       github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resume from the newest surviving checkpoint
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          EVENT_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          BRANCH: 'main'
+          BUILD_WORKFLOW: 'build.yml'
+          FULL_TITLE: 'Full build'
+          PROGRESS_JOB_PATTERN: ''
+          COMPLETION_JOB: 'check-completion'
+          ATTEMPT_CAP: '5'
+        run: |
+          set -euo pipefail
+
+          RUNS="repos/$REPO/actions/workflows/$BUILD_WORKFLOW/runs"
+          stalled=0
+
+          checkpoint_pattern() {
+            if [ "$1" = full ]; then echo 'build-artifact-aerium(-arm64)?(-b)?'
+            else echo 'build-artifact-android(-arm64)?(-b)?'; fi
+          }
+
+          error_marker_pattern() {
+            if [ "$1" = full ]; then echo 'build-error-aerium(-arm64)?'
+            else echo 'build-error-android(-arm64)?'; fi
+          }
+
+          of_flavor() {
+            if [ "$1" = full ]; then
+              jq --arg t "$FULL_TITLE" '{workflow_runs: [.workflow_runs[] | select(.display_title == $t)]}'
+            else
+              jq --arg t "$FULL_TITLE" '{workflow_runs: [.workflow_runs[] | select(.display_title != $t)]}'
+            fi
+          }
+
+          live_artifact_names() {
+            gh api "repos/$REPO/actions/runs/$1/artifacts?per_page=100" \
+              --jq '.artifacts[] | select(.expired == false) | .name' 2>/dev/null || true
+          }
+
+          holds_checkpoint() {
+            live_artifact_names "$1" | grep -qxE "$(checkpoint_pattern "$2")"
+          }
+
+          holds_error_marker() {
+            live_artifact_names "$1" | grep -qxE "$(error_marker_pattern "$2")"
+          }
+
+          compiled_something() {
+            [ -n "$PROGRESS_JOB_PATTERN" ] || return 0
+            local finished
+            finished=$(gh api "repos/$REPO/actions/runs/$1/jobs?per_page=100" \
+              | jq --arg part "$PROGRESS_JOB_PATTERN" \
+                  '[.jobs[] | select(.conclusion == "success" or .conclusion == "cancelled")
+                            | select(.name | contains($part))] | length')
+            [ "$finished" -gt 0 ]
+          }
+
+          finished_building() {
+            [ -n "$COMPLETION_JOB" ] || return 1
+            gh api "repos/$REPO/actions/runs/$1/jobs?per_page=100" \
+              | jq -e --arg job "$COMPLETION_JOB" \
+                  'any(.jobs[]; .name == $job and .conclusion == "success")' >/dev/null
+          }
+
+          stall_already_reported() {
+            [ "$EVENT" = schedule ] || return 1
+            local last_alarm newest_run
+            last_alarm=$(gh api \
+              "repos/$REPO/actions/workflows/auto-resume.yml/runs?branch=$BRANCH&status=failure&per_page=1" \
+              --jq '.workflow_runs[0].created_at // empty' 2>/dev/null || true)
+            newest_run=$(jq -r '[.workflow_runs[].created_at] | sort | reverse | .[0] // empty' <<<"$flavor_json")
+            [ -n "$last_alarm" ] && [ -n "$newest_run" ] && [[ "$last_alarm" > "$newest_run" ]]
+          }
+
+          stall() {
+            echo "$1"
+            if stall_already_reported; then
+              echo "This stall is already red in the Actions list, not raising it a second time."
+              return 0
+            fi
+            stalled=1
+          }
+
+          active_json=""
+          for attempt in 1 2; do
+            if [ "$attempt" -eq 2 ]; then
+              echo "Nothing active yet, looking again in 30s in case a build is still registering."
+              sleep 30
+            fi
+            active_json=$(gh api "$RUNS?branch=$BRANCH&per_page=30" \
+              --jq '{workflow_runs: [.workflow_runs[] | select(.status != "completed")]}')
+            if [ "$(jq '.workflow_runs | length' <<<"$active_json")" -gt 0 ]; then
+              break
+            fi
+          done
+
+          BRANCH_SHA=$(gh api "repos/$REPO/commits/$BRANCH" --jq '.sha')
+          if [ "$EVENT" = schedule ]; then
+            HEAD_SHA="$BRANCH_SHA"
+          else
+            HEAD_SHA="$EVENT_HEAD_SHA"
+            if [ "$HEAD_SHA" != "$BRANCH_SHA" ]; then
+              echo "$BRANCH is now $BRANCH_SHA, that run was superseded, not interrupted."
+              exit 0
+            fi
+          fi
+
+          echo "Looking for a resumable checkpoint for $HEAD_SHA"
+          all_runs_json=$(gh api "$RUNS?head_sha=$HEAD_SHA&per_page=50")
+
+          resume_flavor() {
+            local flavor="$1" label candidate newest_failed attempts
+            label="$flavor build"
+            flavor_json=$(of_flavor "$flavor" <<<"$all_runs_json")
+
+            if [ "$(of_flavor "$flavor" <<<"$active_json" | jq '.workflow_runs | length')" -gt 0 ]; then
+              echo "A $label is still active, nothing to resume."
+              return 0
+            fi
+
+            if [ "$(jq '.workflow_runs | length' <<<"$flavor_json")" -eq 0 ]; then
+              echo "No $label has run for $HEAD_SHA, nothing to resume."
+              return 0
+            fi
+
+            if [ "$(jq '[.workflow_runs[] | select(.conclusion == "success")] | length' <<<"$flavor_json")" -gt 0 ]; then
+              echo "The $label of $HEAD_SHA already succeeded, nothing to resume."
+              return 0
+            fi
+
+            for candidate in $(jq -r '.workflow_runs[] | select(.conclusion == "failure" or .conclusion == "cancelled")
+                                      | .id' <<<"$flavor_json"); do
+              if finished_building "$candidate"; then
+                echo "Run $candidate finished the $label of $HEAD_SHA although a stage failed along the way, nothing to resume."
+                return 0
+              fi
+            done
+
+            newest_failed=$(jq -r '[.workflow_runs[] | select(.conclusion == "failure")]
+                                   | sort_by(.run_number) | reverse | .[0].id // empty' <<<"$flavor_json")
+            if [ -n "$newest_failed" ] && holds_error_marker "$newest_failed" "$flavor"; then
+              {
+                echo "## The $label needs a human, not a resume"
+                echo
+                echo "Run \`$newest_failed\` for \`$HEAD_SHA\` failed deterministically:"
+                echo "a compile error, a gn/patch failure, or a missing build output."
+                echo "Resuming would rebuild to the same point and fail the same way."
+                echo
+                echo "The failure marker artifact on that run has the exit code."
+              } >> "$GITHUB_STEP_SUMMARY"
+              stall "Newest $label failure for $HEAD_SHA is deterministic, not resuming."
+              return 0
+            fi
+
+            RUN_ID=""
+            for candidate in $(jq -r '[.workflow_runs[] | select(.conclusion == "failure" or .conclusion == "cancelled")]
+                                      | sort_by(.run_number) | reverse | .[].id' <<<"$flavor_json"); do
+              if ! holds_checkpoint "$candidate" "$flavor"; then
+                echo "  run $candidate has no surviving checkpoint, looking further back"
+                continue
+              fi
+              if ! compiled_something "$candidate"; then
+                echo "  run $candidate checkpointed a prepared tree with nothing compiled in it, looking further back"
+                continue
+              fi
+              RUN_ID="$candidate"
+              break
+            done
+
+            if [ -z "$RUN_ID" ]; then
+              {
+                echo "## The $label stalled with nothing to resume"
+                echo
+                echo "No run for \`$HEAD_SHA\` left a checkpoint that is still alive and"
+                echo "holds compiled output, so there is no tree to continue from. This"
+                echo "usually means the failure happened in source setup, before the"
+                echo "first checkpoint."
+                echo
+                echo "Dispatch the build manually to start it over."
+              } >> "$GITHUB_STEP_SUMMARY"
+              stall "No surviving $label checkpoint for $HEAD_SHA, a fresh build is needed."
+              return 0
+            fi
+
+            attempts=$(jq '[.workflow_runs[] | select(.actor.login == "github-actions[bot]")] | length' <<<"$flavor_json")
+            if [ "$attempts" -ge "$ATTEMPT_CAP" ]; then
+              {
+                echo "## Auto-resume cap reached"
+                echo
+                echo "The $label of \`$HEAD_SHA\` has been auto-resumed $attempts times"
+                echo "without finishing. Something is wrong that resuming does not fix."
+              } >> "$GITHUB_STEP_SUMMARY"
+              stall "Already auto-resumed the $label $attempts times for $HEAD_SHA, this needs a human."
+              return 0
+            fi
+
+            echo "Dispatching resume of run $RUN_ID as a $label (auto-attempt $((attempts + 1)))"
+            gh api -X POST "repos/$REPO/actions/workflows/$BUILD_WORKFLOW/dispatches" \
+              -f ref="$BRANCH" -f "inputs[resume_run_id]=$RUN_ID" -f "inputs[flavor]=$flavor"
+          }
+
+          resume_flavor core
+          resume_flavor full
+          exit "$stalled"

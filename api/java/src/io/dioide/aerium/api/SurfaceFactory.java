@@ -1,0 +1,11 @@
+// Copyright 2026 Dioide
+// SPDX-License-Identifier: GPL-3.0-only
+
+package io.dioide.aerium.api;
+
+import android.content.Context;
+import android.view.View;
+
+public interface SurfaceFactory {
+    View create(Context context, SurfaceHost host);
+}

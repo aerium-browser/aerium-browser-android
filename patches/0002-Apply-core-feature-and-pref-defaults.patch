@@ -1,0 +1,60 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: fatih-gh <me@mehmetfatihyaman.me>
+Date: Thu, 1 Jan 2026 00:00:00 +0000
+Subject: [PATCH] Apply core feature and pref defaults
+
+---
+ chrome/browser/metrics/chrome_feature_list_creator.cc | 2 ++
+ chrome/browser/prefs/browser_prefs.cc                 | 5 +++++
+ 2 files changed, 7 insertions(+)
+
+diff --git a/chrome/browser/metrics/chrome_feature_list_creator.cc b/chrome/browser/metrics/chrome_feature_list_creator.cc
+index 90e572fe4efe1baa00ca8218dbcb3a5d0ad36ddb..02e4f7e5bb847c8325151fec1ce08f53ec061433 100644
+--- a/chrome/browser/metrics/chrome_feature_list_creator.cc
++++ b/chrome/browser/metrics/chrome_feature_list_creator.cc
+@@ -6,6 +6,7 @@
+ 
+ #include <vector>
+ 
++#include "aerium/defaults/aerium_defaults.h"
+ #include "base/command_line.h"
+ #include "base/files/file_path.h"
+ #include "base/memory/scoped_refptr.h"
+@@ -63,6 +64,7 @@ ChromeFeatureListCreator::~ChromeFeatureListCreator() = default;
+ void ChromeFeatureListCreator::CreateFeatureList() {
+   CreatePrefService();
+   ConvertFlagsToSwitches();
++  aerium::ApplyFeatureDefaults(base::CommandLine::ForCurrentProcess());
+   CreateMetricsServices();
+   SetupInitialPrefs();
+   SetUpFieldTrials();
+diff --git a/chrome/browser/prefs/browser_prefs.cc b/chrome/browser/prefs/browser_prefs.cc
+index 2653e37becbfa113d92456139d86c321f09ed8b5..61e61e05fb92fa2bb34fe59bcee676dec27e5bfd 100644
+--- a/chrome/browser/prefs/browser_prefs.cc
++++ b/chrome/browser/prefs/browser_prefs.cc
+@@ -10,6 +10,7 @@
+ #include <string_view>
+ 
+ #include "ash/constants/ash_login_pref_names.h"
++#include "aerium/defaults/aerium_defaults.h"
+ #include "base/files/file_path.h"
+ #include "base/files/file_util.h"
+ #include "base/json/values_util.h"
+@@ -1738,6 +1739,8 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
+       policy::policy_prefs::kLocalNetworkAccessPermissionsPolicyDefaultEnabled,
+       false);
+ 
++  aerium::RegisterLocalStateDefaults(registry);
++
+   // This is intentionally last.
+   RegisterLocalStatePrefsForMigration(registry);
+ }
+@@ -2297,6 +2300,8 @@ void RegisterUserProfilePrefs(user_prefs::PrefRegistrySyncable* registry,
+   ash::LegacyTokenHandleFetcher::RegisterPrefs(registry);
+   ash::TokenHandleStoreImpl::RegisterPrefs(registry);
+ #endif
++
++  aerium::RegisterProfileDefaults(registry);
+ }
+ 
+ void RegisterScreenshotPrefs(PrefRegistrySimple* registry) {

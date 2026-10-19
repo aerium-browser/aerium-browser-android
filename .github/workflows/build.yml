@@ -1,0 +1,834 @@
+# Copyright 2026 Dioide
+# SPDX-License-Identifier: GPL-3.0-only
+
+name: Build
+run-name: ${{ inputs.flavor == 'full' && 'Full build' || '' }}
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
+      - 'NOTICE'
+      - 'donate/**'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/workflows/triage.yml'
+      - '.github/workflows/auto-resume.yml'
+      - '.github/triage-rules.js'
+  workflow_dispatch:
+    inputs:
+      fresh:
+        description: 'Ignore the saved build tree and start from scratch'
+        type: boolean
+        required: false
+        default: false
+      resume_run_id:
+        description: 'Resume from the build tree saved by this workflow run id'
+        type: string
+        required: false
+        default: ''
+      flavor:
+        description: 'core builds the open core alone, full adds the private Aerium layer'
+        type: choice
+        options:
+          - core
+          - full
+        default: core
+
+permissions:
+  contents: read
+  actions: write
+
+env:
+  AERIUM_FLAVOR: ${{ inputs.flavor || 'core' }}
+  AERIUM_UI_DIR: ${{ inputs.flavor == 'full' && format('{0}/ui', github.workspace) || '' }}
+  AERIUM_APK_BASE: ${{ inputs.flavor == 'full' && 'aerium' || 'aerium-core' }}
+  AERIUM_CHECKPOINT_KEY: ${{ inputs.flavor == 'full' && secrets.AERIUM_CHECKPOINT_KEY || '' }}
+
+concurrency:
+  group: ${{ inputs.flavor || 'core' }}-build-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
+
+jobs:
+  build-1:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: false
+      - name: Check out the Aerium layer
+        if: ${{ env.AERIUM_FLAVOR == 'full' }}
+        uses: actions/checkout@v5
+        with:
+          repository: aerium-browser/aerium-browser-ui
+          ssh-key: ${{ secrets.AERIUM_UI_KEY }}
+          path: ui
+          persist-credentials: false
+      - name: Stage 1
+        id: stage
+        uses: ./.github/actions/stage
+        with:
+          finished: 'false'
+          from_artifact: ${{ inputs.fresh == true && 'never' || 'auto' }}
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
+        env:
+          LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
+          STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
+
+  build-2:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    needs: build-1
+    if: ${{ !cancelled() && needs.build-1.result != 'skipped'
+            && needs.build-1.outputs.deterministic != 'true' }}
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: false
+      - name: Check out the Aerium layer
+        if: ${{ env.AERIUM_FLAVOR == 'full' }}
+        uses: actions/checkout@v5
+        with:
+          repository: aerium-browser/aerium-browser-ui
+          ssh-key: ${{ secrets.AERIUM_UI_KEY }}
+          path: ui
+          persist-credentials: false
+      - name: Stage 2
+        id: stage
+        uses: ./.github/actions/stage
+        with:
+          finished: ${{ needs.build-1.outputs.finished }}
+          from_artifact: 'auto'
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
+        env:
+          LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
+          STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
+
+  build-3:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    needs: build-2
+    if: ${{ !cancelled() && needs.build-2.result != 'skipped'
+            && needs.build-2.outputs.deterministic != 'true' }}
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: false
+      - name: Check out the Aerium layer
+        if: ${{ env.AERIUM_FLAVOR == 'full' }}
+        uses: actions/checkout@v5
+        with:
+          repository: aerium-browser/aerium-browser-ui
+          ssh-key: ${{ secrets.AERIUM_UI_KEY }}
+          path: ui
+          persist-credentials: false
+      - name: Stage 3
+        id: stage
+        uses: ./.github/actions/stage
+        with:
+          finished: ${{ needs.build-2.outputs.finished }}
+          from_artifact: 'auto'
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
+        env:
+          LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
+          STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
+
+  build-4:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    needs: build-3
+    if: ${{ !cancelled() && needs.build-3.result != 'skipped'
+            && needs.build-3.outputs.deterministic != 'true' }}
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: false
+      - name: Check out the Aerium layer
+        if: ${{ env.AERIUM_FLAVOR == 'full' }}
+        uses: actions/checkout@v5
+        with:
+          repository: aerium-browser/aerium-browser-ui
+          ssh-key: ${{ secrets.AERIUM_UI_KEY }}
+          path: ui
+          persist-credentials: false
+      - name: Stage 4
+        id: stage
+        uses: ./.github/actions/stage
+        with:
+          finished: ${{ needs.build-3.outputs.finished }}
+          from_artifact: 'auto'
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
+        env:
+          LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
+          STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
+
+  build-5:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    needs: build-4
+    if: ${{ !cancelled() && needs.build-4.result != 'skipped'
+            && needs.build-4.outputs.deterministic != 'true' }}
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: false
+      - name: Check out the Aerium layer
+        if: ${{ env.AERIUM_FLAVOR == 'full' }}
+        uses: actions/checkout@v5
+        with:
+          repository: aerium-browser/aerium-browser-ui
+          ssh-key: ${{ secrets.AERIUM_UI_KEY }}
+          path: ui
+          persist-credentials: false
+      - name: Stage 5
+        id: stage
+        uses: ./.github/actions/stage
+        with:
+          finished: ${{ needs.build-4.outputs.finished }}
+          from_artifact: 'auto'
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
+        env:
+          LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
+          STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
+
+  build-6:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    needs: build-5
+    if: ${{ !cancelled() && needs.build-5.result != 'skipped'
+            && needs.build-5.outputs.deterministic != 'true' }}
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: false
+      - name: Check out the Aerium layer
+        if: ${{ env.AERIUM_FLAVOR == 'full' }}
+        uses: actions/checkout@v5
+        with:
+          repository: aerium-browser/aerium-browser-ui
+          ssh-key: ${{ secrets.AERIUM_UI_KEY }}
+          path: ui
+          persist-credentials: false
+      - name: Stage 6
+        id: stage
+        uses: ./.github/actions/stage
+        with:
+          finished: ${{ needs.build-5.outputs.finished }}
+          from_artifact: 'auto'
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
+        env:
+          LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
+          STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
+
+  build-7:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    needs: build-6
+    if: ${{ !cancelled() && needs.build-6.result != 'skipped'
+            && needs.build-6.outputs.deterministic != 'true' }}
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: false
+      - name: Check out the Aerium layer
+        if: ${{ env.AERIUM_FLAVOR == 'full' }}
+        uses: actions/checkout@v5
+        with:
+          repository: aerium-browser/aerium-browser-ui
+          ssh-key: ${{ secrets.AERIUM_UI_KEY }}
+          path: ui
+          persist-credentials: false
+      - name: Stage 7
+        id: stage
+        uses: ./.github/actions/stage
+        with:
+          finished: ${{ needs.build-6.outputs.finished }}
+          from_artifact: 'auto'
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
+        env:
+          LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
+          STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
+
+  build-8:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    needs: build-7
+    if: ${{ !cancelled() && needs.build-7.result != 'skipped'
+            && needs.build-7.outputs.deterministic != 'true' }}
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: false
+      - name: Check out the Aerium layer
+        if: ${{ env.AERIUM_FLAVOR == 'full' }}
+        uses: actions/checkout@v5
+        with:
+          repository: aerium-browser/aerium-browser-ui
+          ssh-key: ${{ secrets.AERIUM_UI_KEY }}
+          path: ui
+          persist-credentials: false
+      - name: Stage 8
+        id: stage
+        uses: ./.github/actions/stage
+        with:
+          finished: ${{ needs.build-7.outputs.finished }}
+          from_artifact: 'auto'
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
+        env:
+          LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
+          STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
+
+  build-9:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    needs: build-8
+    if: ${{ !cancelled() && needs.build-8.result != 'skipped'
+            && needs.build-8.outputs.deterministic != 'true' }}
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: false
+      - name: Check out the Aerium layer
+        if: ${{ env.AERIUM_FLAVOR == 'full' }}
+        uses: actions/checkout@v5
+        with:
+          repository: aerium-browser/aerium-browser-ui
+          ssh-key: ${{ secrets.AERIUM_UI_KEY }}
+          path: ui
+          persist-credentials: false
+      - name: Stage 9
+        id: stage
+        uses: ./.github/actions/stage
+        with:
+          finished: ${{ needs.build-8.outputs.finished }}
+          from_artifact: 'auto'
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
+        env:
+          LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
+          STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
+
+  build-10:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    needs: build-9
+    if: ${{ !cancelled() && needs.build-9.result != 'skipped'
+            && needs.build-9.outputs.deterministic != 'true' }}
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: false
+      - name: Check out the Aerium layer
+        if: ${{ env.AERIUM_FLAVOR == 'full' }}
+        uses: actions/checkout@v5
+        with:
+          repository: aerium-browser/aerium-browser-ui
+          ssh-key: ${{ secrets.AERIUM_UI_KEY }}
+          path: ui
+          persist-credentials: false
+      - name: Stage 10
+        id: stage
+        uses: ./.github/actions/stage
+        with:
+          finished: ${{ needs.build-9.outputs.finished }}
+          from_artifact: 'auto'
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
+        env:
+          LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
+          STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
+
+  build-11:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    needs: build-10
+    if: ${{ !cancelled() && needs.build-10.result != 'skipped'
+            && needs.build-10.outputs.deterministic != 'true' }}
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: false
+      - name: Check out the Aerium layer
+        if: ${{ env.AERIUM_FLAVOR == 'full' }}
+        uses: actions/checkout@v5
+        with:
+          repository: aerium-browser/aerium-browser-ui
+          ssh-key: ${{ secrets.AERIUM_UI_KEY }}
+          path: ui
+          persist-credentials: false
+      - name: Stage 11
+        id: stage
+        uses: ./.github/actions/stage
+        with:
+          finished: ${{ needs.build-10.outputs.finished }}
+          from_artifact: 'auto'
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
+        env:
+          LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
+          STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
+
+  build-12:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    needs: build-11
+    if: ${{ !cancelled() && needs.build-11.result != 'skipped'
+            && needs.build-11.outputs.deterministic != 'true' }}
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: false
+      - name: Check out the Aerium layer
+        if: ${{ env.AERIUM_FLAVOR == 'full' }}
+        uses: actions/checkout@v5
+        with:
+          repository: aerium-browser/aerium-browser-ui
+          ssh-key: ${{ secrets.AERIUM_UI_KEY }}
+          path: ui
+          persist-credentials: false
+      - name: Stage 12
+        id: stage
+        uses: ./.github/actions/stage
+        with:
+          finished: ${{ needs.build-11.outputs.finished }}
+          from_artifact: 'auto'
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
+        env:
+          LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
+          STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
+
+  build-13:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    needs: build-12
+    if: ${{ !cancelled() && needs.build-12.result != 'skipped'
+            && needs.build-12.outputs.deterministic != 'true' }}
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: false
+      - name: Check out the Aerium layer
+        if: ${{ env.AERIUM_FLAVOR == 'full' }}
+        uses: actions/checkout@v5
+        with:
+          repository: aerium-browser/aerium-browser-ui
+          ssh-key: ${{ secrets.AERIUM_UI_KEY }}
+          path: ui
+          persist-credentials: false
+      - name: Stage 13
+        id: stage
+        uses: ./.github/actions/stage
+        with:
+          finished: ${{ needs.build-12.outputs.finished }}
+          from_artifact: 'auto'
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
+        env:
+          LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
+          STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
+
+  build-14:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    needs: build-13
+    if: ${{ !cancelled() && needs.build-13.result != 'skipped'
+            && needs.build-13.outputs.deterministic != 'true' }}
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: false
+      - name: Check out the Aerium layer
+        if: ${{ env.AERIUM_FLAVOR == 'full' }}
+        uses: actions/checkout@v5
+        with:
+          repository: aerium-browser/aerium-browser-ui
+          ssh-key: ${{ secrets.AERIUM_UI_KEY }}
+          path: ui
+          persist-credentials: false
+      - name: Stage 14
+        id: stage
+        uses: ./.github/actions/stage
+        with:
+          finished: ${{ needs.build-13.outputs.finished }}
+          from_artifact: 'auto'
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
+        env:
+          LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
+          STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
+
+  build-15:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    needs: build-14
+    if: ${{ !cancelled() && needs.build-14.result != 'skipped'
+            && needs.build-14.outputs.deterministic != 'true' }}
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: false
+      - name: Check out the Aerium layer
+        if: ${{ env.AERIUM_FLAVOR == 'full' }}
+        uses: actions/checkout@v5
+        with:
+          repository: aerium-browser/aerium-browser-ui
+          ssh-key: ${{ secrets.AERIUM_UI_KEY }}
+          path: ui
+          persist-credentials: false
+      - name: Stage 15
+        id: stage
+        uses: ./.github/actions/stage
+        with:
+          finished: ${{ needs.build-14.outputs.finished }}
+          from_artifact: 'auto'
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
+        env:
+          LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
+          STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
+
+  build-16:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    needs: build-15
+    if: ${{ !cancelled() && needs.build-15.result != 'skipped'
+            && needs.build-15.outputs.deterministic != 'true' }}
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: false
+      - name: Check out the Aerium layer
+        if: ${{ env.AERIUM_FLAVOR == 'full' }}
+        uses: actions/checkout@v5
+        with:
+          repository: aerium-browser/aerium-browser-ui
+          ssh-key: ${{ secrets.AERIUM_UI_KEY }}
+          path: ui
+          persist-credentials: false
+      - name: Stage 16
+        id: stage
+        uses: ./.github/actions/stage
+        with:
+          finished: ${{ needs.build-15.outputs.finished }}
+          from_artifact: 'auto'
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
+        env:
+          LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
+          STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
+
+  build-17:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    needs: build-16
+    if: ${{ !cancelled() && needs.build-16.result != 'skipped'
+            && needs.build-16.outputs.deterministic != 'true' }}
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: false
+      - name: Check out the Aerium layer
+        if: ${{ env.AERIUM_FLAVOR == 'full' }}
+        uses: actions/checkout@v5
+        with:
+          repository: aerium-browser/aerium-browser-ui
+          ssh-key: ${{ secrets.AERIUM_UI_KEY }}
+          path: ui
+          persist-credentials: false
+      - name: Stage 17
+        id: stage
+        uses: ./.github/actions/stage
+        with:
+          finished: ${{ needs.build-16.outputs.finished }}
+          from_artifact: 'auto'
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
+        env:
+          LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
+          STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
+
+  build-18:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    needs: build-17
+    if: ${{ !cancelled() && needs.build-17.result != 'skipped'
+            && needs.build-17.outputs.deterministic != 'true' }}
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: false
+      - name: Check out the Aerium layer
+        if: ${{ env.AERIUM_FLAVOR == 'full' }}
+        uses: actions/checkout@v5
+        with:
+          repository: aerium-browser/aerium-browser-ui
+          ssh-key: ${{ secrets.AERIUM_UI_KEY }}
+          path: ui
+          persist-credentials: false
+      - name: Stage 18
+        id: stage
+        uses: ./.github/actions/stage
+        with:
+          finished: ${{ needs.build-17.outputs.finished }}
+          from_artifact: 'auto'
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
+        env:
+          LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
+          STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
+
+  build-19:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    needs: build-18
+    if: ${{ !cancelled() && needs.build-18.result != 'skipped'
+            && needs.build-18.outputs.deterministic != 'true' }}
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: false
+      - name: Check out the Aerium layer
+        if: ${{ env.AERIUM_FLAVOR == 'full' }}
+        uses: actions/checkout@v5
+        with:
+          repository: aerium-browser/aerium-browser-ui
+          ssh-key: ${{ secrets.AERIUM_UI_KEY }}
+          path: ui
+          persist-credentials: false
+      - name: Stage 19
+        id: stage
+        uses: ./.github/actions/stage
+        with:
+          finished: ${{ needs.build-18.outputs.finished }}
+          from_artifact: 'auto'
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
+        env:
+          LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
+          STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
+
+  build-20:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    needs: build-19
+    if: ${{ !cancelled() && needs.build-19.result != 'skipped'
+            && needs.build-19.outputs.deterministic != 'true' }}
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: false
+      - name: Check out the Aerium layer
+        if: ${{ env.AERIUM_FLAVOR == 'full' }}
+        uses: actions/checkout@v5
+        with:
+          repository: aerium-browser/aerium-browser-ui
+          ssh-key: ${{ secrets.AERIUM_UI_KEY }}
+          path: ui
+          persist-credentials: false
+      - name: Stage 20
+        id: stage
+        uses: ./.github/actions/stage
+        with:
+          finished: ${{ needs.build-19.outputs.finished }}
+          from_artifact: 'auto'
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
+        env:
+          LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
+          STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
+
+  build-21:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    needs: build-20
+    if: ${{ !cancelled() && needs.build-20.result != 'skipped'
+            && needs.build-20.outputs.deterministic != 'true' }}
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: false
+      - name: Check out the Aerium layer
+        if: ${{ env.AERIUM_FLAVOR == 'full' }}
+        uses: actions/checkout@v5
+        with:
+          repository: aerium-browser/aerium-browser-ui
+          ssh-key: ${{ secrets.AERIUM_UI_KEY }}
+          path: ui
+          persist-credentials: false
+      - name: Stage 21
+        id: stage
+        uses: ./.github/actions/stage
+        with:
+          finished: ${{ needs.build-20.outputs.finished }}
+          from_artifact: 'auto'
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
+        env:
+          LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
+          STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
+
+  build-22:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    needs: build-21
+    if: ${{ !cancelled() && needs.build-21.result != 'skipped'
+            && needs.build-21.outputs.deterministic != 'true' }}
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: false
+      - name: Check out the Aerium layer
+        if: ${{ env.AERIUM_FLAVOR == 'full' }}
+        uses: actions/checkout@v5
+        with:
+          repository: aerium-browser/aerium-browser-ui
+          ssh-key: ${{ secrets.AERIUM_UI_KEY }}
+          path: ui
+          persist-credentials: false
+      - name: Stage 22
+        id: stage
+        uses: ./.github/actions/stage
+        with:
+          finished: ${{ needs.build-21.outputs.finished }}
+          from_artifact: 'auto'
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
+        env:
+          LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
+          STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
+
+  build-23:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    needs: build-22
+    if: ${{ !cancelled() && needs.build-22.result != 'skipped'
+            && needs.build-22.outputs.deterministic != 'true' }}
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: false
+      - name: Check out the Aerium layer
+        if: ${{ env.AERIUM_FLAVOR == 'full' }}
+        uses: actions/checkout@v5
+        with:
+          repository: aerium-browser/aerium-browser-ui
+          ssh-key: ${{ secrets.AERIUM_UI_KEY }}
+          path: ui
+          persist-credentials: false
+      - name: Stage 23
+        id: stage
+        uses: ./.github/actions/stage
+        with:
+          finished: ${{ needs.build-22.outputs.finished }}
+          from_artifact: 'auto'
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
+        env:
+          LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
+          STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
+
+  build-24:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    needs: build-23
+    if: ${{ !cancelled() && needs.build-23.result != 'skipped'
+            && needs.build-23.outputs.deterministic != 'true' }}
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+      deterministic: ${{ steps.stage.outputs.deterministic }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: false
+      - name: Check out the Aerium layer
+        if: ${{ env.AERIUM_FLAVOR == 'full' }}
+        uses: actions/checkout@v5
+        with:
+          repository: aerium-browser/aerium-browser-ui
+          ssh-key: ${{ secrets.AERIUM_UI_KEY }}
+          path: ui
+          persist-credentials: false
+      - name: Stage 24
+        id: stage
+        uses: ./.github/actions/stage
+        with:
+          finished: ${{ needs.build-23.outputs.finished }}
+          from_artifact: 'auto'
+          restore_run_id: ${{ inputs.resume_run_id || '' }}
+        env:
+          LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
+          STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
+
+  check-completion:
+    runs-on: ubuntu-24.04
+    needs: build-24
+    if: ${{ !cancelled() }}
+    steps:
+      - name: Verify build finished
+        run: |
+          if [ "${{ needs.build-24.outputs.finished }}" != "true" ]; then
+            echo "Build did not finish within 24 stages; dispatch the workflow again to continue from the saved tree."
+            exit 1
+          fi
+          if [ "${{ env.AERIUM_FLAVOR }}" = full ]; then
+            echo "Full build finished. The APK is in the aerium-full-arm64 artifact."
+          else
+            echo "Core build finished. The APK is in the aerium-android-arm64 artifact."
+          fi

@@ -1,0 +1,136 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: fatih-gh <me@mehmetfatihyaman.me>
+Date: Thu, 1 Jan 2026 00:00:00 +0000
+Subject: [PATCH] Bring DevTools to phones
+
+---
+ .../browser/contextmenu/ChromeContextMenuPopulator.java   | 3 +--
+ .../chrome/browser/customtabs/BaseCustomTabActivity.java  | 4 ++++
+ .../chrome/browser/devtools/DevToolsActivity.java         | 6 +++++-
+ .../browser/devtools/DevToolsIntentDataProvider.java      | 8 ++++++++
+ .../chrome/browser/tabbed_mode/MoreToolsItemBuilder.java  | 2 --
+ .../renderer/core/css/resolver/viewport_style_resolver.cc | 5 +++--
+ 6 files changed, 21 insertions(+), 7 deletions(-)
+
+diff --git a/chrome/android/java/src/org/chromium/chrome/browser/contextmenu/ChromeContextMenuPopulator.java b/chrome/android/java/src/org/chromium/chrome/browser/contextmenu/ChromeContextMenuPopulator.java
+index e783bf65be65ee6a38d2f9609c3f1baa9c83a752..49b0d1590e367955d64b38eaf818577f31891df1 100644
+--- a/chrome/android/java/src/org/chromium/chrome/browser/contextmenu/ChromeContextMenuPopulator.java
++++ b/chrome/android/java/src/org/chromium/chrome/browser/contextmenu/ChromeContextMenuPopulator.java
+@@ -503,8 +503,7 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
+     @VisibleForTesting
+     boolean shouldShowDeveloperMenu() {
+         return DevToolsWindowAndroid.isDevToolsAllowedFor(
+-                        getProfile(), mItemDelegate.getWebContents())
+-                && isTabletScreen();
++                getProfile(), mItemDelegate.getWebContents());
+     }
+ 
+     @VisibleForTesting
+diff --git a/chrome/android/java/src/org/chromium/chrome/browser/customtabs/BaseCustomTabActivity.java b/chrome/android/java/src/org/chromium/chrome/browser/customtabs/BaseCustomTabActivity.java
+index 2c2aceeeb34cc09084b3177cb8b1e17f12bab6d4..33b8ec735fe059bed556bc316a101304cd800e68 100644
+--- a/chrome/android/java/src/org/chromium/chrome/browser/customtabs/BaseCustomTabActivity.java
++++ b/chrome/android/java/src/org/chromium/chrome/browser/customtabs/BaseCustomTabActivity.java
+@@ -473,6 +473,10 @@ public abstract class BaseCustomTabActivity extends ChromeActivity {
+             protected OtrProfileId createOffTheRecordProfileId() {
+                 switch (getIntentDataProvider().getCustomTabMode()) {
+                     case CustomTabProfileType.INCOGNITO:
++                        if (getIntentDataProvider().getActivityType()
++                                == ActivityType.DEV_TOOLS) {
++                            return null;
++                        }
+                         // If an incognito popup is being created by Chrome, this should use
+                         // the same primary OTR profile associated with the requester's profile.
+                         if (getIntentDataProvider().getUiType() == CustomTabsUiType.POPUP) {
+diff --git a/chrome/android/java/src/org/chromium/chrome/browser/devtools/DevToolsActivity.java b/chrome/android/java/src/org/chromium/chrome/browser/devtools/DevToolsActivity.java
+index dc0fd3076ff9efd4cdfd179c06d6f9c6384cd1f9..2e4056b0131252f6777281cab11d110c9662982d 100644
+--- a/chrome/android/java/src/org/chromium/chrome/browser/devtools/DevToolsActivity.java
++++ b/chrome/android/java/src/org/chromium/chrome/browser/devtools/DevToolsActivity.java
+@@ -31,6 +31,8 @@ import org.chromium.content_public.browser.WebContents;
+ public class DevToolsActivity extends BaseCustomTabActivity {
+     private static final String WEB_CONTENTS_KEY =
+             "org.chromium.chrome.browser.devtools.DevTools.WebContents";
++    static final String OFF_THE_RECORD_KEY =
++            "org.chromium.chrome.browser.devtools.DevTools.OffTheRecord";
+ 
+     @CalledByNative
+     /** Launches the DevTools activity for the given DevTools frontend. */
+@@ -43,6 +45,7 @@ public class DevToolsActivity extends BaseCustomTabActivity {
+                         | Intent.FLAG_ACTIVITY_NEW_TASK
+                         | Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
+         intent.putExtra(DevToolsActivity.WEB_CONTENTS_KEY, webContents);
++        intent.putExtra(OFF_THE_RECORD_KEY, webContents.isIncognito());
+ 
+         context.startActivity(intent);
+     }
+@@ -67,7 +70,8 @@ public class DevToolsActivity extends BaseCustomTabActivity {
+     public void finishNativeInitialization() {
+         super.finishNativeInitialization();
+ 
+-        TabModel tabModel = getTabModelSelector().getModel(false);
++        TabModel tabModel =
++                getTabModelSelector().getModel(getIntentDataProvider().isOffTheRecord());
+         Tab existingTab = assumeNonNull(tabModel.getCurrentTabSupplier().get());
+ 
+         // Attach the given DevTools frontend web contents to the browser window.
+diff --git a/chrome/android/java/src/org/chromium/chrome/browser/devtools/DevToolsIntentDataProvider.java b/chrome/android/java/src/org/chromium/chrome/browser/devtools/DevToolsIntentDataProvider.java
+index 6b03859660fb2fa2df8a6c6d77e51024a1264711..7768e0038e74a72e457ee945cb31a5a99b98f83b 100644
+--- a/chrome/android/java/src/org/chromium/chrome/browser/devtools/DevToolsIntentDataProvider.java
++++ b/chrome/android/java/src/org/chromium/chrome/browser/devtools/DevToolsIntentDataProvider.java
+@@ -12,6 +12,7 @@ import org.chromium.build.annotations.Nullable;
+ import org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntentDataProvider;
+ import org.chromium.chrome.browser.browserservices.intents.ColorProvider;
+ import org.chromium.chrome.browser.flags.ActivityType;
++import org.chromium.chrome.browser.flags.CustomTabProfileType;
+ 
+ /** BrowserServicesIntentDataProvider implementation for DevTools. */
+ @NullMarked
+@@ -60,6 +61,13 @@ public class DevToolsIntentDataProvider extends BrowserServicesIntentDataProvide
+         return ActivityType.DEV_TOOLS;
+     }
+ 
++    @Override
++    public @CustomTabProfileType int getCustomTabMode() {
++        return mIntent.getBooleanExtra(DevToolsActivity.OFF_THE_RECORD_KEY, false)
++                ? CustomTabProfileType.INCOGNITO
++                : CustomTabProfileType.REGULAR;
++    }
++
+     @Override
+     public Intent getIntent() {
+         return mIntent;
+diff --git a/chrome/android/java/src/org/chromium/chrome/browser/tabbed_mode/MoreToolsItemBuilder.java b/chrome/android/java/src/org/chromium/chrome/browser/tabbed_mode/MoreToolsItemBuilder.java
+index ce4411afa49bc04ebb1979bdf1e07b9ddd4aa1b4..c1577bc3e6e5eff27431645a30aae3ec8ba2c55a 100644
+--- a/chrome/android/java/src/org/chromium/chrome/browser/tabbed_mode/MoreToolsItemBuilder.java
++++ b/chrome/android/java/src/org/chromium/chrome/browser/tabbed_mode/MoreToolsItemBuilder.java
+@@ -28,7 +28,6 @@ import org.chromium.components.embedder_support.util.UrlUtilities;
+ import org.chromium.content_public.browser.ContentFeatureList;
+ import org.chromium.content_public.browser.ContentFeatureMap;
+ import org.chromium.content_public.browser.WebContents;
+-import org.chromium.ui.base.DeviceFormFactor;
+ import org.chromium.ui.modelutil.MVCListAdapter.ListItem;
+ import org.chromium.ui.modelutil.PropertyModel;
+ import org.chromium.url.GURL;
+@@ -252,7 +251,6 @@ public class MoreToolsItemBuilder {
+      */
+     public boolean shouldShowDevToolsItem(@Nullable Tab currentTab) {
+         if (!ContentFeatureMap.isEnabled(ContentFeatureList.ANDROID_DEV_TOOLS_FRONTEND)
+-                || !DeviceFormFactor.isNonMultiDisplayContextOnTablet(mContext)
+                 || currentTab == null
+                 || currentTab.isNativePage()) {
+             return false;
+diff --git a/third_party/blink/renderer/core/css/resolver/viewport_style_resolver.cc b/third_party/blink/renderer/core/css/resolver/viewport_style_resolver.cc
+index 386519f0b17502baba5f1fbd50fbfcd1d247e523..6d086a43b49d9e187fe63823098bea6851c01ef0 100644
+--- a/third_party/blink/renderer/core/css/resolver/viewport_style_resolver.cc
++++ b/third_party/blink/renderer/core/css/resolver/viewport_style_resolver.cc
+@@ -93,8 +93,9 @@ ViewportDescription ViewportStyleResolver::ResolveViewportDescription(
+ 
+ void ViewportStyleResolver::Resolve() {
+   mojom::blink::ViewportStyle viewport_style =
+-      document_->GetSettings() ? document_->GetSettings()->GetViewportStyle()
+-                               : mojom::blink::ViewportStyle::kDefault;
++      document_->GetSettings() && !document_->IsViewSource()
++          ? document_->GetSettings()->GetViewportStyle()
++          : mojom::blink::ViewportStyle::kDefault;
+   document_->GetViewportData().SetViewportDescription(
+       ResolveViewportDescription(viewport_style));
+ }

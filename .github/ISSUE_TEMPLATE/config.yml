@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security problem privately
+    url: https://github.com/aerium-browser/aerium-browser-core/security/advisories/new
+    about: Please don't open a public issue for a vulnerability. This form is only visible to the maintainers.
+  - name: Chromium bug tracker
+    url: https://issues.chromium.org/issues
+    about: If it also happens in Chrome or another Chromium browser, report it upstream instead.
+  - name: Aerium project site
+    url: https://aerium-browser.github.io
+    about: Downloads, documentation and what this build changes.

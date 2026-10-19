@@ -1,0 +1,49 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: fatih-gh <me@mehmetfatihyaman.me>
+Date: Thu, 1 Jan 2026 00:00:00 +0000
+Subject: [PATCH] Keep extension processes in the foreground
+
+---
+ .../content/browser/ChildProcessLauncherHelperImpl.java   | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/content/public/android/java/src/org/chromium/content/browser/ChildProcessLauncherHelperImpl.java b/content/public/android/java/src/org/chromium/content/browser/ChildProcessLauncherHelperImpl.java
+index 95274bf853c4a6bb3d0e475507c592f18d3a745c..4a13197f10fdcda7312e728b76bbdfcc5d3bd62d 100644
+--- a/content/public/android/java/src/org/chromium/content/browser/ChildProcessLauncherHelperImpl.java
++++ b/content/public/android/java/src/org/chromium/content/browser/ChildProcessLauncherHelperImpl.java
+@@ -358,6 +358,9 @@ public final class ChildProcessLauncherHelperImpl {
+     // client thread (in getTerminationInfoAndStop()).
+     private volatile boolean mIsSpareRenderer;
+ 
++    private static final String EXTENSION_PROCESS_SWITCH = "--extension-process";
++    private final boolean mIsExtensionProcess;
++
+     @CalledByNative
+     private static IFileDescriptorInfo @Nullable [] makeFdInfos(
+             @JniType("std::vector<int32_t>") int[] ids,
+@@ -771,6 +774,7 @@ public final class ChildProcessLauncherHelperImpl {
+         mProcessType =
+                 ContentSwitchUtils.getSwitchValue(commandLine, ContentSwitches.SWITCH_PROCESS_TYPE);
+         mIsSpareRenderer = isSpareRenderer;
++        mIsExtensionProcess = Arrays.asList(commandLine).contains(EXTENSION_PROCESS_SWITCH);
+ 
+         if (sandboxed) {
+             mRanking = sSandboxedChildConnectionRanking;
+@@ -800,6 +804,9 @@ public final class ChildProcessLauncherHelperImpl {
+         } else {
+             mEffectiveImportance = ChildProcessImportance.IMPORTANT;
+         }
++        if (mIsExtensionProcess) {
++            mEffectiveImportance = ChildProcessImportance.IMPORTANT;
++        }
+ 
+         if (!ApplicationStatus.isInitialized()) return;
+         if (sWindowFocusListener == null
+@@ -957,6 +964,7 @@ public final class ChildProcessLauncherHelperImpl {
+ 
+         if ((shouldUseMainFrameVisibility && isVisibleMainFrame)
+                 || importance == ChildProcessImportance.IMPORTANT
++                || mIsExtensionProcess
+                 || hasMediaStream
+                 || hasImmersiveXrSession) {
+             newEffectiveImportance = ChildProcessImportance.IMPORTANT;

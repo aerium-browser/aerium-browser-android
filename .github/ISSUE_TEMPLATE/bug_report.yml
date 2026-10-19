@@ -1,0 +1,86 @@
+name: Bug report
+description: Something in Aerium behaves incorrectly
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **A bot reads this before a human does.** It closes issues it cannot work
+        from, and it goes by whether the form is filled in, because it has no way
+        to tell a real report from an empty one. Fill the fields in and nothing
+        happens to your issue. Leave them half empty and it closes with a comment
+        saying what was missing. Edit the issue and it reopens on its own.
+
+        Closed issues that nobody ever comes back to fill in get deleted after a
+        while, so a screenshot with "doesn't work" under it will not survive.
+
+        One more thing, said plainly. Aerium is a spare-time project, not a
+        company with a support desk. Nobody here is under any obligation to fix
+        anything. Describe what happened and someone will probably look. Write it
+        like an order and nobody will.
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Before reporting
+      options:
+        - label: This does NOT happen in Chrome or another Chromium browser (if it does, report it at issues.chromium.org instead).
+          required: true
+        - label: I searched this tracker and this is not already reported.
+          required: true
+        - label: I am on the latest Aerium release.
+          required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Aerium version
+      description: Settings > About Aerium. For example 153.0.8010.52 (build 238).
+      placeholder: "153.0.8010.52 (build 238)"
+    validations:
+      required: true
+
+  - type: input
+    id: device
+    attributes:
+      label: Device and Android version
+      placeholder: "Pixel 8, Android 15"
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps, starting from a fresh launch.
+      placeholder: |
+        1. Open Settings
+        2. Tap Delete browsing data
+        3. Tap More options
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected, and what happened instead
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Crash log (if it crashed)
+      description: |
+        With USB debugging on: `adb logcat -c`, reproduce the crash, then `adb logcat -d > crash.txt`.
+        Paste the FATAL EXCEPTION block. A screenshot of a crash is not usable; the stack trace is.
+      render: text
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Screenshots or anything else
+    validations:
+      required: false

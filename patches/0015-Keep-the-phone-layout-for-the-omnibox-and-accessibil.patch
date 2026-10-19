@@ -1,0 +1,202 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: fatih-gh <me@mehmetfatihyaman.me>
+Date: Thu, 1 Jan 2026 00:00:00 +0000
+Subject: [PATCH] Keep the phone layout for the omnibox and accessibility
+
+---
+ ...tateBrowserControlsVisibilityDelegate.java |  5 +++--
+ chrome/browser/flag-metadata.json             | 22 +++++++++----------
+ .../magic_stack/HomeModulesConfigManager.java |  4 +++-
+ .../ui/messages/snackbar/SnackbarManager.java |  3 ++-
+ .../omnibox/browser/autocomplete_result.cc    |  2 +-
+ .../zero_suggest_verbatim_match_provider.cc   |  2 +-
+ 6 files changed, 21 insertions(+), 17 deletions(-)
+
+diff --git a/chrome/android/java/src/org/chromium/chrome/browser/tab/TabStateBrowserControlsVisibilityDelegate.java b/chrome/android/java/src/org/chromium/chrome/browser/tab/TabStateBrowserControlsVisibilityDelegate.java
+index aca2c0f617170073aa2b6c97df80959c897060bb..c2168a2daa8c8e2b7f6df793cb5790b1d9a8065e 100644
+--- a/chrome/android/java/src/org/chromium/chrome/browser/tab/TabStateBrowserControlsVisibilityDelegate.java
++++ b/chrome/android/java/src/org/chromium/chrome/browser/tab/TabStateBrowserControlsVisibilityDelegate.java
+@@ -21,7 +21,6 @@ import org.chromium.build.annotations.Nullable;
+ import org.chromium.cc.input.BrowserControlsState;
+ import org.chromium.chrome.browser.device.DeviceClassManager;
+ import org.chromium.chrome.browser.flags.ChromeFeatureList;
+-import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
+ import org.chromium.components.browser_ui.util.BrowserControlsVisibilityDelegate;
+ import org.chromium.components.dom_distiller.core.DomDistillerUrlUtils;
+ import org.chromium.components.embedder_support.util.UrlUtilities;
+@@ -30,6 +29,7 @@ import org.chromium.content_public.browser.ImeAdapter;
+ import org.chromium.content_public.browser.ImeEventObserver;
+ import org.chromium.content_public.browser.NavigationHandle;
+ import org.chromium.content_public.browser.WebContents;
++import org.chromium.ui.accessibility.AccessibilityState;
+ import org.chromium.ui.base.WindowAndroid;
+ import org.chromium.url.GURL;
+ 
+@@ -297,7 +297,8 @@ public class TabStateBrowserControlsVisibilityDelegate extends BrowserControlsVi
+         }
+         // TODO(tedchoc): AccessibilityUtil and DeviceClassManager checks do not belong in Tab
+         //                logic.  They should be moved to application level checks.
+-        if (ChromeAccessibilityUtil.get().isAccessibilityEnabled()) {
++        if (AccessibilityState.isTouchExplorationEnabled()
++                || AccessibilityState.isComplexUserInteractionServiceEnabled()) {
+             enableHidingBrowserControls = false;
+             flags |= (1 << (int) LockReason.A11Y_ENABLED);
+         }
+diff --git a/chrome/browser/flag-metadata.json b/chrome/browser/flag-metadata.json
+index e7b5be616ece35f7c418bdef468da8a5042dc1d2..72ff2dfeff8076e3f4d12b3506ea7c1772052228 100644
+--- a/chrome/browser/flag-metadata.json
++++ b/chrome/browser/flag-metadata.json
+@@ -218,7 +218,7 @@
+     "owners": [
+       "etiennep@google.com", "fdoray@google.com"
+     ],
+-    "expiry_milestone": 107
++    "expiry_milestone": -1
+   },
+   {
+     "name": "allow-all-sites-to-initiate-mirroring",
+@@ -331,7 +331,7 @@
+   {
+     "name": "android-bottom-bar",
+     "owners": [ "polardz@google.com", "ckitagawa@chromium.com", "clank-tab-dev@google.com" ],
+-    "expiry_milestone": 170
++    "expiry_milestone": -1
+   },
+   {
+     "name": "android-bricks-native-page",
+@@ -1789,7 +1789,7 @@
+   {
+     "name": "cct-open-in-browser-button-if-allowed-by-embedder",
+     "owners": ["kamalchoudhury@google.com", "edmundw@google.com"],
+-    "expiry_milestone": 140
++    "expiry_milestone": -1
+   },
+   {
+     "name": "cct-open-in-browser-button-if-enabled-by-embedder",
+@@ -2564,7 +2564,7 @@
+   {
+     "name": "darken-websites-checkbox-in-themes-setting",
+     "owners": [ "nemco@google.com", "wenyufu@google.com", "twellington@chromium.org" ],
+-    "expiry_milestone": 160
++    "expiry_milestone": -1
+   },
+   {
+     "name": "data-controls-search-with",
+@@ -3267,7 +3267,7 @@
+   {
+     "name": "enable-accessibility-sequential-focus",
+     "owners": [ "jocelyntran@google.com", "//ui/accessibility/OWNERS" ],
+-    "expiry_milestone": 155
++    "expiry_milestone": -1
+   },
+   {
+     "name": "enable-accessibility-set-selectable-on-all-nodes-with-text",
+@@ -4845,7 +4845,7 @@
+   {
+     "name": "enforce-incognito-isolation",
+     "owners": [ "shuyng@google.com", "clank-large-form-factors@google.com" ],
+-    "expiry_milestone": 152
++    "expiry_milestone": -1
+   },
+   {
+     "name": "enforce-management-disclaimer",
+@@ -6368,7 +6368,7 @@
+   {
+     "name": "inline-pdf-v2",
+     "owners": [ "rathomas@google.com", "clank-large-form-factors@google.com" ],
+-    "expiry_milestone": 158
++    "expiry_milestone": -1
+   },
+   {
+     "name": "inline-pdf-v2-incognito",
+@@ -6671,7 +6671,7 @@
+   {
+     "name": "jump-start-omnibox",
+     "owners": [ "ender@google.com", "chrome-mobile-search@google.com" ],
+-    "expiry_milestone": 145
++    "expiry_milestone": -1
+   },
+   {
+     "name": "jupiter-screensaver",
+@@ -6937,7 +6937,7 @@
+       "twellington@chromium.org",
+       "skavuluru@google.com"
+     ],
+-    "expiry_milestone": 160
++    "expiry_milestone": -1
+   },
+   {
+     "name": "long-screenshots-lenient-memory-check",
+@@ -7555,7 +7555,7 @@
+   {
+     "name": "offline-auto-fetch",
+     "owners": [ "tbansal@google.com" ],
+-    "expiry_milestone": 135
++    "expiry_milestone": -1
+   },
+   {
+     "name": "omaha-min-sdk-version-android",
+@@ -10025,7 +10025,7 @@
+   {
+     "name": "use-fullscreen-insets-api",
+     "owners": [ "clhager@google.com"],
+-    "expiry_milestone": 140
++    "expiry_milestone": -1
+   },
+   {
+     "name": "use-fullscreen-insets-api-on-automotive",
+diff --git a/chrome/browser/magic_stack/android/java/src/org/chromium/chrome/browser/magic_stack/HomeModulesConfigManager.java b/chrome/browser/magic_stack/android/java/src/org/chromium/chrome/browser/magic_stack/HomeModulesConfigManager.java
+index 0d80babfbdfb850f6f18c11e995bb3c5be839491..8123a925fe5461691518f208c2a2f6558fcbfbfe 100644
+--- a/chrome/browser/magic_stack/android/java/src/org/chromium/chrome/browser/magic_stack/HomeModulesConfigManager.java
++++ b/chrome/browser/magic_stack/android/java/src/org/chromium/chrome/browser/magic_stack/HomeModulesConfigManager.java
+@@ -86,7 +86,9 @@ public class HomeModulesConfigManager {
+      * @param moduleType {@link ModuleType} needed to be notified to the listeners.
+      */
+     public boolean getPrefModuleTypeEnabled(@ModuleType int moduleType) {
+-        return mSharedPreferencesManager.readBoolean(getSettingsPreferenceKey(moduleType), true);
++        return mSharedPreferencesManager.readBoolean(
++                getSettingsPreferenceKey(moduleType),
++                !HomeModulesUtils.belongsToEducationalTipModule(moduleType));
+     }
+ 
+     /**
+diff --git a/chrome/browser/ui/messages/android/java/src/org/chromium/chrome/browser/ui/messages/snackbar/SnackbarManager.java b/chrome/browser/ui/messages/android/java/src/org/chromium/chrome/browser/ui/messages/snackbar/SnackbarManager.java
+index a255312f65554016510ffb50bb3f787c153185b5..c5ebb8368dec5e35f04b5f1b03cf7c74f0ee8fd4 100644
+--- a/chrome/browser/ui/messages/android/java/src/org/chromium/chrome/browser/ui/messages/snackbar/SnackbarManager.java
++++ b/chrome/browser/ui/messages/android/java/src/org/chromium/chrome/browser/ui/messages/snackbar/SnackbarManager.java
+@@ -596,7 +596,8 @@ public class SnackbarManager
+         // If a11y is on, set a longer minimum duration; otherwise, use the recommended timeout
+         // duration.
+         int minDuration =
+-                AccessibilityState.isPerformGesturesEnabled()
++                AccessibilityState.isTouchExplorationEnabled()
++                                || AccessibilityState.isComplexUserInteractionServiceEnabled()
+                         ? sAccessibilitySnackbarDurationMs
+                         : durationMs;
+ 
+diff --git a/components/omnibox/browser/autocomplete_result.cc b/components/omnibox/browser/autocomplete_result.cc
+index 6aea0872679b3425dad14bb257803633fae80da2..3dcd4acf8fb36e4169e42ba7d01737438a074dd2 100644
+--- a/components/omnibox/browser/autocomplete_result.cc
++++ b/components/omnibox/browser/autocomplete_result.cc
+@@ -79,7 +79,7 @@ typedef AutocompleteMatchType ACMatchType;
+ namespace {
+ 
+ constexpr bool is_android_any = !!BUILDFLAG(IS_ANDROID);
+-constexpr bool is_android_desktop = !!BUILDFLAG(IS_DESKTOP_ANDROID);
++constexpr bool is_android_desktop = false;
+ constexpr bool is_android_mobile = is_android_any && !is_android_desktop;
+ constexpr bool is_ios = !!BUILDFLAG(IS_IOS);
+ constexpr bool is_desktop = !(is_android_mobile || is_ios);
+diff --git a/components/omnibox/browser/zero_suggest_verbatim_match_provider.cc b/components/omnibox/browser/zero_suggest_verbatim_match_provider.cc
+index 69cfb055fc782f06da7a4bf710e810aed013e6ea..4d360a96ac64b9f0d866e5baecac48099c2dc528 100644
+--- a/components/omnibox/browser/zero_suggest_verbatim_match_provider.cc
++++ b/components/omnibox/browser/zero_suggest_verbatim_match_provider.cc
+@@ -28,7 +28,7 @@
+ 
+ namespace {
+ constexpr bool is_android = !!BUILDFLAG(IS_ANDROID);
+-constexpr bool is_desktop_android = !!BUILDFLAG(IS_DESKTOP_ANDROID);
++constexpr bool is_desktop_android = false;
+ 
+ // Returns whether specific context is eligible for a verbatim match.
+ // Offers verbatim match for:

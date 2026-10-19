@@ -1,0 +1,137 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: fatih-gh <me@mehmetfatihyaman.me>
+Date: Thu, 1 Jan 2026 00:00:00 +0000
+Subject: [PATCH] Run Manifest V2 extensions
+
+---
+ chrome/common/extensions/api/_api_features.json            | 1 +
+ chrome/common/extensions/api/_manifest_features.json       | 2 +-
+ chrome/common/extensions/api/api_sources.gni               | 7 ++-----
+ .../browser/api/webstore_private/webstore_private_api.cc   | 4 +++-
+ extensions/browser/manifest_v2_handler.cc                  | 5 ++++-
+ extensions/common/extension_features.cc                    | 2 ++
+ extensions/common/extension_features.h                     | 2 ++
+ 7 files changed, 15 insertions(+), 8 deletions(-)
+
+diff --git a/chrome/common/extensions/api/_api_features.json b/chrome/common/extensions/api/_api_features.json
+index 4255410af88106db0aa7cd9c1f55577e243595e2..5ea285475600c3246f5d6317ba3eedf098150334 100644
+--- a/chrome/common/extensions/api/_api_features.json
++++ b/chrome/common/extensions/api/_api_features.json
+@@ -100,6 +100,7 @@
+     "dependencies": ["permission:glicPrivate.invoke"]
+   },
+   "app": {
++    "platforms": ["chromeos", "linux", "mac", "win"],
+     "blocklist": [
+       "2FC374607C2DF285634B67C64A2E356C607091C3",  // Quickoffice
+       "3727DD3E564B6055387425027AD74C58784ACC15",  // Quickoffice internal
+diff --git a/chrome/common/extensions/api/_manifest_features.json b/chrome/common/extensions/api/_manifest_features.json
+index 48adcf00acbdb323a737cd906c567dd47ff2222b..d2f91e25cbecf9f1ff6cba61596de3a3befdefe3 100644
+--- a/chrome/common/extensions/api/_manifest_features.json
++++ b/chrome/common/extensions/api/_manifest_features.json
+@@ -18,7 +18,7 @@
+   "chrome_settings_overrides": {
+     "channel": "stable",
+     "extension_types": ["extension"],
+-    "platforms": ["win", "mac"]
++    "platforms": ["win", "mac", "desktop_android"]
+   },
+   "file_browser_handlers": {
+     "channel": "stable",
+diff --git a/chrome/common/extensions/api/api_sources.gni b/chrome/common/extensions/api/api_sources.gni
+index 194386bf5e2a788140a888a1dc9f58e4625538d2..b1721f2aabded260651c6dcc1773b2c3e52531ff 100644
+--- a/chrome/common/extensions/api/api_sources.gni
++++ b/chrome/common/extensions/api/api_sources.gni
+@@ -61,9 +61,11 @@ if (enable_guest_view) {
+ # registration. These do not generate the strong C++ types.
+ uncompiled_sources_ = [
+   "action.json",
++  "browser_action.json",
+   "browsing_data.json",
+   "commands.json",
+   "extension.json",
++  "page_action.json",
+   "top_sites.json",
+ ]
+ 
+@@ -162,11 +164,6 @@ if (enable_extensions) {
+     schema_sources_ += [ "pdf_viewer_private.idl" ]
+   }
+ 
+-  uncompiled_sources_ += [
+-    "browser_action.json",
+-    "page_action.json",
+-  ]
+-
+   if (is_chromeos) {
+     uncompiled_sources_ += [
+       "chromeos_info_private.json",
+diff --git a/extensions/browser/api/webstore_private/webstore_private_api.cc b/extensions/browser/api/webstore_private/webstore_private_api.cc
+index ad5ac45ba49b5fcd3fe313c28fcc3c536b4825ea..17d20ff287fa754d7094d3f3259eb02f7e2ff61d 100644
+--- a/extensions/browser/api/webstore_private/webstore_private_api.cc
++++ b/extensions/browser/api/webstore_private/webstore_private_api.cc
+@@ -1620,7 +1620,9 @@ ExtensionFunction::ResponseAction
+ WebstorePrivateGetMV2DeprecationStatusFunction::Run() {
+   return RespondNow(ArgumentList(
+       api::webstore_private::GetMV2DeprecationStatus::Results::Create(
+-          api::webstore_private::MV2DeprecationStatus::kHardDisable)));
++          base::FeatureList::IsEnabled(extensions_features::kAeriumManifestV2)
++              ? api::webstore_private::MV2DeprecationStatus::kInactive
++              : api::webstore_private::MV2DeprecationStatus::kHardDisable)));
+ }
+ 
+ #if !BUILDFLAG(IS_ANDROID)
+diff --git a/extensions/browser/manifest_v2_handler.cc b/extensions/browser/manifest_v2_handler.cc
+index 5841d3dfbc88884916629485c70b7c2671a6bc6b..141dbf6e2d5ae1cfa8e51f157b4e26310f239244 100644
+--- a/extensions/browser/manifest_v2_handler.cc
++++ b/extensions/browser/manifest_v2_handler.cc
+@@ -5,6 +5,7 @@
+ #include "extensions/browser/manifest_v2_handler.h"
+ 
+ #include "base/auto_reset.h"
++#include "base/feature_list.h"
+ #include "base/metrics/histogram_functions.h"
+ #include "base/one_shot_event.h"
+ #include "base/strings/stringprintf.h"
+@@ -24,6 +25,7 @@
+ #include "extensions/browser/pref_types.h"
+ #include "extensions/buildflags/buildflags.h"
+ #include "extensions/common/extension.h"
++#include "extensions/common/extension_features.h"
+ 
+ static_assert(BUILDFLAG(ENABLE_EXTENSIONS_CORE));
+ 
+@@ -114,7 +116,8 @@ bool ShouldDisableLegacyExtensions() {
+     return false;
+   }
+ 
+-  return true;
++  return !base::FeatureList::IsEnabled(
++      extensions_features::kAeriumManifestV2);
+ }
+ 
+ }  // namespace
+diff --git a/extensions/common/extension_features.cc b/extensions/common/extension_features.cc
+index 0aa262591d6f288b6b1e7707a7fc70f833ac852b..e6b8c817d79fd7ffcefff7059f7bc41166319b47 100644
+--- a/extensions/common/extension_features.cc
++++ b/extensions/common/extension_features.cc
+@@ -272,4 +272,6 @@ BASE_FEATURE(kOptimizeWebRequestProxy, base::FEATURE_ENABLED_BY_DEFAULT);
+ 
+ BASE_FEATURE(kUseSha256ForExtensionHashes, base::FEATURE_DISABLED_BY_DEFAULT);
+ 
++BASE_FEATURE(kAeriumManifestV2, base::FEATURE_ENABLED_BY_DEFAULT);
++
+ }  // namespace extensions_features
+diff --git a/extensions/common/extension_features.h b/extensions/common/extension_features.h
+index 094c6b9928742c86ef079b057c93f8379ed999d7..fe5c2b96e21c29bf316a6e2de5404917934b33cd 100644
+--- a/extensions/common/extension_features.h
++++ b/extensions/common/extension_features.h
+@@ -354,6 +354,8 @@ BASE_DECLARE_FEATURE(kWebRequestPerContextEventDispatch);
+ // If enabled, `HashedExtensionId` uses SHA-256 hashes instead of SHA-1.
+ BASE_DECLARE_FEATURE(kUseSha256ForExtensionHashes);
+ 
++BASE_DECLARE_FEATURE(kAeriumManifestV2);
++
+ }  // namespace extensions_features
+ 
+ #endif  // EXTENSIONS_COMMON_EXTENSION_FEATURES_H_

@@ -1,0 +1,170 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: fatih-gh <me@mehmetfatihyaman.me>
+Date: Thu, 1 Jan 2026 00:00:00 +0000
+Subject: [PATCH] Make cross origin referrers configurable
+
+---
+ .../init/ChromeBrowserInitializer.java        |  3 +++
+ content/public/common/referrer.cc             | 18 +++++++++++-----
+ net/base/features.cc                          |  7 +++++++
+ net/base/features.h                           |  3 +++
+ net/url_request/url_request_http_job.cc       |  3 ++-
+ net/url_request/url_request_job.cc            | 21 +++++++++++++++++++
+ net/url_request/url_request_job.h             |  3 +++
+ 7 files changed, 52 insertions(+), 6 deletions(-)
+
+diff --git a/chrome/android/java/src/org/chromium/chrome/browser/init/ChromeBrowserInitializer.java b/chrome/android/java/src/org/chromium/chrome/browser/init/ChromeBrowserInitializer.java
+index b772e336566191e805686bac80081a4fb5ea45bb..063efd9e5c0408b99a2b6868eb57d6e89100eec7 100644
+--- a/chrome/android/java/src/org/chromium/chrome/browser/init/ChromeBrowserInitializer.java
++++ b/chrome/android/java/src/org/chromium/chrome/browser/init/ChromeBrowserInitializer.java
+@@ -6,6 +6,8 @@ package org.chromium.chrome.browser.init;
+ 
+ import android.os.StrictMode;
+ 
++import io.dioide.aerium.bridge.AeriumPrefs;
++
+ import org.chromium.base.CommandLine;
+ import org.chromium.base.ResettersForTesting;
+ import org.chromium.base.SysUtils;
+@@ -108,6 +110,7 @@ public class ChromeBrowserInitializer {
+         ThreadUtils.checkUiThread();
+         if (parts.isActivityFinishingOrDestroyed()) return;
+         ProcessInitializationHandler.getInstance().initializePreNative();
++        AeriumPrefs.applyToCommandLine();
+         ProcessInitializationHandler.getInstance().initializePreNativeLibraryLoad();
+         try (TraceEvent _ = TraceEvent.scoped("ChromeBrowserInitializer.preInflationStartup")) {
+             parts.preInflationStartup();
+diff --git a/content/public/common/referrer.cc b/content/public/common/referrer.cc
+index e5258679dd876490012a756f7e10cfb64541cbe6..a4a8e6717dab2d724780e12adc32b190c4399fdc 100644
+--- a/content/public/common/referrer.cc
++++ b/content/public/common/referrer.cc
+@@ -46,9 +46,11 @@ blink::mojom::ReferrerPtr Referrer::SanitizeForRequest(
+   DCHECK_NE(effective_policy, network::mojom::ReferrerPolicy::kDefault);
+ 
+   return blink::mojom::Referrer::New(
+-      net::URLRequestJob::ComputeReferrerForPolicy(
+-          ReferrerPolicyForUrlRequest(effective_policy),
+-          referrer.url /* original_referrer */, request /* destination */),
++      net::URLRequestJob::ApplyCrossOriginReferrerMode(
++          net::URLRequestJob::ComputeReferrerForPolicy(
++              ReferrerPolicyForUrlRequest(effective_policy),
++              referrer.url /* original_referrer */, request /* destination */),
++          request),
+       effective_policy);
+ }
+ 
+@@ -57,8 +59,14 @@ url::Origin Referrer::SanitizeOriginForRequest(
+     const GURL& request,
+     const url::Origin& initiator,
+     network::mojom::ReferrerPolicy policy) {
+-  Referrer fake_referrer(initiator.GetURL(), policy);
+-  Referrer sanitized_referrer = SanitizeForRequest(request, fake_referrer);
++  if (policy == network::mojom::ReferrerPolicy::kDefault) {
++    policy = blink::ReferrerUtils::NetToMojoReferrerPolicy(
++        blink::ReferrerUtils::GetDefaultNetReferrerPolicy());
++  }
++  Referrer sanitized_referrer(
++      net::URLRequestJob::ComputeReferrerForPolicy(
++          ReferrerPolicyForUrlRequest(policy), initiator.GetURL(), request),
++      policy);
+   return url::Origin::Create(sanitized_referrer.url);
+ }
+ 
+diff --git a/net/base/features.cc b/net/base/features.cc
+index 91baaef2c5b4d1f02d74330a518782c9e3dade25..9b888dd70b21f563ae6a85a3b9b64128be6841e9 100644
+--- a/net/base/features.cc
++++ b/net/base/features.cc
+@@ -1082,5 +1082,12 @@ BASE_FEATURE_PARAM(int,
+                    &kQuicSocketSendBufferSize,
+                    -1);
+ 
++BASE_FEATURE(kAeriumCrossOriginReferrer, base::FEATURE_DISABLED_BY_DEFAULT);
++BASE_FEATURE_PARAM(int,
++                   kAeriumCrossOriginReferrerMode,
++                   &kAeriumCrossOriginReferrer,
++                   "mode",
++                   0);
++
+ }  // namespace net::features
+ 
+diff --git a/net/base/features.h b/net/base/features.h
+index 58a2623a745e37138137040d618ab8ee0ebe489a..364c64f8af5bbc42b57218329cc24d818e4a0476 100644
+--- a/net/base/features.h
++++ b/net/base/features.h
+@@ -1066,6 +1066,9 @@ NET_EXPORT BASE_DECLARE_FEATURE(kEnableWindowsTcpLoopbackFastFail);
+ NET_EXPORT BASE_DECLARE_FEATURE(kQuicSocketSendBufferSize);
+ NET_EXPORT BASE_DECLARE_FEATURE_PARAM(int, kQuicSocketSendBufferSizeParam);
+ 
++NET_EXPORT BASE_DECLARE_FEATURE(kAeriumCrossOriginReferrer);
++NET_EXPORT BASE_DECLARE_FEATURE_PARAM(int, kAeriumCrossOriginReferrerMode);
++
+ }  // namespace net::features
+ 
+ #endif  // NET_BASE_FEATURES_H_
+diff --git a/net/url_request/url_request_http_job.cc b/net/url_request/url_request_http_job.cc
+index f93d02b8024ee7348ca8a975d813be0408e1def7..bc999401e55cff9052123a19f1e8832b9abc21a5 100644
+--- a/net/url_request/url_request_http_job.cc
++++ b/net/url_request/url_request_http_job.cc
+@@ -513,7 +513,8 @@ void URLRequestHttpJob::Start() {
+ 
+   // URLRequest::SetReferrer ensures that we do not send username and password
+   // fields in the referrer.
+-  GURL referrer(request_->referrer());
++  GURL referrer = URLRequestJob::ApplyCrossOriginReferrerMode(
++      GURL(request_->referrer()), request_->url());
+ 
+   // Our consumer should have made sure that this is a safe referrer (e.g. via
+   // URLRequestJob::ComputeReferrerForPolicy).
+diff --git a/net/url_request/url_request_job.cc b/net/url_request/url_request_job.cc
+index ebc70925cb064e29c6258f8b6b1a085b55b1133d..0b7569a97322671bd2ee599d3aa7aa42db25fc21 100644
+--- a/net/url_request/url_request_job.cc
++++ b/net/url_request/url_request_job.cc
+@@ -20,6 +20,7 @@
+ #include "base/values.h"
+ #include "net/base/auth.h"
+ #include "net/base/features.h"
++#include "url/origin.h"
+ #include "net/base/io_buffer.h"
+ #include "net/base/load_flags.h"
+ #include "net/base/load_states.h"
+@@ -312,6 +313,26 @@ GURL MaybeStripToOrigin(GURL url, bool should_strip_to_origin) {
+ }  // namespace
+ 
+ // static
++GURL URLRequestJob::ApplyCrossOriginReferrerMode(const GURL& referrer,
++                                                 const GURL& destination) {
++  if (!referrer.is_valid() ||
++      !base::FeatureList::IsEnabled(features::kAeriumCrossOriginReferrer)) {
++    return referrer;
++  }
++  const url::Origin referrer_origin = url::Origin::Create(referrer);
++  if (referrer_origin.IsSameOriginWith(destination)) {
++    return referrer;
++  }
++  switch (features::kAeriumCrossOriginReferrerMode.Get()) {
++    case 1:
++      return referrer_origin.GetURL();
++    case 2:
++      return GURL();
++    default:
++      return referrer;
++  }
++}
++
+ GURL URLRequestJob::ComputeReferrerForPolicy(
+     ReferrerPolicy policy,
+     const GURL& original_referrer,
+diff --git a/net/url_request/url_request_job.h b/net/url_request/url_request_job.h
+index 4c662ac8b9d7017be0bbaf92d0fa99f6ef62c749..2ed99930a978259d09e505c3cd0a1e789d285fa6 100644
+--- a/net/url_request/url_request_job.h
++++ b/net/url_request/url_request_job.h
+@@ -300,6 +300,9 @@ class NET_EXPORT URLRequestJob {
+       const GURL& destination,
+       bool* same_origin_out_for_metrics = nullptr);
+ 
++  static GURL ApplyCrossOriginReferrerMode(const GURL& referrer,
++                                           const GURL& destination);
++
+  protected:
+   // Notifies the job that we are connected.
+   int NotifyConnected(const TransportInfo& info,

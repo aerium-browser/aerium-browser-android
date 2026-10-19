@@ -1,0 +1,268 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: fatih-gh <me@mehmetfatihyaman.me>
+Date: Thu, 1 Jan 2026 00:00:00 +0000
+Subject: [PATCH] Show the extensions toolbar and popups on phones
+
+---
+ .../chrome/browser/toolbar/ToolbarManager.java    |  2 +-
+ .../browser/resources/extensions/extensions.html  |  1 +
+ chrome/browser/resources/extensions/item_list.css | 11 +++++++++++
+ .../browser/resources/extensions/shared_vars.css  |  6 ++++++
+ .../browser/resources/extensions/toggle_row.css   |  2 +-
+ .../extensions/extension_action_popup_contents.cc | 14 ++++++++++++++
+ .../toolbar/java/res/layout/toolbar_phone.xml     |  6 ++++++
+ .../ExtensionActionListCoordinator.java           |  4 ++++
+ .../extensions/ExtensionActionListMediator.java   | 14 ++++++--------
+ .../toolbar/extensions/ExtensionActionPopup.java  |  6 ++++++
+ .../chrome/browser/toolbar/top/ToolbarPhone.java  | 15 +++++++++++++++
+ 11 files changed, 71 insertions(+), 10 deletions(-)
+
+diff --git a/chrome/android/java/src/org/chromium/chrome/browser/toolbar/ToolbarManager.java b/chrome/android/java/src/org/chromium/chrome/browser/toolbar/ToolbarManager.java
+index 1d8b14d51be39faacd0433ce2ca82c0ad375bf2f..8bdeffab69e68480e20b5c3cd38a5e33e42745e4 100644
+--- a/chrome/android/java/src/org/chromium/chrome/browser/toolbar/ToolbarManager.java
++++ b/chrome/android/java/src/org/chromium/chrome/browser/toolbar/ToolbarManager.java
+@@ -2765,7 +2765,7 @@ public class ToolbarManager
+                                                         mActivityTabProvider.asObservable(),
+                                                         mTabCreatorManager.getTabCreator(false),
+                                                         getBrowsingModeThemeColorProvider(),
+-                                                        (ToolbarTablet) mToolbarLayout,
++                                                        mToolbarLayout,
+                                                         contextMenuPopulatorFactory,
+                                                         selectionDropdownMenuDelegate,
+                                                         mTabModelSelector,
+diff --git a/chrome/browser/resources/extensions/extensions.html b/chrome/browser/resources/extensions/extensions.html
+index ac398cfc332d7965ff19bc0a2353bfbaf1180ad9..0561748156d8a1da2b8c95cc465ee5247159f9f5 100644
+--- a/chrome/browser/resources/extensions/extensions.html
++++ b/chrome/browser/resources/extensions/extensions.html
+@@ -4,6 +4,7 @@
+ <head>
+   <meta charset="utf8">
+   <meta name="color-scheme" content="light dark">
++  <meta name="viewport" content="width=device-width, initial-scale=1">
+   <title>$i18n{title}</title>
+   <base href="chrome://extensions">
+   <link rel="stylesheet" href="chrome://resources/css/md_colors.css">
+diff --git a/chrome/browser/resources/extensions/item_list.css b/chrome/browser/resources/extensions/item_list.css
+index 05cc88e7a72b9ab0f865afab0a5ebe0d39473639..3c1d0fd33da52403ecf6c20d70f6514e35eeb3b5 100644
+--- a/chrome/browser/resources/extensions/item_list.css
++++ b/chrome/browser/resources/extensions/item_list.css
+@@ -23,6 +23,17 @@
+   padding: 24px 60px 64px;
+ }
+ 
++@media (max-width: 599px) {
++  .items-container,
++  #content-wrapper {
++    --extensions-card-width: calc(100vw - 24px);
++  }
++
++  #content-wrapper {
++    padding: 16px 12px 64px;
++  }
++}
++
+ #content-wrapper:has(extensions-review-panel),
+ #content-wrapper:has(extensions-mv2-deprecation-panel) {
+   padding-top: 14px;
+diff --git a/chrome/browser/resources/extensions/shared_vars.css b/chrome/browser/resources/extensions/shared_vars.css
+index 2c4ab4018cf8c935f627b5caeccad3b623ee4f2c..5c22edf89505c744777a647520a157b1b678e3bd 100644
+--- a/chrome/browser/resources/extensions/shared_vars.css
++++ b/chrome/browser/resources/extensions/shared_vars.css
+@@ -23,6 +23,12 @@ html {
+   --panel-icon-color: var(--google-grey-700);
+ }
+ 
++@media (max-width: 599px) {
++  html {
++    --cr-toolbar-field-width: 100%;
++  }
++}
++
+ @media (prefers-color-scheme: dark) {
+   html {
+     --panel-icon-color: var(--google-grey-500);
+diff --git a/chrome/browser/resources/extensions/toggle_row.css b/chrome/browser/resources/extensions/toggle_row.css
+index bc5311b8ec5c1aa4b38213331d20179bfbf4336a..d59786d4a18c3d6ef4d5b1250c7ba4ac0b846b60 100644
+--- a/chrome/browser/resources/extensions/toggle_row.css
++++ b/chrome/browser/resources/extensions/toggle_row.css
+@@ -11,7 +11,7 @@
+ :host {
+   align-items: center;
+   display: flex;
+-  touch-action: none;
++  touch-action: pan-y;
+ }
+ 
+ input {
+diff --git a/chrome/browser/ui/android/extensions/extension_action_popup_contents.cc b/chrome/browser/ui/android/extensions/extension_action_popup_contents.cc
+index e2048698668578019201223c843dac69a9532098..c63ebb4279a3acf8cf3ae830329e62ae02281822 100644
+--- a/chrome/browser/ui/android/extensions/extension_action_popup_contents.cc
++++ b/chrome/browser/ui/android/extensions/extension_action_popup_contents.cc
+@@ -18,6 +18,7 @@
+ #include "extensions/browser/extension_action.h"
+ #include "extensions/browser/extension_action_manager.h"
+ #include "extensions/browser/extension_registry.h"
++#include "ui/base/device_form_factor.h"
+ 
+ // Must come after all headers that specialize FromJniType() / ToJniType().
+ #include "chrome/browser/ui/android/extensions/jni_headers/ExtensionActionPopupContents_jni.h"
+@@ -36,6 +37,11 @@ namespace {
+ // https://developer.chrome.com/docs/extensions/reference/api/action#popup
+ constexpr gfx::Size kMinSize = {25, 25};
+ constexpr gfx::Size kMaxSize = {800, 600};
++constexpr gfx::Size kWindowFillSize = {1 << 16, 1 << 16};
++
++bool FillsWindow() {
++  return ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_PHONE;
++}
+ 
+ }  // namespace
+ 
+@@ -131,6 +137,11 @@ void ExtensionActionPopupContents::OnLoaded() {
+   }
+   Java_ExtensionActionPopupContents_onLoaded(AttachCurrentThread(),
+                                              java_object_);
++  if (FillsWindow()) {
++    Java_ExtensionActionPopupContents_resizeDueToAutoResize(
++        AttachCurrentThread(), java_object_, kWindowFillSize.width(),
++        kWindowFillSize.height());
++  }
+ }
+ 
+ void ExtensionActionPopupContents::Destroy(JNIEnv* env) {
+@@ -143,6 +154,9 @@ void ExtensionActionPopupContents::LoadInitialPage(JNIEnv* env) {
+ 
+ void ExtensionActionPopupContents::SetUpNewMainFrame(
+     RenderFrameHost* render_frame_host) {
++  if (FillsWindow()) {
++    return;
++  }
+   render_frame_host->GetView()->EnableAutoResize(kMinSize, kMaxSize);
+ }
+ 
+diff --git a/chrome/browser/ui/android/toolbar/java/res/layout/toolbar_phone.xml b/chrome/browser/ui/android/toolbar/java/res/layout/toolbar_phone.xml
+index 9e1f21d5a0c8ec9cdf75ca8a24c30adadd16af0c..dfbf25b97e1d5dd5c34c93eac5585b2d216e2ada 100644
+--- a/chrome/browser/ui/android/toolbar/java/res/layout/toolbar_phone.xml
++++ b/chrome/browser/ui/android/toolbar/java/res/layout/toolbar_phone.xml
+@@ -67,6 +67,12 @@ found in the LICENSE file.
+             android:layout_width="52dp"
+             style="@style/ToolbarHoverableButton"/>
+ 
++        <ViewStub
++            android:id="@+id/extensions_toolbar_container_stub"
++            android:inflatedId="@+id/extensions_toolbar_container"
++            android:layout_width="wrap_content"
++            android:layout_height="match_parent" />
++
+         <ViewStub
+             android:id="@+id/signin_button_stub"
+             android:layout="@layout/signin_button_view"
+diff --git a/chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/extensions/ExtensionActionListCoordinator.java b/chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/extensions/ExtensionActionListCoordinator.java
+index d9da4869f7e8bbea49d5263b0103f08fcaf6ba61..37cb25ef6900a2fbdc43b368f99a129260e6eb57 100644
+--- a/chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/extensions/ExtensionActionListCoordinator.java
++++ b/chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/extensions/ExtensionActionListCoordinator.java
+@@ -225,6 +225,10 @@ public class ExtensionActionListCoordinator implements Destroyable {
+     }
+ 
+     public class RecyclerViewDelegate {
++        public View getContainerView() {
++            return mContainer;
++        }
++
+         /**
+          * Retrieves the view representing the button for a specific extension action.
+          *
+diff --git a/chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/extensions/ExtensionActionListMediator.java b/chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/extensions/ExtensionActionListMediator.java
+index 2740f9c91e4191f4d985975e381bf18b87d5fbf0..d2c864efdb59459e3ee43cbce197364403b05ee3 100644
+--- a/chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/extensions/ExtensionActionListMediator.java
++++ b/chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/extensions/ExtensionActionListMediator.java
+@@ -707,12 +707,8 @@ class ExtensionActionListMediator implements Destroyable {
+ 
+         ListMenuButton buttonView =
+                 (ListMenuButton) mRecyclerViewDelegate.getButtonViewForId(actionId);
+-        if (buttonView == null) {
+-            contents.destroy();
+-            mActionState = new ActionState.Idle();
+-            undoPopout();
+-            return;
+-        }
++        View anchorView =
++                buttonView != null ? buttonView : mRecyclerViewDelegate.getContainerView();
+ 
+         Activity activity = mWindowAndroid.getActivity().get();
+         if (activity == null) {
+@@ -725,13 +721,15 @@ class ExtensionActionListMediator implements Destroyable {
+         // the "pressed" look while loading the action popup too. For context menu {@link
+         // ListMenuButton} already handles this, but not for popup where we show the window
+         // ourselves.
+-        buttonView.setIsPressed(true);
++        if (buttonView != null) {
++            buttonView.setIsPressed(true);
++        }
+ 
+         ExtensionActionPopup popup =
+                 new ExtensionActionPopup(
+                         activity,
+                         mWindowAndroid,
+-                        buttonView,
++                        anchorView,
+                         actionId,
+                         contents,
+                         mContextMenuPopulatorFactory,
+diff --git a/chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/extensions/ExtensionActionPopup.java b/chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/extensions/ExtensionActionPopup.java
+index eddfde6b63e20f301827a5ba4b434163e1054d7f..3bbb1efb179e56cdafd832bdb9405412ae73bb59 100644
+--- a/chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/extensions/ExtensionActionPopup.java
++++ b/chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/extensions/ExtensionActionPopup.java
+@@ -33,6 +33,7 @@ import org.chromium.components.thinwebview.internal.ThinWebViewContextMenuItemDe
+ import org.chromium.content_public.browser.WebContents;
+ import org.chromium.content_public.browser.selection.SelectionDropdownMenuDelegate;
+ import org.chromium.ui.base.ActivityWindowAndroid;
++import org.chromium.ui.base.DeviceFormFactor;
+ import org.chromium.ui.base.ViewAndroidDelegate;
+ import org.chromium.ui.base.ViewUtils;
+ import org.chromium.ui.base.WindowAndroid;
+@@ -119,6 +120,11 @@ class ExtensionActionPopup implements Destroyable {
+                 windowAndroid,
+                 WebContents.createDefaultInternalsHolder());
+ 
++        if (!DeviceFormFactor.isNonMultiDisplayContextOnTablet(activity)) {
++            View decorView = activity.getWindow().getDecorView();
++            webContents.setSize(decorView.getWidth(), decorView.getHeight());
++        }
++
+         mPopupWindowAndroid =
+                 new ActivityWindowAndroid(
+                         activity,
+diff --git a/chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/top/ToolbarPhone.java b/chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/top/ToolbarPhone.java
+index efb5b0b4bb31f44a41da2934170d259d7aadbdc9..9ac9eccf73cdbd7017c3d1fd5d620ad148bc6297 100644
+--- a/chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/top/ToolbarPhone.java
++++ b/chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/top/ToolbarPhone.java
+@@ -1686,6 +1686,8 @@ public class ToolbarPhone extends ToolbarLayout
+             canvas.restore();
+         }
+ 
++        drawExtensionsContainer(canvas);
++
+         // Draw the signin button if visible.
+         if (mSigninButtonCoordinator != null && mSigninButtonCoordinator.isVisible()) {
+             View signinButtonView = mSigninButtonCoordinator.getViewForDrawing();
+@@ -1829,6 +1831,19 @@ public class ToolbarPhone extends ToolbarLayout
+         return new Rect(left, top, right, bottom);
+     }
+ 
++    private void drawExtensionsContainer(Canvas canvas) {
++        View container = findViewById(R.id.extensions_toolbar_container);
++        if (container == null
++                || container.getVisibility() == View.GONE
++                || container.getWidth() == 0) {
++            return;
++        }
++        canvas.save();
++        ViewUtils.translateCanvasToView(mToolbarButtonsContainer, container, canvas);
++        container.draw(canvas);
++        canvas.restore();
++    }
++
+     private boolean drawLocationBar(Canvas canvas, long drawingTime) {
+         TraceEvent.begin("ToolbarPhone.drawLocationBar");
+         boolean clipped = false;

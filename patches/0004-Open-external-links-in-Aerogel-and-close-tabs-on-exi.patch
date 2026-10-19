@@ -1,0 +1,81 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: fatih-gh <me@mehmetfatihyaman.me>
+Date: Thu, 1 Jan 2026 00:00:00 +0000
+Subject: [PATCH] Open external links in Aerogel and close tabs on exit
+
+---
+ .../chrome/browser/ChromeTabbedActivity.java     |  5 ++++-
+ .../chrome/browser/LaunchIntentDispatcher.java   | 16 ++++++++++++++++
+ 2 files changed, 20 insertions(+), 1 deletion(-)
+
+diff --git a/chrome/android/java/src/org/chromium/chrome/browser/ChromeTabbedActivity.java b/chrome/android/java/src/org/chromium/chrome/browser/ChromeTabbedActivity.java
+index 6a9d0fadbca5a7ad98cfce597bf925bcfad5e230..e69a7be7a4a611c0023c6c98632f2468e5ca4d0d 100644
+--- a/chrome/android/java/src/org/chromium/chrome/browser/ChromeTabbedActivity.java
++++ b/chrome/android/java/src/org/chromium/chrome/browser/ChromeTabbedActivity.java
+@@ -17,6 +17,8 @@ import static org.chromium.chrome.browser.ui.IncognitoRestoreAppLaunchDrawBlocke
+ import static org.chromium.chrome.browser.url_constants.UrlConstantResolver.getOriginalNativeNtpUrl;
+ 
+ import android.app.Activity;
++
++import io.dioide.aerium.bridge.AeriumPrefs;
+ import android.app.ApplicationStartInfo;
+ import android.content.Context;
+ import android.content.Intent;
+@@ -2500,7 +2502,8 @@ public class ChromeTabbedActivity extends ChromeActivity implements PreAttachInt
+             }
+ 
+             boolean noRestoreState =
+-                    CommandLine.getInstance().hasSwitch(ChromeSwitches.NO_RESTORE_STATE);
++                    CommandLine.getInstance().hasSwitch(ChromeSwitches.NO_RESTORE_STATE)
++                            || AeriumPrefs.startWithoutTabs(getSavedInstanceState() != null);
+             boolean shouldShowNtpAsHomeSurfaceAtStartup = false;
+             final AtomicBoolean isActiveUrlNtp = new AtomicBoolean(false);
+             if (noRestoreState) {
+diff --git a/chrome/android/java/src/org/chromium/chrome/browser/LaunchIntentDispatcher.java b/chrome/android/java/src/org/chromium/chrome/browser/LaunchIntentDispatcher.java
+index abd476097e11d1e53ca03ea99a1f7e098b305d2a..99e6e18fcc301ec13ca880eeda179dd5ca12d329 100644
+--- a/chrome/android/java/src/org/chromium/chrome/browser/LaunchIntentDispatcher.java
++++ b/chrome/android/java/src/org/chromium/chrome/browser/LaunchIntentDispatcher.java
+@@ -8,6 +8,8 @@ import static org.chromium.build.NullUtil.assertNonNull;
+ import static org.chromium.build.NullUtil.assumeNonNull;
+ 
+ import android.annotation.SuppressLint;
++
++import io.dioide.aerium.bridge.AeriumPrefs;
+ import android.app.Activity;
+ import android.app.ActivityManager.RecentTaskInfo;
+ import android.content.Context;
+@@ -130,6 +132,9 @@ public class LaunchIntentDispatcher {
+     public static @Action int dispatchToCustomTabActivity(Activity currentActivity, Intent intent) {
+         LaunchIntentDispatcher dispatcher = new LaunchIntentDispatcher(currentActivity, intent);
+         if (!isCustomTabIntent(dispatcher.mIntent)) return Action.CONTINUE;
++        if (AeriumPrefs.get(AeriumPrefs.EXTERNAL_LINKS_IN_AEROGEL)) {
++            return dispatcher.dispatchToTabbedActivity();
++        }
+         if (shouldOverrideAlwaysOpenInBrowser(dispatcher.mIntent)) {
+             RecordUserAction.record("CustomTabs.AlwaysOpenInBrowserOverride");
+             return dispatcher.dispatchToTabbedActivity();
+@@ -196,6 +201,12 @@ public class LaunchIntentDispatcher {
+         mIntent = assertNonNull(IntentUtils.sanitizeIntent(intent, unparcelFds));
+     }
+ 
++    private static boolean isWebUrl(@Nullable String url) {
++        if (url == null) return false;
++        String scheme = Uri.parse(url).getScheme();
++        return "http".equals(scheme) || "https".equals(scheme);
++    }
++
+     /** When started with an intent, maybe pre-resolve the domain. */
+     private void maybePrefetchDnsInBackground() {
+         if (Intent.ACTION_VIEW.equals(mIntent.getAction())) {
+@@ -436,6 +447,11 @@ public class LaunchIntentDispatcher {
+             if (!chromeTabbedTaskExists(mActivity)) {
+                 newIntent.putExtra(IntentHandler.EXTRA_STARTED_TABBED_CHROME_TASK, true);
+             }
++            if (AeriumPrefs.get(AeriumPrefs.EXTERNAL_LINKS_IN_AEROGEL)
++                    && isWebUrl(IntentHandler.getUrlFromIntent(newIntent))) {
++                newIntent.putExtra(IntentHandler.EXTRA_OPEN_NEW_INCOGNITO_TAB, true);
++                IntentUtils.addTrustedIntentExtras(newIntent);
++            }
+             if ((newIntent.getFlags() & Intent.FLAG_ACTIVITY_NEW_TASK) != 0) {
+                 // Adjacent launch flag, if present, already would have made the launcher activity
+                 // start on the adajcent screen in multi-window mode. Clear it on the new Intent for

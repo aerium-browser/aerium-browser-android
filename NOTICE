@@ -1,0 +1,40 @@
+Aerium core
+Copyright (c) 2026 Dioide
+
+Aerium's own code in this repository is licensed under the GNU General Public
+License version 3 only, in LICENSE.
+
+Chromium
+Copyright (c) The Chromium Authors
+Licensed under the BSD 3-Clause License.
+https://chromium.googlesource.com/chromium/src/+/main/LICENSE
+
+The core builds on Chromium. The files in patches/ change Chromium source
+files: Chromium's code keeps its BSD licence, and Aerium's changes are under
+the GPL above.
+
+EARLIER RELEASES
+
+Releases published before the core existed were built from earlier versions of
+this repository, which applied the GPL-2.0-only patch series of Vanadium
+(https://github.com/GrapheneOS/Vanadium) to Chromium. The complete source of
+every one of those releases stays available in this repository's history and
+in its release tags, under the licences it carried at the time.
+
+TRADEMARKS
+
+"Aerium", "Aerium Guard", the Aerium logo and every icon generated from it, and
+the application id io.dioide.aerium are not covered by the GPL grant above.
+The licence covers the code. It does not grant the name or the look of the
+project.
+
+You may say that your work is based on Aerium. You may not use the name, the
+logo or the application id for a fork, a rebuild, or any build carrying
+changes, and you may not use them in a way that suggests your build comes from
+or is endorsed by this project. Pick your own name, logo and application id.
+Mozilla and the Chromium project place the same condition on their own marks,
+for the same reason.
+
+Chromium is a trademark of Google LLC. Aerium is an independent project and is
+not affiliated with, endorsed by, or sponsored by Google LLC or the Chromium
+project.

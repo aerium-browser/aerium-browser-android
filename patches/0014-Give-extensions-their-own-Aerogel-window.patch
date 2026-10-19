@@ -1,0 +1,172 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: fatih-gh <me@mehmetfatihyaman.me>
+Date: Thu, 1 Jan 2026 00:00:00 +0000
+Subject: [PATCH] Give extensions their own Aerogel window
+
+---
+ .../chromium/chrome/browser/ChromeTabbedActivity.java    | 8 +++++---
+ .../MinimizeAppAndCloseTabBackPressHandler.java          | 4 ++++
+ chrome/browser/extensions/api/tabs/tabs_api.cc           | 3 +++
+ .../chrome/browser/incognito/IncognitoUtils.java         | 8 +-------
+ chrome/browser/profiles/profile_destroyer.cc             | 5 +++++
+ content/browser/web_contents/web_contents_impl.cc        | 9 +++++++++
+ content/public/browser/web_contents.h                    | 3 +++
+ extensions/browser/process_manager.cc                    | 8 +++++++-
+ 8 files changed, 37 insertions(+), 11 deletions(-)
+
+diff --git a/chrome/android/java/src/org/chromium/chrome/browser/ChromeTabbedActivity.java b/chrome/android/java/src/org/chromium/chrome/browser/ChromeTabbedActivity.java
+index e69a7be7a4a611c0023c6c98632f2468e5ca4d0d..aad92b940269a752d958a48a6b5f0056a8b26d45 100644
+--- a/chrome/android/java/src/org/chromium/chrome/browser/ChromeTabbedActivity.java
++++ b/chrome/android/java/src/org/chromium/chrome/browser/ChromeTabbedActivity.java
+@@ -1284,15 +1284,17 @@ public class ChromeTabbedActivity extends ChromeActivity implements PreAttachInt
+                         defaultPaneId);
+         // TODO(crbug.com/444024982): Preserve default pane via PaneListBuilder.
+         var builder = mHubProvider.getPaneListBuilder();
+-        if (!IncognitoUtils.shouldOpenIncognitoAsWindow()
+-                || mSupportedProfileType == SupportedProfileType.REGULAR) {
++        boolean singleProfileWindow =
++                IncognitoUtils.shouldOpenIncognitoAsWindow()
++                        && mSupportedProfileType != SupportedProfileType.MIXED;
++        if (!singleProfileWindow || mSupportedProfileType == SupportedProfileType.REGULAR) {
+             builder.registerPane(
+                     PaneId.TAB_SWITCHER,
+                     LazyOneshotSupplier.fromSupplier(() -> createTabSwitcherPane(false)));
+             builder.registerPane(
+                     PaneId.TAB_GROUPS, LazyOneshotSupplier.fromSupplier(this::createTabGroupsPane));
+         }
+-        if (!IncognitoUtils.shouldOpenIncognitoAsWindow()
++        if (!singleProfileWindow
+                 || mSupportedProfileType == SupportedProfileType.OFF_THE_RECORD) {
+             builder.registerPane(
+                     PaneId.INCOGNITO_TAB_SWITCHER,
+diff --git a/chrome/browser/back_press/android/java/src/org/chromium/chrome/browser/back_press/MinimizeAppAndCloseTabBackPressHandler.java b/chrome/browser/back_press/android/java/src/org/chromium/chrome/browser/back_press/MinimizeAppAndCloseTabBackPressHandler.java
+index 2db787ec0edeecc0149799eecce66587678ac34c..e00628aa131ba8f8199933fe29105080f5484849 100644
+--- a/chrome/browser/back_press/android/java/src/org/chromium/chrome/browser/back_press/MinimizeAppAndCloseTabBackPressHandler.java
++++ b/chrome/browser/back_press/android/java/src/org/chromium/chrome/browser/back_press/MinimizeAppAndCloseTabBackPressHandler.java
+@@ -252,6 +252,10 @@ public class MinimizeAppAndCloseTabBackPressHandler
+     }
+ 
+     private void onTabChanged(@Nullable Tab tab) {
++        if (tab != null && tab.isIncognitoBranded()) {
++            mSystemBackPressSupplier.set(true);
++            return;
++        }
+         if (supportCloseTabUponMinimization()) {
+             Pair<Boolean, Boolean> backPressAction = determineBackPressAction(tab);
+             boolean minimizeApp = backPressAction.first;
+diff --git a/chrome/browser/extensions/api/tabs/tabs_api.cc b/chrome/browser/extensions/api/tabs/tabs_api.cc
+index 0892d1b23ea62ab466d946a787bf6b7197cc4239..ef45f1b97742553e0f8e705686c068aa813d098d 100644
+--- a/chrome/browser/extensions/api/tabs/tabs_api.cc
++++ b/chrome/browser/extensions/api/tabs/tabs_api.cc
+@@ -1904,6 +1904,9 @@ base::ListValue TabsQueryFunction::BuildTabList(
+     }
+ 
+     TabListInterface* tab_list = TabListInterface::From(browser);
++    if (!tab_list) {
++      continue;
++    }
+     for (int i = 0; i < tab_list->GetTabCount(); ++i) {
+       if (tab_index > -1 && i != tab_index) {
+         continue;
+diff --git a/chrome/browser/incognito/android/java/src/org/chromium/chrome/browser/incognito/IncognitoUtils.java b/chrome/browser/incognito/android/java/src/org/chromium/chrome/browser/incognito/IncognitoUtils.java
+index 82919be542dab3d77fbc23a16c66f4b37825fa89..fb20d17eb0192cb211f25b12fb17470662b8b646 100644
+--- a/chrome/browser/incognito/android/java/src/org/chromium/chrome/browser/incognito/IncognitoUtils.java
++++ b/chrome/browser/incognito/android/java/src/org/chromium/chrome/browser/incognito/IncognitoUtils.java
+@@ -134,13 +134,7 @@ public class IncognitoUtils {
+         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S_V2) {
+             return false;
+         }
+-        if (ChromeFeatureList.sAndroidOpenIncognitoAsWindowRestrictions.isEnabled()) {
+-            return !MultiInstanceUtils.isLowMemoryDevice()
+-                    && DisplayUtil.isGlobalDefaultDisplayWithMinDiagonal(
+-                            RESTRICTED_LARGE_DIAGONAL_DISPLAY_THRESHOLD_INCHES);
+-        }
+-        return DisplayUtil.isGlobalDefaultDisplayWithMinDiagonal(
+-                LARGE_DIAGONAL_DISPLAY_THRESHOLD_INCHES);
++        return true;
+     }
+ 
+     /**
+diff --git a/chrome/browser/profiles/profile_destroyer.cc b/chrome/browser/profiles/profile_destroyer.cc
+index d08378d6b30fe4d91ec847e77a3ed92a5bd4e9c2..b4db68a6018cb22ea073908262edbbed6628e8ce 100644
+--- a/chrome/browser/profiles/profile_destroyer.cc
++++ b/chrome/browser/profiles/profile_destroyer.cc
+@@ -23,6 +23,7 @@
+ #include "chrome/browser/browser_features.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "content/public/browser/render_process_host.h"
++#include "content/public/browser/web_contents.h"
+ 
+ namespace {
+ 
+@@ -202,6 +203,10 @@ void ProfileDestroyer::DestroyOTRProfileWhenAppropriateWithTimeout(
+   if (GetPendingDestroyerForProfile(profile))
+     return;
+ 
++  if (content::WebContents::IsBrowserContextInUse(profile)) {
++    return;
++  }
++
+   TRACE_EVENT("shutdown",
+               "ProfileDestroyer::DestroyOTRProfileWhenAppropriateWithTimeout",
+               [&](perfetto::EventContext ctx) {
+diff --git a/content/browser/web_contents/web_contents_impl.cc b/content/browser/web_contents/web_contents_impl.cc
+index 6d6d0947faf0be9203085344fce2998dbba586c8..54fb90e79de336039dae6ca8994559ef8149eb44 100644
+--- a/content/browser/web_contents/web_contents_impl.cc
++++ b/content/browser/web_contents/web_contents_impl.cc
+@@ -826,6 +826,15 @@ WebContents* WebContents::FromRenderViewHost(RenderViewHost* rvh) {
+       static_cast<RenderViewHostImpl*>(rvh)->GetDelegate());
+ }
+ 
++bool WebContents::IsBrowserContextInUse(BrowserContext* browser_context) {
++  for (WebContentsImpl* web_contents : WebContentsImpl::GetAllWebContents()) {
++    if (web_contents->GetBrowserContext() == browser_context) {
++      return true;
++    }
++  }
++  return false;
++}
++
+ WebContents* WebContents::FromRenderFrameHost(RenderFrameHost* rfh) {
+   OPTIONAL_TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("content.verbose"),
+                         "WebContents::FromRenderFrameHost", "render_frame_host",
+diff --git a/content/public/browser/web_contents.h b/content/public/browser/web_contents.h
+index 286c61111d622b0bf0a4b84769a6d223019bdf63..3288d217079cbfd43dcfc3b56bce93cb05a9bc74 100644
+--- a/content/public/browser/web_contents.h
++++ b/content/public/browser/web_contents.h
+@@ -447,6 +447,9 @@ class WebContents : public PageNavigator, public base::SupportsUserData {
+   //   one case where a RenderFrameHost can be active but not primary.
+   CONTENT_EXPORT static WebContents* FromRenderFrameHost(RenderFrameHost* rfh);
+ 
++  CONTENT_EXPORT static bool IsBrowserContextInUse(
++      BrowserContext* browser_context);
++
+   // Returns the WebContents associated with the |frame_tree_node_id|. This may
+   // return nullptr if the RenderFrameHost is shutting down.
+   CONTENT_EXPORT static WebContents* FromFrameTreeNodeId(
+diff --git a/extensions/browser/process_manager.cc b/extensions/browser/process_manager.cc
+index d097a45600c4b40ea984d6935c49f5c2b8cbbd6f..e399c2e9ca7464cc2d53eab6f78166e4351638bb 100644
+--- a/extensions/browser/process_manager.cc
++++ b/extensions/browser/process_manager.cc
+@@ -23,6 +23,7 @@
+ #include "base/time/time.h"
+ #include "base/trace_event/trace_event.h"
+ #include "base/uuid.h"
++#include "build/build_config.h"
+ #include "components/back_forward_cache/back_forward_cache_disable.h"
+ #include "components/back_forward_cache/disabled_reason_id.h"
+ #include "content/public/browser/browser_context.h"
+@@ -212,7 +213,12 @@ ProcessManager::ProcessManager(BrowserContext* context,
+ 
+   // Only the original profile needs to listen for ready to create background
+   // pages for all spanning extensions.
+-  if (!context->IsOffTheRecord()) {
++#if BUILDFLAG(IS_ANDROID)
++  const bool create_startup_hosts = true;
++#else
++  const bool create_startup_hosts = !context->IsOffTheRecord();
++#endif
++  if (create_startup_hosts) {
+     ExtensionSystem::Get(context)->ready().Post(
+         FROM_HERE,
+         base::BindOnce(&ProcessManager::MaybeCreateStartupBackgroundHosts,

@@ -1,0 +1,31 @@
+# Copyright 2026 Dioide
+# SPDX-License-Identifier: GPL-3.0-only
+
+target_os = "android"
+target_cpu = "arm64"
+is_desktop_android = true
+chrome_public_manifest_package = "io.dioide.aerium.core"
+
+is_official_build = true
+is_debug = false
+is_component_build = false
+dcheck_always_on = false
+symbol_level = 0
+blink_symbol_level = 0
+v8_symbol_level = 0
+chrome_pgo_phase = 2
+use_siso = true
+
+disable_fieldtrial_testing_config = true
+enable_reporting = false
+proprietary_codecs = true
+ffmpeg_branding = "Chrome"
+
+enable_vr = false
+enable_arcore = false
+enable_openxr = false
+enable_cardboard = false
+enable_remoting = false
+build_contextual_search = false
+rtc_build_examples = false
+use_errorprone_java_compiler = false

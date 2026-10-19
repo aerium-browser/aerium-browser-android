@@ -1,0 +1,325 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: fatih-gh <me@mehmetfatihyaman.me>
+Date: Thu, 1 Jan 2026 00:00:00 +0000
+Subject: [PATCH] Add noise to canvas readback and layout measurements
+
+---
+ .../blink/renderer/core/dom/element.cc        |   7 +-
+ third_party/blink/renderer/core/dom/range.cc  |   6 +-
+ .../renderer/core/html/canvas/text_metrics.cc |   5 +
+ .../canvas2d/base_rendering_context_2d.cc     |   4 +
+ third_party/blink/renderer/platform/BUILD.gn  |   2 +
+ .../platform/graphics/fingerprint_noise.cc    | 107 ++++++++++++++++++
+ .../platform/graphics/fingerprint_noise.h     |  32 ++++++
+ .../platform/graphics/image_data_buffer.cc    |  11 +-
+ 8 files changed, 170 insertions(+), 4 deletions(-)
+ create mode 100644 third_party/blink/renderer/platform/graphics/fingerprint_noise.cc
+ create mode 100644 third_party/blink/renderer/platform/graphics/fingerprint_noise.h
+
+diff --git a/third_party/blink/renderer/core/dom/element.cc b/third_party/blink/renderer/core/dom/element.cc
+index 91d23907c2cb7a9c6f775b121d11e66beaad62c2..6b2ffe42a703061c05bd5d2916dfdfe254e0abd0 100644
+--- a/third_party/blink/renderer/core/dom/element.cc
++++ b/third_party/blink/renderer/core/dom/element.cc
+@@ -303,6 +303,7 @@
+ #include "third_party/blink/renderer/platform/bindings/v8_dom_wrapper.h"
+ #include "third_party/blink/renderer/platform/bindings/v8_per_context_data.h"
+ #include "third_party/blink/renderer/platform/geometry/calculation_value.h"
++#include "third_party/blink/renderer/platform/graphics/fingerprint_noise.h"
+ #include "third_party/blink/renderer/platform/graphics/paint/tracked_element_data.h"
+ #include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_set.h"
+ #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
+@@ -3391,6 +3392,7 @@ DOMRectList* Element::getClientRects() {
+   for (auto& rect : rects) {
+     GetDocument().AdjustRectForScrollAndAbsoluteZoom(rect,
+                                                      *element_layout_object);
++    rect = FingerprintNoise::Scale(rect);
+   }
+   return MakeGarbageCollected<DOMRectList>(rects);
+ }
+@@ -3488,7 +3490,10 @@ DOMRect* Element::GetBoundingClientRectForBinding() {
+   // TODO(crbug.com/1499981): This should be removed once synchronized scrolling
+   // impact is understood.
+   SyncScrollAttemptHeuristic::DidAccessScrollOffset();
+-  return GetBoundingClientRect();
++  GetDocument().UpdateStyleAndLayoutForNode(this,
++                                            DocumentUpdateReason::kJavaScript);
++  return DOMRect::FromRectF(
++      FingerprintNoise::Scale(GetBoundingClientRectNoLifecycleUpdate()));
+ }
+ 
+ ContainerQueryList* Element::matchContainer(const String& query) {
+diff --git a/third_party/blink/renderer/core/dom/range.cc b/third_party/blink/renderer/core/dom/range.cc
+index fcea0d96675b5f7b3ae3ff4a859b62b32ae21b3e..34ebab60a8c925d7dbb89bb578c2f32602318260 100644
+--- a/third_party/blink/renderer/core/dom/range.cc
++++ b/third_party/blink/renderer/core/dom/range.cc
+@@ -65,6 +65,7 @@
+ #include "third_party/blink/renderer/core/trustedtypes/trusted_types_names.h"
+ #include "third_party/blink/renderer/core/trustedtypes/trusted_types_util.h"
+ #include "third_party/blink/renderer/platform/bindings/exception_state.h"
++#include "third_party/blink/renderer/platform/graphics/fingerprint_noise.h"
+ #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
+ #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
+ #include "third_party/blink/renderer/platform/wtf/text/strcat.h"
+@@ -1688,6 +1689,9 @@ DOMRectList* Range::getClientRects() const {
+ 
+   Vector<gfx::QuadF> quads;
+   GetBorderAndTextQuads(quads);
++  for (gfx::QuadF& quad : quads) {
++    quad = FingerprintNoise::Scale(quad);
++  }
+ 
+   return MakeGarbageCollected<DOMRectList>(quads);
+ }
+@@ -1696,7 +1700,7 @@ DOMRect* Range::getBoundingClientRect() const {
+   // TODO(crbug.com/1499981): This should be removed once synchronized scrolling
+   // impact is understood.
+   SyncScrollAttemptHeuristic::DidAccessScrollOffset();
+-  return DOMRect::FromRectF(BoundingRect());
++  return DOMRect::FromRectF(FingerprintNoise::Scale(BoundingRect()));
+ }
+ 
+ // TODO(editing-dev): We should make
+diff --git a/third_party/blink/renderer/core/html/canvas/text_metrics.cc b/third_party/blink/renderer/core/html/canvas/text_metrics.cc
+index a78150b4a695b8a78a2d5462414a72f41693c1c8..d630c0808bf00b5b21ab58c74153fe0b7b8a24ee 100644
+--- a/third_party/blink/renderer/core/html/canvas/text_metrics.cc
++++ b/third_party/blink/renderer/core/html/canvas/text_metrics.cc
+@@ -21,6 +21,7 @@
+ #include "third_party/blink/renderer/platform/fonts/shaping/shape_result.h"
+ #include "third_party/blink/renderer/platform/fonts/shaping/shape_result_view.h"
+ #include "third_party/blink/renderer/platform/fonts/simple_font_data.h"
++#include "third_party/blink/renderer/platform/graphics/fingerprint_noise.h"
+ #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
+ #include "third_party/blink/renderer/platform/text/text_direction.h"
+ #include "third_party/blink/renderer/platform/text/text_run.h"
+@@ -127,6 +128,10 @@ void TextMetrics::Update(const Font* font,
+   ctx_text_baseline_ = baseline;
+   actual_bounding_box_left_ = -glyph_bounds.x() + text_align_dx_;
+   actual_bounding_box_right_ = glyph_bounds.right() - text_align_dx_;
++  width_ = FingerprintNoise::Scale(width_);
++  actual_bounding_box_left_ = FingerprintNoise::Scale(actual_bounding_box_left_);
++  actual_bounding_box_right_ =
++      FingerprintNoise::Scale(actual_bounding_box_right_);
+ 
+   // y direction
+   const FontMetrics& font_metrics = font_data->GetFontMetrics();
+diff --git a/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc b/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
+index 89fcf5f32bc606bf852843d78b976bbc9de8f012..de4e40975b9040c01de382500c3c6929103cf5c9 100644
+--- a/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
++++ b/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
+@@ -82,6 +82,7 @@
+ #include "third_party/blink/renderer/platform/graphics/canvas_2d_bitmap_provider.h"
+ #include "third_party/blink/renderer/platform/graphics/canvas_2d_resource_provider.h"
+ #include "third_party/blink/renderer/platform/graphics/canvas_deferred_paint_record.h"
++#include "third_party/blink/renderer/platform/graphics/fingerprint_noise.h"
+ #include "third_party/blink/renderer/platform/graphics/flush_reason.h"
+ #include "third_party/blink/renderer/platform/graphics/gpu/shared_gpu_context.h"
+ #include "third_party/blink/renderer/platform/graphics/gpu/webgpu_cpp.h"
+@@ -511,6 +512,9 @@ ImageData* BaseRenderingContext2D::getImageDataInternal(
+         snapshot->PaintImageForCurrentFrame().readPixels(
+             image_data_pixmap.info(), image_data_pixmap.writable_addr(),
+             image_data_pixmap.rowBytes(), sx, sy);
++    if (read_pixels_successful) {
++      FingerprintNoise::AddToPixels(image_data_pixmap, sx, sy);
++    }
+     if (!read_pixels_successful) {
+       SkIRect bounds =
+           snapshot->PaintImageForCurrentFrame().GetSkImageInfo().bounds();
+diff --git a/third_party/blink/renderer/platform/BUILD.gn b/third_party/blink/renderer/platform/BUILD.gn
+index 94334c1ce13473f4e2ba295f288bcc9564093f32..80e025b43da63498aecb6799601a99f0c308db3b 100644
+--- a/third_party/blink/renderer/platform/BUILD.gn
++++ b/third_party/blink/renderer/platform/BUILD.gn
+@@ -1033,6 +1033,8 @@ component("platform") {
+     "graphics/filters/source_graphic.h",
+     "graphics/filters/spot_light_source.cc",
+     "graphics/filters/spot_light_source.h",
++    "graphics/fingerprint_noise.cc",
++    "graphics/fingerprint_noise.h",
+     "graphics/flush_for_image_listener.cc",
+     "graphics/flush_for_image_listener.h",
+     "graphics/flush_reason.h",
+diff --git a/third_party/blink/renderer/platform/graphics/fingerprint_noise.cc b/third_party/blink/renderer/platform/graphics/fingerprint_noise.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..c3c20ff869d8f407e3ecad76adbd03c44428cfc7
+--- /dev/null
++++ b/third_party/blink/renderer/platform/graphics/fingerprint_noise.cc
+@@ -0,0 +1,107 @@
++// Copyright 2026 Dioide
++// SPDX-License-Identifier: GPL-3.0-only
++
++#include "third_party/blink/renderer/platform/graphics/fingerprint_noise.h"
++
++#include "base/containers/span.h"
++#include "base/feature_list.h"
++#include "base/numerics/safe_conversions.h"
++#include "base/rand_util.h"
++#include "ui/gfx/skia_span_util.h"
++
++namespace blink {
++
++namespace {
++
++BASE_FEATURE(kAeriumFingerprintNoise, base::FEATURE_ENABLED_BY_DEFAULT);
++
++uint64_t Mix(uint64_t value) {
++  value += 0x9e3779b97f4a7c15ull;
++  value = (value ^ (value >> 30)) * 0xbf58476d1ce4e5b9ull;
++  value = (value ^ (value >> 27)) * 0x94d049bb133111ebull;
++  return value ^ (value >> 31);
++}
++
++uint64_t SessionKey() {
++  static const uint64_t key = base::RandUint64();
++  return key;
++}
++
++double Factor() {
++  static const double factor =
++      1.0 + (static_cast<double>(Mix(SessionKey()) % 2001) - 1000.0) * 1e-7;
++  return factor;
++}
++
++bool HasByteChannels(const SkPixmap& pixmap) {
++  return pixmap.addr() && (pixmap.colorType() == kRGBA_8888_SkColorType ||
++                           pixmap.colorType() == kBGRA_8888_SkColorType);
++}
++
++}  // namespace
++
++bool FingerprintNoise::IsEnabled() {
++  return base::FeatureList::IsEnabled(kAeriumFingerprintNoise);
++}
++
++void FingerprintNoise::AddToPixels(const SkPixmap& pixmap,
++                                   int origin_x,
++                                   int origin_y) {
++  if (!IsEnabled() || !HasByteChannels(pixmap)) {
++    return;
++  }
++  base::span<uint8_t> bytes = gfx::SkPixmapToWritableSpan(pixmap);
++  const size_t row_bytes = pixmap.rowBytes();
++  const uint64_t key = SessionKey();
++  for (int y = 0; y < pixmap.height(); ++y) {
++    for (int x = 0; x < pixmap.width(); ++x) {
++      const size_t offset = static_cast<size_t>(y) * row_bytes +
++                            static_cast<size_t>(x) * 4;
++      if (bytes[offset + 3] != 0xff) {
++        continue;
++      }
++      const uint64_t position =
++          (static_cast<uint64_t>(static_cast<uint32_t>(origin_y + y)) << 32) |
++          static_cast<uint32_t>(origin_x + x);
++      const uint64_t hash = Mix(key ^ position);
++      if ((hash & 31) != 0) {
++        continue;
++      }
++      bytes[offset + (hash >> 5) % 3] ^= 1;
++    }
++  }
++}
++
++SkPixmap FingerprintNoise::ForEncoding(const SkPixmap& pixmap,
++                                       Vector<uint8_t>& storage) {
++  if (!IsEnabled() || !HasByteChannels(pixmap)) {
++    return pixmap;
++  }
++  base::span<const uint8_t> source = gfx::SkPixmapToSpan(pixmap);
++  storage.resize(base::checked_cast<wtf_size_t>(source.size()));
++  base::span(storage).copy_from(source);
++  SkPixmap copy(pixmap.info(), storage.data(), pixmap.rowBytes());
++  AddToPixels(copy, 0, 0);
++  return copy;
++}
++
++double FingerprintNoise::Scale(double value) {
++  return IsEnabled() ? value * Factor() : value;
++}
++
++gfx::RectF FingerprintNoise::Scale(const gfx::RectF& rect) {
++  if (!IsEnabled()) {
++    return rect;
++  }
++  return gfx::ScaleRect(rect, static_cast<float>(Factor()));
++}
++
++gfx::QuadF FingerprintNoise::Scale(const gfx::QuadF& quad) {
++  gfx::QuadF scaled = quad;
++  if (IsEnabled()) {
++    scaled.Scale(static_cast<float>(Factor()));
++  }
++  return scaled;
++}
++
++}  // namespace blink
+diff --git a/third_party/blink/renderer/platform/graphics/fingerprint_noise.h b/third_party/blink/renderer/platform/graphics/fingerprint_noise.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..94d745d4381163305c71b5a7d48bdfbcd000da39
+--- /dev/null
++++ b/third_party/blink/renderer/platform/graphics/fingerprint_noise.h
+@@ -0,0 +1,32 @@
++// Copyright 2026 Dioide
++// SPDX-License-Identifier: GPL-3.0-only
++
++#ifndef THIRD_PARTY_BLINK_RENDERER_PLATFORM_GRAPHICS_FINGERPRINT_NOISE_H_
++#define THIRD_PARTY_BLINK_RENDERER_PLATFORM_GRAPHICS_FINGERPRINT_NOISE_H_
++
++#include <stdint.h>
++
++#include "third_party/blink/renderer/platform/platform_export.h"
++#include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
++#include "third_party/blink/renderer/platform/wtf/vector.h"
++#include "third_party/skia/include/core/SkPixmap.h"
++#include "ui/gfx/geometry/quad_f.h"
++#include "ui/gfx/geometry/rect_f.h"
++
++namespace blink {
++
++class PLATFORM_EXPORT FingerprintNoise {
++  STATIC_ONLY(FingerprintNoise);
++
++ public:
++  static bool IsEnabled();
++  static void AddToPixels(const SkPixmap& pixmap, int origin_x, int origin_y);
++  static SkPixmap ForEncoding(const SkPixmap& pixmap, Vector<uint8_t>& storage);
++  static double Scale(double value);
++  static gfx::RectF Scale(const gfx::RectF& rect);
++  static gfx::QuadF Scale(const gfx::QuadF& quad);
++};
++
++}  // namespace blink
++
++#endif  // THIRD_PARTY_BLINK_RENDERER_PLATFORM_GRAPHICS_FINGERPRINT_NOISE_H_
+diff --git a/third_party/blink/renderer/platform/graphics/image_data_buffer.cc b/third_party/blink/renderer/platform/graphics/image_data_buffer.cc
+index d05ea261a96fcdf74e9600330eb7b4994af41657..cdbf0cc3716b38b927440dc78b4b1f7e4570a232 100644
+--- a/third_party/blink/renderer/platform/graphics/image_data_buffer.cc
++++ b/third_party/blink/renderer/platform/graphics/image_data_buffer.cc
+@@ -35,6 +35,7 @@
+ #include "base/compiler_specific.h"
+ #include "base/logging.h"
+ #include "base/memory/ptr_util.h"
++#include "third_party/blink/renderer/platform/graphics/fingerprint_noise.h"
+ #include "third_party/blink/renderer/platform/image-encoders/image_encoder_utils.h"
+ #include "third_party/blink/renderer/platform/wtf/text/base64.h"
+ #include "third_party/blink/renderer/platform/wtf/text/strcat.h"
+@@ -139,14 +140,20 @@ base::span<const uint8_t> ImageDataBuffer::PixelData() const {
+ bool ImageDataBuffer::EncodeImage(const ImageEncodingMimeType mime_type,
+                                   const double& quality,
+                                   Vector<unsigned char>* encoded_image) const {
+-  return ImageEncoder::Encode(encoded_image, pixmap_, mime_type, quality);
++  Vector<uint8_t> noisy;
++  return ImageEncoder::Encode(encoded_image,
++                              FingerprintNoise::ForEncoding(pixmap_, noisy),
++                              mime_type, quality);
+ }
+ 
+ String ImageDataBuffer::ToDataURL(const ImageEncodingMimeType mime_type,
+                                   const double& quality) const {
+   DCHECK(is_valid_);
+   Vector<unsigned char> result;
+-  if (!ImageEncoder::Encode(&result, pixmap_, mime_type, quality)) {
++  Vector<uint8_t> noisy;
++  if (!ImageEncoder::Encode(&result,
++                            FingerprintNoise::ForEncoding(pixmap_, noisy),
++                            mime_type, quality)) {
+     return "data:,";
+   }
+   return StrCat({"data:", ImageEncoderUtils::MimeTypeName(mime_type),

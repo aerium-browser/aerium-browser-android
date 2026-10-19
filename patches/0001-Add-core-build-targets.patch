@@ -1,0 +1,51 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: fatih-gh <me@mehmetfatihyaman.me>
+Date: Thu, 1 Jan 2026 00:00:00 +0000
+Subject: [PATCH] Add core build targets
+
+---
+ chrome/android/BUILD.gn       | 3 +++
+ chrome/browser/prefs/BUILD.gn | 2 ++
+ 2 files changed, 5 insertions(+)
+
+diff --git a/chrome/android/BUILD.gn b/chrome/android/BUILD.gn
+index 1b74cd83753feb11bf2571c635dbf32639f93677..dcc6fb5e1b18fafbbd86ae594b0777da4332533a 100644
+--- a/chrome/android/BUILD.gn
++++ b/chrome/android/BUILD.gn
+@@ -8,6 +8,7 @@ import("//build/toolchain/gcc_toolchain.gni")
+ 
+ import("//chrome/android/chrome_common_shared_library.gni")
+ import("//chrome/android/modules/chrome_feature_module_tmpl.gni")
++import("//aerium/bridge/bridge_sources.gni")
+ import("//components/supervised_user/buildflags.gni")
+ 
+ assert(!is_cronet_build)
+@@ -312,6 +313,7 @@ if (_is_default_toolchain) {
+ 
+   android_library("chrome_java") {
+     deps = [
++      "//aerium/api:api_java",
+       ":base_module_java",
+       ":chrome_app_java_resources",
+       ":chrome_public_apk_template_resources",
+@@ -893,6 +895,7 @@ if (_is_default_toolchain) {
+ 
+     # From java_sources.gni.
+     sources = chrome_java_sources
++    sources += aerium_bridge_java_sources
+ 
+     # Include sources from feed_java_sources.gni.
+     sources += feed_java_sources
+diff --git a/chrome/browser/prefs/BUILD.gn b/chrome/browser/prefs/BUILD.gn
+index 817cd91bdac667c3165d33c55d01ca16842b75a7..3bac5fd177cc6609fb818ec3841d0ee7edcf6e97 100644
+--- a/chrome/browser/prefs/BUILD.gn
++++ b/chrome/browser/prefs/BUILD.gn
+@@ -48,6 +48,8 @@ source_set("impl") {
+   public_deps = [ "//chrome/browser:browser_public_dependencies" ]
+ 
+   sources = [
++    "//aerium/defaults/aerium_defaults.cc",
++    "//aerium/defaults/aerium_defaults.h",
+     "browser_prefs.cc",
+     "chrome_command_line_pref_store.cc",
+     "chrome_pref_model_associator_client.cc",

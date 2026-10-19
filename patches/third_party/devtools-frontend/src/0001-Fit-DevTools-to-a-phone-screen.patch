@@ -1,0 +1,40 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: fatih-gh <me@mehmetfatihyaman.me>
+Date: Thu, 1 Jan 2026 00:00:00 +0000
+Subject: [PATCH] Fit DevTools to a phone screen
+
+---
+ front_end/entrypoint_template.html           |  1 +
+ front_end/panels/settings/settingsScreen.css | 10 ++++++++++
+ 2 files changed, 11 insertions(+)
+
+diff --git a/front_end/entrypoint_template.html b/front_end/entrypoint_template.html
+index e778aefef2c32caa29253d80ce46da0a02fa1f73..ad8cba9e04a0383c708c272f9410fb29429e69e6 100644
+--- a/front_end/entrypoint_template.html
++++ b/front_end/entrypoint_template.html
+@@ -6,6 +6,7 @@
+ <!DOCTYPE html>
+ <html lang="en">
+ <meta charset="utf-8">
++<meta name="viewport" content="width=device-width, initial-scale=1">
+ <title>DevTools</title>
+ <style>
+   @media (prefers-color-scheme: dark) {
+diff --git a/front_end/panels/settings/settingsScreen.css b/front_end/panels/settings/settingsScreen.css
+index edaaf1ad90b100e7ff91de55faa64848bf9032e4..9a1f91cd169043a6644609099bd909ca30747ec2 100644
+--- a/front_end/panels/settings/settingsScreen.css
++++ b/front_end/panels/settings/settingsScreen.css
+@@ -195,3 +195,13 @@ devtools-button.link-icon {
+ .greendev-widgets input[type="radio"] {
+   margin: var(--sys-size-4);
+ }
++
++@media (max-width: 599px) {
++  .settings-window-title {
++    display: none;
++  }
++
++  .settings-content {
++    margin: var(--sys-size-3) var(--sys-size-3) var(--sys-size-3) 0;
++  }
++}

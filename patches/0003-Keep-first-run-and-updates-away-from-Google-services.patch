@@ -1,0 +1,79 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: fatih-gh <me@mehmetfatihyaman.me>
+Date: Thu, 1 Jan 2026 00:00:00 +0000
+Subject: [PATCH] Keep first run and updates away from Google services
+
+---
+ .../org/chromium/chrome/browser/init/AsyncInitTaskRunner.java  | 2 +-
+ .../component_updater/chrome_component_updater_configurator.cc | 2 +-
+ .../component_updater_command_line_config_policy.h             | 2 +-
+ components/url_formatter/url_formatter.cc                      | 3 +--
+ .../chromium/content/browser/font/AndroidFontLookupImpl.java   | 2 +-
+ 5 files changed, 5 insertions(+), 6 deletions(-)
+
+diff --git a/chrome/android/java/src/org/chromium/chrome/browser/init/AsyncInitTaskRunner.java b/chrome/android/java/src/org/chromium/chrome/browser/init/AsyncInitTaskRunner.java
+index b18283937751b7a1ff9aa10383ad65d7e743340f..a87eacbca1565a13857314214ba15a7f3e97cbe8 100644
+--- a/chrome/android/java/src/org/chromium/chrome/browser/init/AsyncInitTaskRunner.java
++++ b/chrome/android/java/src/org/chromium/chrome/browser/init/AsyncInitTaskRunner.java
+@@ -38,7 +38,7 @@ public abstract class AsyncInitTaskRunner {
+ 
+     @VisibleForTesting
+     boolean shouldFetchVariationsSeedDuringFirstRun() {
+-        return VersionInfo.isOfficialBuild();
++        return false;
+     }
+ 
+     private class FetchSeedTask implements Runnable {
+diff --git a/chrome/browser/component_updater/chrome_component_updater_configurator.cc b/chrome/browser/component_updater/chrome_component_updater_configurator.cc
+index 744a905fa17d6f54d6e19c16292d7720d4ea5aa4..476f2db900ba9e55ed37929cbfb5e4e29b7efeb6 100644
+--- a/chrome/browser/component_updater/chrome_component_updater_configurator.cc
++++ b/chrome/browser/component_updater/chrome_component_updater_configurator.cc
+@@ -123,7 +123,7 @@ class ChromeConfigurator : public update_client::Configurator {
+ ChromeConfigurator::ChromeConfigurator(const base::CommandLine* cmdline,
+                                        PrefService* pref_service)
+     : configurator_impl_(ComponentUpdaterCommandLineConfigPolicy(cmdline),
+-                         /*require_encryption=*/false),
++                         /*require_encryption=*/true),
+       pref_service_(pref_service),
+       persisted_data_(update_client::CreatePersistedData(
+           base::BindRepeating(
+diff --git a/components/component_updater/component_updater_command_line_config_policy.h b/components/component_updater/component_updater_command_line_config_policy.h
+index 6c16b4e37a753dc813565070290f417b2eba7ab2..a627cb7ffd59ccb430893c970ab8bdd77893adf5 100644
+--- a/components/component_updater/component_updater_command_line_config_policy.h
++++ b/components/component_updater/component_updater_command_line_config_policy.h
+@@ -42,7 +42,7 @@ class ComponentUpdaterCommandLineConfigPolicy final
+   bool background_downloads_enabled_ = false;
+   bool deltas_enabled_ = true;
+   bool fast_update_ = false;
+-  bool pings_enabled_ = true;
++  bool pings_enabled_ = false;
+   bool test_request_ = false;
+ 
+   // If non-zero, time interval until the first component update check.
+diff --git a/components/url_formatter/url_formatter.cc b/components/url_formatter/url_formatter.cc
+index 2f6cb317900b93a5f2be9e687bff34f031381c63..dad48b6d67e01c8cb17fd9a407efb3237fe11e5b 100644
+--- a/components/url_formatter/url_formatter.cc
++++ b/components/url_formatter/url_formatter.cc
+@@ -673,8 +673,7 @@ std::u16string FormatUrlWithAdjustments(
+   }
+ 
+   // Host.
+-  bool trim_trivial_subdomains =
+-      (format_types & kFormatUrlOmitTrivialSubdomains) != 0;
++  bool trim_trivial_subdomains = false;
+   bool trim_mobile_prefix = (format_types & kFormatUrlOmitMobilePrefix) != 0;
+   AppendFormattedComponent(
+       spec, parsed.host,
+diff --git a/content/public/android/java/src/org/chromium/content/browser/font/AndroidFontLookupImpl.java b/content/public/android/java/src/org/chromium/content/browser/font/AndroidFontLookupImpl.java
+index 069b9bd6f160135f71f1ebb4c772eb9ed0fc6910..90768a0095bb721b065073684f8ed2d798736023 100644
+--- a/content/public/android/java/src/org/chromium/content/browser/font/AndroidFontLookupImpl.java
++++ b/content/public/android/java/src/org/chromium/content/browser/font/AndroidFontLookupImpl.java
+@@ -96,7 +96,7 @@ public class AndroidFontLookupImpl implements AndroidFontLookup {
+             PostTask.createSequencedTaskRunner(TaskTraits.USER_BLOCKING_MAY_BLOCK);
+ 
+     private AndroidFontLookupImpl(Context appContext) {
+-        this(appContext, new FontsContractWrapper(), createFullFontNameToQueryMap());
++        this(appContext, new FontsContractWrapper(), new HashMap<>());
+     }
+ 
+     @VisibleForTesting

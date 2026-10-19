@@ -1,0 +1,73 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: fatih-gh <me@mehmetfatihyaman.me>
+Date: Thu, 1 Jan 2026 00:00:00 +0000
+Subject: [PATCH] Install extensions from trusted catalogues
+
+---
+ chrome/browser/download/download_crx_util.cc | 29 ++++++++++++++++++++
+ 1 file changed, 29 insertions(+)
+
+diff --git a/chrome/browser/download/download_crx_util.cc b/chrome/browser/download/download_crx_util.cc
+index 77e32a025e1086f24fa2c7549438ecdb9f7019f5..4fd0af1ce93784f08faec62a679755713d09630c 100644
+--- a/chrome/browser/download/download_crx_util.cc
++++ b/chrome/browser/download/download_crx_util.cc
+@@ -7,6 +7,8 @@
+ #include "chrome/browser/download/download_crx_util.h"
+ 
+ #include <memory>
++#include <optional>
++#include <string_view>
+ 
+ #include "base/auto_reset.h"
+ #include "build/build_config.h"
+@@ -23,9 +25,12 @@
+ #include "extensions/browser/install_prompt_data.h"
+ #include "extensions/browser/webstore_installer.h"
+ #include "extensions/buildflags/buildflags.h"
++#include "extensions/common/constants.h"
+ #include "extensions/common/extension.h"
+ #include "extensions/common/extension_urls.h"
+ #include "extensions/common/user_script.h"
++#include "url/gurl.h"
++#include "url/origin.h"
+ 
+ #if !BUILDFLAG(IS_ANDROID)
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+@@ -44,6 +49,29 @@ namespace {
+ 
+ bool g_allow_offstore_install_for_testing = false;
+ 
++constexpr std::string_view kTrustedCatalogueHosts[] = {
++    "addons.opera.com",
++    "operacdn.com",
++    "microsoftedge.microsoft.com",
++    "edge.microsoft.com",
++    "delivery.mp.microsoft.com",
++    "github.com",
++    "githubusercontent.com",
++};
++
++bool IsFromTrustedCatalogue(const DownloadItem& item) {
++  const std::optional<url::Origin>& initiator = item.GetRequestInitiator();
++  if (initiator && initiator->scheme() == extensions::kExtensionScheme) {
++    return true;
++  }
++  for (std::string_view host : kTrustedCatalogueHosts) {
++    if (item.GetURL().DomainIs(host) || item.GetReferrerUrl().DomainIs(host)) {
++      return true;
++    }
++  }
++  return false;
++}
++
+ // Hold a mock ExtensionInstallPrompt object that will be used when the
+ // download system opens a CRX.
+ ExtensionInstallPrompt* mock_install_prompt_for_testing = nullptr;
+@@ -91,6 +119,7 @@ std::unique_ptr<ExtensionInstallPrompt> CreateExtensionInstallPrompt(
+ 
+ bool OffStoreInstallAllowedByPrefs(Profile* profile, const DownloadItem& item) {
+   return g_allow_offstore_install_for_testing ||
++         IsFromTrustedCatalogue(item) ||
+          extensions::ExtensionManagementFactory::GetForBrowserContext(profile)
+              ->IsOffstoreInstallAllowed(item.GetURL(), item.GetReferrerUrl());
+ }

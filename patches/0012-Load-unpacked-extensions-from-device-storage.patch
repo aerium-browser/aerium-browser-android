@@ -1,0 +1,146 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: fatih-gh <me@mehmetfatihyaman.me>
+Date: Thu, 1 Jan 2026 00:00:00 +0000
+Subject: [PATCH] Load unpacked extensions from device storage
+
+---
+ .../org/chromium/base/VirtualDocumentPath.java   | 16 ++++++++++++++--
+ extensions/browser/unpacked_installer.cc         | 14 +++++++++++---
+ extensions/common/extension_l10n_util.cc         | 14 ++++++++++++++
+ extensions/common/extension_l10n_util.h          |  4 ++++
+ .../manifest_handlers/default_locale_handler.cc  |  2 ++
+ 5 files changed, 45 insertions(+), 5 deletions(-)
+
+diff --git a/base/android/java/src/org/chromium/base/VirtualDocumentPath.java b/base/android/java/src/org/chromium/base/VirtualDocumentPath.java
+index 7a440c9893ae493a243211f7dc4f67f4256e86f7..6bc1be4f78be92c6dcfe0b541d0af39a87955cc4 100644
+--- a/base/android/java/src/org/chromium/base/VirtualDocumentPath.java
++++ b/base/android/java/src/org/chromium/base/VirtualDocumentPath.java
+@@ -51,6 +51,8 @@ class VirtualDocumentPath {
+ 
+     private static final String VIRTUAL_PATH_MARKER = "SAF";
+     private static final String TREE_PATH = "tree";
++    private static final String EXTERNAL_STORAGE_AUTHORITY =
++            "com.android.externalstorage.documents";
+ 
+     private final String mAuthority;
+     private final String mEncodedTreeId;
+@@ -166,8 +168,9 @@ class VirtualDocumentPath {
+         String documentId = DocumentsContract.getTreeDocumentId(tree);
+         assert treeId.equals(documentId);
+ 
+-        // TODO(crbug.com/406136787): create a fast path for com.android.externalstorage.documents,
+-        // which is known to use the relative paths directly as document IDs.
++        if (EXTERNAL_STORAGE_AUTHORITY.equals(mAuthority)) {
++            return resolveByRelativeDocumentId(tree, treeId);
++        }
+ 
+         String[] columns = {
+             DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+@@ -313,6 +316,15 @@ class VirtualDocumentPath {
+                 names[names.length - 1]);
+     }
+ 
++    private @Nullable Uri resolveByRelativeDocumentId(Uri tree, String treeId) {
++        String documentId = treeId;
++        if (!mRelativePath.isEmpty()) {
++            documentId += treeId.endsWith(":") ? mRelativePath : "/" + mRelativePath;
++        }
++        Uri uri = DocumentsContract.buildDocumentUriUsingTree(tree, documentId);
++        return contentUriExists(uri) ? uri : null;
++    }
++
+     private String[] relativePathComponents() {
+         if (mRelativePath.isEmpty()) return new String[0];
+         return mRelativePath.split("/");
+diff --git a/extensions/browser/unpacked_installer.cc b/extensions/browser/unpacked_installer.cc
+index c3626959e73aeabd49e1e1d546062d48779a417b..ccb5619fbcf5f9ed43bb321d7f831aee135948a4 100644
+--- a/extensions/browser/unpacked_installer.cc
++++ b/extensions/browser/unpacked_installer.cc
+@@ -324,9 +324,17 @@ bool UnpackedInstaller::LoadExtension(mojom::ManifestLocation location,
+   extension_ =
+       file_util::LoadExtension(extension_path_, location, flags, error);
+ 
+-  return extension_ &&
+-         extension_l10n_util::ValidateExtensionLocales(
+-             extension_path_, *extension_->manifest()->value(), error) &&
++  if (!extension_) {
++    return false;
++  }
++#if BUILDFLAG(IS_ANDROID)
++  const bool skip_locale_check = extension_path_.IsVirtualDocumentPath();
++#else
++  const bool skip_locale_check = false;
++#endif
++  return (skip_locale_check ||
++          extension_l10n_util::ValidateExtensionLocales(
++              extension_path_, *extension_->manifest()->value(), error)) &&
+          IndexAndPersistRulesIfNeeded(error);
+ }
+ 
+diff --git a/extensions/common/extension_l10n_util.cc b/extensions/common/extension_l10n_util.cc
+index 375bf23af4fc6468cb1505d151dc9170e798f8cd..63ce73c2795558db9a570feb0941b8973f75f70f 100644
+--- a/extensions/common/extension_l10n_util.cc
++++ b/extensions/common/extension_l10n_util.cc
+@@ -28,6 +28,7 @@
+ #include "base/strings/stringprintf.h"
+ #include "base/strings/utf_string_conversions.h"
+ #include "base/values.h"
++#include "build/build_config.h"
+ #include "extensions/common/constants.h"
+ #include "extensions/common/error_utils.h"
+ #include "extensions/common/extension.h"
+@@ -453,6 +454,8 @@ std::set<LanguageTag> GetValidLocales(const base::FilePath& locale_path,
+   base::FilePath locale_folder;
+   std::set<LanguageTag> valid_locales;
+   while (!(locale_folder = locales.Next()).empty()) {
++    locale_folder = ResolveLocaleDirectory(locale_path, locale_folder,
++                                           locales.GetInfo().GetName());
+     std::string locale_name = locale_folder.BaseName().MaybeAsASCII();
+     if (locale_name.empty()) {
+       NOTREACHED();  // Not ASCII.
+@@ -586,6 +589,17 @@ bool ValidateExtensionLocales(const base::FilePath& extension_path,
+   return true;
+ }
+ 
++base::FilePath ResolveLocaleDirectory(const base::FilePath& parent,
++                                      const base::FilePath& entry,
++                                      const base::FilePath& name) {
++#if BUILDFLAG(IS_ANDROID)
++  if (entry.IsContentUri()) {
++    return parent.Append(name);
++  }
++#endif
++  return entry;
++}
++
+ bool ShouldSkipValidation(const base::FilePath& locales_path,
+                           const base::FilePath& locale_path,
+                           const std::set<std::string>& all_locales) {
+diff --git a/extensions/common/extension_l10n_util.h b/extensions/common/extension_l10n_util.h
+index c24f9ac9c90df29f27979e42f493a4ea4a965fd4..ddca35b4a3c2d17bcc4fac940061182b8848798b 100644
+--- a/extensions/common/extension_l10n_util.h
++++ b/extensions/common/extension_l10n_util.h
+@@ -131,6 +131,10 @@ bool ShouldSkipValidation(const base::FilePath& locales_path,
+                           const base::FilePath& locale_path,
+                           const std::set<std::string>& all_locales);
+ 
++base::FilePath ResolveLocaleDirectory(const base::FilePath& parent,
++                                      const base::FilePath& entry,
++                                      const base::FilePath& name);
++
+ // Sets the process and preferred locale for the duration of the current scope,
+ // then reverts back to whatever the current values were before constructing
+ // this. For testing purposed only!
+diff --git a/extensions/common/manifest_handlers/default_locale_handler.cc b/extensions/common/manifest_handlers/default_locale_handler.cc
+index f47839432c6c0aa24fb37dbddc3709ffdb432983..0a373dab00cbd20bf948b5723abe2bb5899a33ce 100644
+--- a/extensions/common/manifest_handlers/default_locale_handler.cc
++++ b/extensions/common/manifest_handlers/default_locale_handler.cc
+@@ -95,6 +95,8 @@ bool DefaultLocaleHandler::Validate(
+ 
+   base::FilePath locale_path;
+   while (!(locale_path = locales.Next()).empty()) {
++    locale_path = extension_l10n_util::ResolveLocaleDirectory(
++        path, locale_path, locales.GetInfo().GetName());
+     if (extension_l10n_util::ShouldSkipValidation(path, locale_path,
+                                                   all_locales))
+       continue;

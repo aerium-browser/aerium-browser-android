@@ -1,0 +1,87 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: fatih-gh <me@mehmetfatihyaman.me>
+Date: Thu, 1 Jan 2026 00:00:00 +0000
+Subject: [PATCH] Reduce client hints and report a steady battery
+
+---
+ .../embedder_support/user_agent_utils.cc      | 22 +++++++++++++++++++
+ .../modules/battery/battery_dispatcher.cc     | 12 +++++-----
+ 2 files changed, 28 insertions(+), 6 deletions(-)
+
+diff --git a/components/embedder_support/user_agent_utils.cc b/components/embedder_support/user_agent_utils.cc
+index 5d96c604058070930d59de9b0d672cbdb6d32439..d9fe81dd3cffa96a52e937ce7aa93dfa9f3e1a7d 100644
+--- a/components/embedder_support/user_agent_utils.cc
++++ b/components/embedder_support/user_agent_utils.cc
+@@ -56,6 +56,10 @@
+ 
+ namespace embedder_support {
+ 
++namespace {
++BASE_FEATURE(kAeriumReducedClientHints, base::FEATURE_ENABLED_BY_DEFAULT);
++}  // namespace
++
+ namespace {
+ 
+ #if BUILDFLAG(IS_WIN)
+@@ -166,6 +170,9 @@ const blink::UserAgentBrandList GetUserAgentBrandList(
+ #if !BUILDFLAG(CHROMIUM_BRANDING)
+   brand = version_info::GetProductName();
+ #endif
++  if (!brand) {
++    brand = "Google Chrome";
++  }
+ 
+   std::string brand_version =
+       output_version_type == blink::UserAgentBrandVersionType::kFullVersion
+@@ -697,6 +704,21 @@ blink::UserAgentMetadata GetUserAgentMetadata(bool only_low_entropy_ch) {
+   metadata.bitness = GetCpuBitness();
+   metadata.wow64 = IsWoW64();
+   metadata.platform_version = GetPlatformVersion();
++#if BUILDFLAG(IS_ANDROID)
++  if (base::FeatureList::IsEnabled(kAeriumReducedClientHints)) {
++    const std::string reduced_version =
++        base::StrCat({version_info::GetMajorVersionNumber(), ".0.0.0"});
++    for (blink::UserAgentBrandVersion& entry :
++         metadata.brand_full_version_list) {
++      if (entry.version == metadata.full_version) {
++        entry.version = reduced_version;
++      }
++    }
++    metadata.full_version = reduced_version;
++    metadata.model = "K";
++    metadata.platform_version = "10.0.0";
++  }
++#endif
+   return metadata;
+ }
+ 
+diff --git a/third_party/blink/renderer/modules/battery/battery_dispatcher.cc b/third_party/blink/renderer/modules/battery/battery_dispatcher.cc
+index 86be964c0119d0ea052453b46a3eaea7957fe7eb..8df7aa83b456541c0051e78704051dcc2bfe2087 100644
+--- a/third_party/blink/renderer/modules/battery/battery_dispatcher.cc
++++ b/third_party/blink/renderer/modules/battery/battery_dispatcher.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "third_party/blink/renderer/modules/battery/battery_dispatcher.h"
+ 
++#include "base/location.h"
++#include "base/task/single_thread_task_runner.h"
+ #include "services/device/public/mojom/battery_status.mojom-blink.h"
+ #include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
+ #include "third_party/blink/public/platform/platform.h"
+@@ -43,12 +45,10 @@ void BatteryDispatcher::UpdateBatteryStatus(
+ }
+ 
+ void BatteryDispatcher::StartListening(LocalDOMWindow* window) {
+-  DCHECK(!monitor_.is_bound());
+-  // See https://bit.ly/2S0zRAS for task types.
+-  window->GetBrowserInterfaceBroker().GetInterface(
+-      monitor_.BindNewPipeAndPassReceiver(
+-          window->GetTaskRunner(TaskType::kMiscPlatformAPI)));
+-  QueryNextStatus();
++  window->GetTaskRunner(TaskType::kMiscPlatformAPI)
++      ->PostTask(FROM_HERE,
++                 BindOnce(&BatteryDispatcher::UpdateBatteryStatus,
++                          WrapPersistent(this), BatteryStatus()));
+ }
+ 
+ void BatteryDispatcher::StopListening() {
