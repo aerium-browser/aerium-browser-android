@@ -56,6 +56,16 @@ final class TabsImpl implements TabsApi {
     }
 
     @Override
+    public List<TabInfo> listAll(boolean aerogel) {
+        List<TabInfo> tabs = new ArrayList<>();
+        for (TabModelSelector selector :
+                TabWindowManagerSingleton.getInstance().getAllTabModelSelectors()) {
+            for (Tab tab : selector.getModel(aerogel)) tabs.add(info(tab));
+        }
+        return tabs;
+    }
+
+    @Override
     public @Nullable TabInfo current() {
         TabModelSelector selector = selector();
         Tab tab = selector == null ? null : selector.getCurrentTab();

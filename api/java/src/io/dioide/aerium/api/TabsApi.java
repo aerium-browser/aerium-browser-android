@@ -12,6 +12,8 @@ public interface TabsApi {
 
     List<TabInfo> list(boolean aerogel);
 
+    List<TabInfo> listAll(boolean aerogel);
+
     @Nullable
     TabInfo current();
 
