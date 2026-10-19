@@ -8,6 +8,7 @@ import android.content.SharedPreferences;
 import androidx.annotation.Nullable;
 
 import org.chromium.base.ContextUtils;
+import org.chromium.chrome.browser.homepage.HomepageManager;
 import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.components.prefs.PrefChangeRegistrar;
 import org.chromium.components.prefs.PrefService;
@@ -48,6 +49,8 @@ final class SettingsImpl implements SettingsApi {
             prefs().setString(WEBRTC_PREF, webrtcPolicy((String) value));
         } else if (setting == CoreSettings.SEARCH_SUGGESTIONS) {
             prefs().setBoolean(SUGGEST_PREF, (Boolean) value);
+        } else if (setting == CoreSettings.HOMEPAGE) {
+            HomepageManager.getInstance().setPrefHomepageEnabled((Boolean) value);
         } else {
             throw unknown(setting);
         }
@@ -55,6 +58,11 @@ final class SettingsImpl implements SettingsApi {
 
     @Override
     public Subscription observe(Setting<?> setting, Runnable onChange) {
+        if (setting == CoreSettings.HOMEPAGE) {
+            HomepageManager.HomepageStateListener listener = onChange::run;
+            HomepageManager.getInstance().addListener(listener);
+            return () -> HomepageManager.getInstance().removeListener(listener);
+        }
         String profilePref = profilePref(setting);
         if (profilePref != null) {
             PrefChangeRegistrar registrar = new PrefChangeRegistrar(prefs());
@@ -92,6 +100,9 @@ final class SettingsImpl implements SettingsApi {
         }
         if (setting == CoreSettings.SEARCH_SUGGESTIONS) {
             return prefs().getBoolean(SUGGEST_PREF);
+        }
+        if (setting == CoreSettings.HOMEPAGE) {
+            return HomepageManager.getInstance().isHomepageEnabled();
         }
         throw unknown(setting);
     }

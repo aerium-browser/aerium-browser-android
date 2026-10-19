@@ -5,6 +5,7 @@ package io.dioide.aerium.bridge;
 
 import org.chromium.build.annotations.ServiceImpl;
 
+import io.dioide.aerium.api.ActionsApi;
 import io.dioide.aerium.api.AeriumCore;
 import io.dioide.aerium.api.BrowsingDataApi;
 import io.dioide.aerium.api.ExtensionsApi;
@@ -56,5 +57,10 @@ public class CoreService implements AeriumCore {
     @Override
     public PrefsApi prefs() {
         return mCore.prefs();
+    }
+
+    @Override
+    public ActionsApi actions() {
+        return mCore.actions();
     }
 }

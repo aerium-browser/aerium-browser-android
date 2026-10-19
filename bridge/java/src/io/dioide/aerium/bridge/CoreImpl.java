@@ -3,6 +3,7 @@
 
 package io.dioide.aerium.bridge;
 
+import io.dioide.aerium.api.ActionsApi;
 import io.dioide.aerium.api.AeriumCore;
 import io.dioide.aerium.api.BrowsingDataApi;
 import io.dioide.aerium.api.ExtensionsApi;
@@ -20,6 +21,7 @@ final class CoreImpl implements AeriumCore {
     private final ExtensionsApi mExtensions = new ExtensionsImpl();
     private final SitesApi mSites = new SitesImpl();
     private final PrefsApi mPrefs = new PrefsImpl();
+    private final ActionsApi mActions = new ActionsImpl();
 
     @Override
     public int apiVersion() {
@@ -59,5 +61,10 @@ final class CoreImpl implements AeriumCore {
     @Override
     public PrefsApi prefs() {
         return mPrefs;
+    }
+
+    @Override
+    public ActionsApi actions() {
+        return mActions;
     }
 }

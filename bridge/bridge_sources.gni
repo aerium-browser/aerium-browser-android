@@ -6,6 +6,7 @@ declare_args() {
 }
 
 aerium_bridge_java_sources = [
+  "//aerium/bridge/java/src/io/dioide/aerium/bridge/ActionsImpl.java",
   "//aerium/bridge/java/src/io/dioide/aerium/bridge/Aerium.java",
   "//aerium/bridge/java/src/io/dioide/aerium/bridge/AeriumPrefs.java",
   "//aerium/bridge/java/src/io/dioide/aerium/bridge/AeriumUi.java",
