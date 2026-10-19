@@ -8,10 +8,10 @@ Subject: [PATCH] Run Manifest V2 extensions
  chrome/common/extensions/api/_manifest_features.json       | 2 +-
  chrome/common/extensions/api/api_sources.gni               | 7 ++-----
  .../browser/api/webstore_private/webstore_private_api.cc   | 4 +++-
- extensions/browser/manifest_v2_handler.cc                  | 5 ++++-
+ extensions/browser/manifest_v2_handler.cc                  | 4 +++-
  extensions/common/extension_features.cc                    | 2 ++
  extensions/common/extension_features.h                     | 2 ++
- 7 files changed, 15 insertions(+), 8 deletions(-)
+ 7 files changed, 14 insertions(+), 8 deletions(-)
 
 diff --git a/chrome/common/extensions/api/_api_features.json b/chrome/common/extensions/api/_api_features.json
 index 4255410af88106db0aa7cd9c1f55577e243595e2..5ea285475600c3246f5d6317ba3eedf098150334 100644
@@ -82,7 +82,7 @@ index ad5ac45ba49b5fcd3fe313c28fcc3c536b4825ea..17d20ff287fa754d7094d3f3259eb02f
  
  #if !BUILDFLAG(IS_ANDROID)
 diff --git a/extensions/browser/manifest_v2_handler.cc b/extensions/browser/manifest_v2_handler.cc
-index 5841d3dfbc88884916629485c70b7c2671a6bc6b..141dbf6e2d5ae1cfa8e51f157b4e26310f239244 100644
+index 5841d3dfbc88884916629485c70b7c2671a6bc6b..631c3c0430275fd28be5b6966f4c6494354e91d2 100644
 --- a/extensions/browser/manifest_v2_handler.cc
 +++ b/extensions/browser/manifest_v2_handler.cc
 @@ -5,6 +5,7 @@
@@ -101,13 +101,12 @@ index 5841d3dfbc88884916629485c70b7c2671a6bc6b..141dbf6e2d5ae1cfa8e51f157b4e2631
  
  static_assert(BUILDFLAG(ENABLE_EXTENSIONS_CORE));
  
-@@ -114,7 +116,8 @@ bool ShouldDisableLegacyExtensions() {
+@@ -114,7 +116,7 @@ bool ShouldDisableLegacyExtensions() {
      return false;
    }
  
 -  return true;
-+  return !base::FeatureList::IsEnabled(
-+      extensions_features::kAeriumManifestV2);
++  return !base::FeatureList::IsEnabled(extensions_features::kAeriumManifestV2);
  }
  
  }  // namespace

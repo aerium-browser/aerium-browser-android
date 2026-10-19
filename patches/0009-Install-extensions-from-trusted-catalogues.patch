@@ -4,11 +4,11 @@ Date: Thu, 1 Jan 2026 00:00:00 +0000
 Subject: [PATCH] Install extensions from trusted catalogues
 
 ---
- chrome/browser/download/download_crx_util.cc | 29 ++++++++++++++++++++
- 1 file changed, 29 insertions(+)
+ chrome/browser/download/download_crx_util.cc | 30 +++++++++++++++++++-
+ 1 file changed, 29 insertions(+), 1 deletion(-)
 
 diff --git a/chrome/browser/download/download_crx_util.cc b/chrome/browser/download/download_crx_util.cc
-index 77e32a025e1086f24fa2c7549438ecdb9f7019f5..4fd0af1ce93784f08faec62a679755713d09630c 100644
+index 77e32a025e1086f24fa2c7549438ecdb9f7019f5..dab7642c0cec613f558e639a258f5218fc76c31c 100644
 --- a/chrome/browser/download/download_crx_util.cc
 +++ b/chrome/browser/download/download_crx_util.cc
 @@ -7,6 +7,8 @@
@@ -63,11 +63,12 @@ index 77e32a025e1086f24fa2c7549438ecdb9f7019f5..4fd0af1ce93784f08faec62a67975571
  // Hold a mock ExtensionInstallPrompt object that will be used when the
  // download system opens a CRX.
  ExtensionInstallPrompt* mock_install_prompt_for_testing = nullptr;
-@@ -91,6 +119,7 @@ std::unique_ptr<ExtensionInstallPrompt> CreateExtensionInstallPrompt(
+@@ -90,7 +118,7 @@ std::unique_ptr<ExtensionInstallPrompt> CreateExtensionInstallPrompt(
+ }  // namespace
  
  bool OffStoreInstallAllowedByPrefs(Profile* profile, const DownloadItem& item) {
-   return g_allow_offstore_install_for_testing ||
-+         IsFromTrustedCatalogue(item) ||
+-  return g_allow_offstore_install_for_testing ||
++  return g_allow_offstore_install_for_testing || IsFromTrustedCatalogue(item) ||
           extensions::ExtensionManagementFactory::GetForBrowserContext(profile)
               ->IsOffstoreInstallAllowed(item.GetURL(), item.GetReferrerUrl());
  }

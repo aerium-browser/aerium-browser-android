@@ -5,8 +5,8 @@ Subject: [PATCH] Reduce client hints and report a steady battery
 
 ---
  .../embedder_support/user_agent_utils.cc      | 22 +++++++++++++++++++
- .../modules/battery/battery_dispatcher.cc     | 12 +++++-----
- 2 files changed, 28 insertions(+), 6 deletions(-)
+ .../modules/battery/battery_dispatcher.cc     | 11 +++++-----
+ 2 files changed, 27 insertions(+), 6 deletions(-)
 
 diff --git a/components/embedder_support/user_agent_utils.cc b/components/embedder_support/user_agent_utils.cc
 index 5d96c604058070930d59de9b0d672cbdb6d32439..d9fe81dd3cffa96a52e937ce7aa93dfa9f3e1a7d 100644
@@ -56,7 +56,7 @@ index 5d96c604058070930d59de9b0d672cbdb6d32439..d9fe81dd3cffa96a52e937ce7aa93dfa
  }
  
 diff --git a/third_party/blink/renderer/modules/battery/battery_dispatcher.cc b/third_party/blink/renderer/modules/battery/battery_dispatcher.cc
-index 86be964c0119d0ea052453b46a3eaea7957fe7eb..8df7aa83b456541c0051e78704051dcc2bfe2087 100644
+index 86be964c0119d0ea052453b46a3eaea7957fe7eb..c442d511bd51304b6b6f08a2aa8af22e3a7690a1 100644
 --- a/third_party/blink/renderer/modules/battery/battery_dispatcher.cc
 +++ b/third_party/blink/renderer/modules/battery/battery_dispatcher.cc
 @@ -4,6 +4,8 @@
@@ -68,7 +68,7 @@ index 86be964c0119d0ea052453b46a3eaea7957fe7eb..8df7aa83b456541c0051e78704051dcc
  #include "services/device/public/mojom/battery_status.mojom-blink.h"
  #include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
  #include "third_party/blink/public/platform/platform.h"
-@@ -43,12 +45,10 @@ void BatteryDispatcher::UpdateBatteryStatus(
+@@ -43,12 +45,9 @@ void BatteryDispatcher::UpdateBatteryStatus(
  }
  
  void BatteryDispatcher::StartListening(LocalDOMWindow* window) {
@@ -79,9 +79,8 @@ index 86be964c0119d0ea052453b46a3eaea7957fe7eb..8df7aa83b456541c0051e78704051dcc
 -          window->GetTaskRunner(TaskType::kMiscPlatformAPI)));
 -  QueryNextStatus();
 +  window->GetTaskRunner(TaskType::kMiscPlatformAPI)
-+      ->PostTask(FROM_HERE,
-+                 BindOnce(&BatteryDispatcher::UpdateBatteryStatus,
-+                          WrapPersistent(this), BatteryStatus()));
++      ->PostTask(FROM_HERE, BindOnce(&BatteryDispatcher::UpdateBatteryStatus,
++                                     WrapPersistent(this), BatteryStatus()));
  }
  
  void BatteryDispatcher::StopListening() {

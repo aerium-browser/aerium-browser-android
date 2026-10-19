@@ -116,17 +116,17 @@ index f93d02b8024ee7348ca8a975d813be0408e1def7..bc999401e55cff9052123a19f1e8832b
    // Our consumer should have made sure that this is a safe referrer (e.g. via
    // URLRequestJob::ComputeReferrerForPolicy).
 diff --git a/net/url_request/url_request_job.cc b/net/url_request/url_request_job.cc
-index ebc70925cb064e29c6258f8b6b1a085b55b1133d..0b7569a97322671bd2ee599d3aa7aa42db25fc21 100644
+index ebc70925cb064e29c6258f8b6b1a085b55b1133d..908730667ea539d12789cb3430d649d7b2969263 100644
 --- a/net/url_request/url_request_job.cc
 +++ b/net/url_request/url_request_job.cc
-@@ -20,6 +20,7 @@
- #include "base/values.h"
- #include "net/base/auth.h"
- #include "net/base/features.h"
+@@ -42,6 +42,7 @@
+ #include "net/url_request/redirect_info.h"
+ #include "net/url_request/redirect_util.h"
+ #include "net/url_request/url_request_context.h"
 +#include "url/origin.h"
- #include "net/base/io_buffer.h"
- #include "net/base/load_flags.h"
- #include "net/base/load_states.h"
+ 
+ namespace net {
+ 
 @@ -312,6 +313,26 @@ GURL MaybeStripToOrigin(GURL url, bool should_strip_to_origin) {
  }  // namespace
  

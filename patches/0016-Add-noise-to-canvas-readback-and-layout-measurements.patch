@@ -6,13 +6,13 @@ Subject: [PATCH] Add noise to canvas readback and layout measurements
 ---
  .../blink/renderer/core/dom/element.cc        |   7 +-
  third_party/blink/renderer/core/dom/range.cc  |   6 +-
- .../renderer/core/html/canvas/text_metrics.cc |   5 +
+ .../renderer/core/html/canvas/text_metrics.cc |   6 +
  .../canvas2d/base_rendering_context_2d.cc     |   4 +
  third_party/blink/renderer/platform/BUILD.gn  |   2 +
  .../platform/graphics/fingerprint_noise.cc    | 107 ++++++++++++++++++
  .../platform/graphics/fingerprint_noise.h     |  32 ++++++
  .../platform/graphics/image_data_buffer.cc    |  11 +-
- 8 files changed, 170 insertions(+), 4 deletions(-)
+ 8 files changed, 171 insertions(+), 4 deletions(-)
  create mode 100644 third_party/blink/renderer/platform/graphics/fingerprint_noise.cc
  create mode 100644 third_party/blink/renderer/platform/graphics/fingerprint_noise.h
 
@@ -80,7 +80,7 @@ index fcea0d96675b5f7b3ae3ff4a859b62b32ae21b3e..34ebab60a8c925d7dbb89bb578c2f326
  
  // TODO(editing-dev): We should make
 diff --git a/third_party/blink/renderer/core/html/canvas/text_metrics.cc b/third_party/blink/renderer/core/html/canvas/text_metrics.cc
-index a78150b4a695b8a78a2d5462414a72f41693c1c8..d630c0808bf00b5b21ab58c74153fe0b7b8a24ee 100644
+index a78150b4a695b8a78a2d5462414a72f41693c1c8..995860e67e11e7dccfbeb57697793d4d762d0b17 100644
 --- a/third_party/blink/renderer/core/html/canvas/text_metrics.cc
 +++ b/third_party/blink/renderer/core/html/canvas/text_metrics.cc
 @@ -21,6 +21,7 @@
@@ -91,12 +91,13 @@ index a78150b4a695b8a78a2d5462414a72f41693c1c8..d630c0808bf00b5b21ab58c74153fe0b
  #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
  #include "third_party/blink/renderer/platform/text/text_direction.h"
  #include "third_party/blink/renderer/platform/text/text_run.h"
-@@ -127,6 +128,10 @@ void TextMetrics::Update(const Font* font,
+@@ -127,6 +128,11 @@ void TextMetrics::Update(const Font* font,
    ctx_text_baseline_ = baseline;
    actual_bounding_box_left_ = -glyph_bounds.x() + text_align_dx_;
    actual_bounding_box_right_ = glyph_bounds.right() - text_align_dx_;
 +  width_ = FingerprintNoise::Scale(width_);
-+  actual_bounding_box_left_ = FingerprintNoise::Scale(actual_bounding_box_left_);
++  actual_bounding_box_left_ =
++      FingerprintNoise::Scale(actual_bounding_box_left_);
 +  actual_bounding_box_right_ =
 +      FingerprintNoise::Scale(actual_bounding_box_right_);
  
@@ -139,7 +140,7 @@ index 94334c1ce13473f4e2ba295f288bcc9564093f32..80e025b43da63498aecb6799601a99f0
      "graphics/flush_reason.h",
 diff --git a/third_party/blink/renderer/platform/graphics/fingerprint_noise.cc b/third_party/blink/renderer/platform/graphics/fingerprint_noise.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..c3c20ff869d8f407e3ecad76adbd03c44428cfc7
+index 0000000000000000000000000000000000000000..a32032a12d118ce0c30a2f00b4afd4f4f250b2a5
 --- /dev/null
 +++ b/third_party/blink/renderer/platform/graphics/fingerprint_noise.cc
 @@ -0,0 +1,107 @@
@@ -200,8 +201,8 @@ index 0000000000000000000000000000000000000000..c3c20ff869d8f407e3ecad76adbd03c4
 +  const uint64_t key = SessionKey();
 +  for (int y = 0; y < pixmap.height(); ++y) {
 +    for (int x = 0; x < pixmap.width(); ++x) {
-+      const size_t offset = static_cast<size_t>(y) * row_bytes +
-+                            static_cast<size_t>(x) * 4;
++      const size_t offset =
++          static_cast<size_t>(y) * row_bytes + static_cast<size_t>(x) * 4;
 +      if (bytes[offset + 3] != 0xff) {
 +        continue;
 +      }

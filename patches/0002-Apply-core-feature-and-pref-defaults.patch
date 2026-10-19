@@ -29,17 +29,17 @@ index 90e572fe4efe1baa00ca8218dbcb3a5d0ad36ddb..02e4f7e5bb847c8325151fec1ce08f53
    SetupInitialPrefs();
    SetUpFieldTrials();
 diff --git a/chrome/browser/prefs/browser_prefs.cc b/chrome/browser/prefs/browser_prefs.cc
-index 2653e37becbfa113d92456139d86c321f09ed8b5..61e61e05fb92fa2bb34fe59bcee676dec27e5bfd 100644
+index 2653e37becbfa113d92456139d86c321f09ed8b5..9bbf85dff6f568fcd66beb9fdd7e59163ed243c4 100644
 --- a/chrome/browser/prefs/browser_prefs.cc
 +++ b/chrome/browser/prefs/browser_prefs.cc
-@@ -10,6 +10,7 @@
+@@ -9,6 +9,7 @@
+ #include <string>
  #include <string_view>
  
- #include "ash/constants/ash_login_pref_names.h"
 +#include "aerium/defaults/aerium_defaults.h"
+ #include "ash/constants/ash_login_pref_names.h"
  #include "base/files/file_path.h"
  #include "base/files/file_util.h"
- #include "base/json/values_util.h"
 @@ -1738,6 +1739,8 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
        policy::policy_prefs::kLocalNetworkAccessPermissionsPolicyDefaultEnabled,
        false);
