@@ -140,7 +140,8 @@ void ApplyFeatureDefaults(base::CommandLine* command_line) {
   CollectNames(enabled, &taken);
   CollectNames(disabled, &taken);
   std::vector<std::string> on(std::begin(kFeaturesOn), std::end(kFeaturesOn));
-  std::vector<std::string> off(std::begin(kFeaturesOff), std::end(kFeaturesOff));
+  std::vector<std::string> off(std::begin(kFeaturesOff),
+                               std::end(kFeaturesOff));
   const std::string referrer_mode =
       command_line->GetSwitchValueASCII(kCrossOriginReferrerSwitch);
   if (referrer_mode == "1" || referrer_mode == "2") {
@@ -164,7 +165,8 @@ void RegisterProfileDefaults(user_prefs::PrefRegistrySyncable* registry) {
              base::Value(static_cast<int>(
                  prefetch::NetworkPredictionOptions::kDisabled)));
   SetDefault(registry, prefs::kEnableHyperlinkAuditing, base::Value(false));
-  SetDefault(registry, prefs::kViewSourceLineWrappingEnabled, base::Value(true));
+  SetDefault(registry, prefs::kViewSourceLineWrappingEnabled,
+             base::Value(true));
   SetDefault(registry, prefs::kEnableDoNotTrack, base::Value(true));
   SetDefault(registry, prefs::kHttpsOnlyModeEnabled, base::Value(true));
   SetDefault(registry, prefs::kHttpsFirstBalancedMode, base::Value(true));
