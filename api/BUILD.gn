@@ -28,6 +28,8 @@ android_library("api_java") {
     "java/src/io/dioide/aerium/api/ThemeTokens.java",
     "java/src/io/dioide/aerium/api/ToolbarSpec.java",
     "java/src/io/dioide/aerium/api/UiProvider.java",
+    "java/src/io/dioide/aerium/api/WebAppInfo.java",
+    "java/src/io/dioide/aerium/api/WebAppsApi.java",
   ]
   deps = [ "//third_party/androidx:androidx_annotation_annotation_java" ]
 }

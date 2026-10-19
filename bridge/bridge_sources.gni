@@ -21,4 +21,5 @@ aerium_bridge_java_sources = [
   "//aerium/bridge/java/src/io/dioide/aerium/bridge/SurfaceDialog.java",
   "//aerium/bridge/java/src/io/dioide/aerium/bridge/SurfaceFragment.java",
   "//aerium/bridge/java/src/io/dioide/aerium/bridge/TabsImpl.java",
+  "//aerium/bridge/java/src/io/dioide/aerium/bridge/WebAppsImpl.java",
 ]

@@ -12,6 +12,7 @@ import io.dioide.aerium.api.PrefsApi;
 import io.dioide.aerium.api.SettingsApi;
 import io.dioide.aerium.api.SitesApi;
 import io.dioide.aerium.api.TabsApi;
+import io.dioide.aerium.api.WebAppsApi;
 
 final class CoreImpl implements AeriumCore {
     private final SettingsApi mSettings = new SettingsImpl();
@@ -22,6 +23,7 @@ final class CoreImpl implements AeriumCore {
     private final SitesApi mSites = new SitesImpl();
     private final PrefsApi mPrefs = new PrefsImpl();
     private final ActionsApi mActions = new ActionsImpl();
+    private final WebAppsApi mWebApps = new WebAppsImpl();
 
     @Override
     public int apiVersion() {
@@ -66,5 +68,10 @@ final class CoreImpl implements AeriumCore {
     @Override
     public ActionsApi actions() {
         return mActions;
+    }
+
+    @Override
+    public WebAppsApi webApps() {
+        return mWebApps;
     }
 }

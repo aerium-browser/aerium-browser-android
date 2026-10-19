@@ -1,0 +1,38 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: fatih-gh <me@mehmetfatihyaman.me>
+Date: Thu, 1 Jan 2026 00:00:00 +0000
+Subject: [PATCH] List and remove installed web apps
+
+---
+ .../chrome/browser/webapps/WebappRegistry.java | 18 ++++++++++++++++++
+ 1 file changed, 18 insertions(+)
+
+diff --git a/chrome/android/java/src/org/chromium/chrome/browser/webapps/WebappRegistry.java b/chrome/android/java/src/org/chromium/chrome/browser/webapps/WebappRegistry.java
+index 0fc9f4a3d752b0be1e7b280b109ec5758499aedd..654aa1903682e50fff809735adfa411176973c35 100644
+--- a/chrome/android/java/src/org/chromium/chrome/browser/webapps/WebappRegistry.java
++++ b/chrome/android/java/src/org/chromium/chrome/browser/webapps/WebappRegistry.java
+@@ -291,6 +291,24 @@ public class WebappRegistry {
+         return bestMatch;
+     }
+ 
++    public List<WebappDataStorage> getInstalledWebapps() {
++        List<WebappDataStorage> webapps = new ArrayList<>();
++        for (WebappDataStorage storage : mStorages.values()) {
++            if (!storage.getId().startsWith(WebApkConstants.WEBAPK_ID_PREFIX)) {
++                webapps.add(storage);
++            }
++        }
++        return webapps;
++    }
++
++    public void removeWebapp(String id) {
++        WebappDataStorage storage = mStorages.remove(id);
++        if (storage == null) return;
++        storage.delete();
++        mPreferences.edit().putStringSet(KEY_WEBAPP_SET, mStorages.keySet()).apply();
++        notifyOriginsWithInstalledAppChanged();
++    }
++
+     /**
+      * Returns a string representation of the WebAPK scope URL, or the empty string if the storage
+      * is not for a WebAPK.

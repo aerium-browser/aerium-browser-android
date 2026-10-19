@@ -23,4 +23,6 @@ public interface AeriumCore {
     PrefsApi prefs();
 
     ActionsApi actions();
+
+    WebAppsApi webApps();
 }

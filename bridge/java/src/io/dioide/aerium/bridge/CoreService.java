@@ -14,6 +14,7 @@ import io.dioide.aerium.api.PrefsApi;
 import io.dioide.aerium.api.SettingsApi;
 import io.dioide.aerium.api.SitesApi;
 import io.dioide.aerium.api.TabsApi;
+import io.dioide.aerium.api.WebAppsApi;
 
 @ServiceImpl(AeriumCore.class)
 public class CoreService implements AeriumCore {
@@ -62,5 +63,10 @@ public class CoreService implements AeriumCore {
     @Override
     public ActionsApi actions() {
         return mCore.actions();
+    }
+
+    @Override
+    public WebAppsApi webApps() {
+        return mCore.webApps();
     }
 }
