@@ -1,0 +1,56 @@
+# Copyright 2026 Dioide
+# SPDX-License-Identifier: GPL-3.0-only
+
+name: upstream-watch
+
+on:
+  schedule:
+    - cron: '17 7 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: upstream-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Compare chromium.pin with the newest Android stable
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          PINNED=$(tr -d '[:space:]' < chromium.pin)
+          LATEST=$(curl -fsSL 'https://chromiumdash.appspot.com/fetch_releases?channel=Stable&platform=Android&num=1' \
+            | jq -r '.[0].version')
+          echo "Pinned $PINNED, newest Android stable $LATEST"
+          case "$LATEST" in
+            ''|null|*[!0-9.]*) echo "Could not read the newest version."; exit 1 ;;
+          esac
+          if [ "$(printf '%s\n%s\n' "$PINNED" "$LATEST" | sort -V | tail -n1)" = "$PINNED" ]; then
+            echo "Up to date."
+            exit 0
+          fi
+          TITLE="Chromium $LATEST is out"
+          if gh issue list -R "$REPO" --state all --search "\"$TITLE\" in:title" --json title \
+              -q '.[].title' | grep -qxF "$TITLE"; then
+            echo "An issue for $LATEST already exists."
+            exit 0
+          fi
+          gh label create upstream -R "$REPO" --color 2A4485 --description "New Chromium release" 2>/dev/null || true
+          {
+            echo "Android stable moved from $PINNED to $LATEST."
+            echo
+            echo "To update, set \`chromium.pin\` to $LATEST, regenerate the patch series against it and run the Build workflow."
+            echo
+            echo "Release notes: https://chromereleases.googleblog.com/"
+          } > body.md
+          gh issue create -R "$REPO" --title "$TITLE" --label upstream --body-file body.md

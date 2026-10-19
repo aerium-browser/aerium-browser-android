@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
 name: Build
-run-name: ${{ inputs.flavor == 'full' && 'Full build' || '' }}
+run-name: ${{ inputs.flavor == 'full' && (inputs.arch == 'x64' && 'Full build x64' || 'Full build') || (inputs.arch == 'x64' && 'Build x64' || '') }}
 
 on:
   push:
@@ -16,6 +16,7 @@ on:
       - '.github/workflows/triage.yml'
       - '.github/workflows/auto-resume.yml'
       - '.github/workflows/publish.yml'
+      - '.github/workflows/upstream-watch.yml'
       - '.github/triage-rules.js'
   workflow_dispatch:
     inputs:
@@ -36,6 +37,13 @@ on:
           - core
           - full
         default: core
+      arch:
+        description: 'arm64 for phones, x64 for emulators and Chromebooks'
+        type: choice
+        options:
+          - arm64
+          - x64
+        default: arm64
 
 permissions:
   contents: read
@@ -48,7 +56,7 @@ env:
   AERIUM_CHECKPOINT_KEY: ${{ inputs.flavor == 'full' && secrets.AERIUM_CHECKPOINT_KEY || '' }}
 
 concurrency:
-  group: ${{ inputs.flavor || 'core' }}-build-${{ github.ref }}
+  group: ${{ inputs.flavor || 'core' }}-${{ inputs.arch || 'arm64' }}-build-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'push' }}
 
 jobs:
@@ -77,6 +85,7 @@ jobs:
           finished: 'false'
           from_artifact: ${{ inputs.fresh == true && 'never' || 'auto' }}
           restore_run_id: ${{ inputs.resume_run_id || '' }}
+          arch: ${{ inputs.arch || 'arm64' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
@@ -109,6 +118,7 @@ jobs:
           finished: ${{ needs.build-1.outputs.finished }}
           from_artifact: 'auto'
           restore_run_id: ${{ inputs.resume_run_id || '' }}
+          arch: ${{ inputs.arch || 'arm64' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
@@ -141,6 +151,7 @@ jobs:
           finished: ${{ needs.build-2.outputs.finished }}
           from_artifact: 'auto'
           restore_run_id: ${{ inputs.resume_run_id || '' }}
+          arch: ${{ inputs.arch || 'arm64' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
@@ -173,6 +184,7 @@ jobs:
           finished: ${{ needs.build-3.outputs.finished }}
           from_artifact: 'auto'
           restore_run_id: ${{ inputs.resume_run_id || '' }}
+          arch: ${{ inputs.arch || 'arm64' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
@@ -205,6 +217,7 @@ jobs:
           finished: ${{ needs.build-4.outputs.finished }}
           from_artifact: 'auto'
           restore_run_id: ${{ inputs.resume_run_id || '' }}
+          arch: ${{ inputs.arch || 'arm64' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
@@ -237,6 +250,7 @@ jobs:
           finished: ${{ needs.build-5.outputs.finished }}
           from_artifact: 'auto'
           restore_run_id: ${{ inputs.resume_run_id || '' }}
+          arch: ${{ inputs.arch || 'arm64' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
@@ -269,6 +283,7 @@ jobs:
           finished: ${{ needs.build-6.outputs.finished }}
           from_artifact: 'auto'
           restore_run_id: ${{ inputs.resume_run_id || '' }}
+          arch: ${{ inputs.arch || 'arm64' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
@@ -301,6 +316,7 @@ jobs:
           finished: ${{ needs.build-7.outputs.finished }}
           from_artifact: 'auto'
           restore_run_id: ${{ inputs.resume_run_id || '' }}
+          arch: ${{ inputs.arch || 'arm64' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
@@ -333,6 +349,7 @@ jobs:
           finished: ${{ needs.build-8.outputs.finished }}
           from_artifact: 'auto'
           restore_run_id: ${{ inputs.resume_run_id || '' }}
+          arch: ${{ inputs.arch || 'arm64' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
@@ -365,6 +382,7 @@ jobs:
           finished: ${{ needs.build-9.outputs.finished }}
           from_artifact: 'auto'
           restore_run_id: ${{ inputs.resume_run_id || '' }}
+          arch: ${{ inputs.arch || 'arm64' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
@@ -397,6 +415,7 @@ jobs:
           finished: ${{ needs.build-10.outputs.finished }}
           from_artifact: 'auto'
           restore_run_id: ${{ inputs.resume_run_id || '' }}
+          arch: ${{ inputs.arch || 'arm64' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
@@ -429,6 +448,7 @@ jobs:
           finished: ${{ needs.build-11.outputs.finished }}
           from_artifact: 'auto'
           restore_run_id: ${{ inputs.resume_run_id || '' }}
+          arch: ${{ inputs.arch || 'arm64' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
@@ -461,6 +481,7 @@ jobs:
           finished: ${{ needs.build-12.outputs.finished }}
           from_artifact: 'auto'
           restore_run_id: ${{ inputs.resume_run_id || '' }}
+          arch: ${{ inputs.arch || 'arm64' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
@@ -493,6 +514,7 @@ jobs:
           finished: ${{ needs.build-13.outputs.finished }}
           from_artifact: 'auto'
           restore_run_id: ${{ inputs.resume_run_id || '' }}
+          arch: ${{ inputs.arch || 'arm64' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
@@ -525,6 +547,7 @@ jobs:
           finished: ${{ needs.build-14.outputs.finished }}
           from_artifact: 'auto'
           restore_run_id: ${{ inputs.resume_run_id || '' }}
+          arch: ${{ inputs.arch || 'arm64' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
@@ -557,6 +580,7 @@ jobs:
           finished: ${{ needs.build-15.outputs.finished }}
           from_artifact: 'auto'
           restore_run_id: ${{ inputs.resume_run_id || '' }}
+          arch: ${{ inputs.arch || 'arm64' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
@@ -589,6 +613,7 @@ jobs:
           finished: ${{ needs.build-16.outputs.finished }}
           from_artifact: 'auto'
           restore_run_id: ${{ inputs.resume_run_id || '' }}
+          arch: ${{ inputs.arch || 'arm64' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
@@ -621,6 +646,7 @@ jobs:
           finished: ${{ needs.build-17.outputs.finished }}
           from_artifact: 'auto'
           restore_run_id: ${{ inputs.resume_run_id || '' }}
+          arch: ${{ inputs.arch || 'arm64' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
@@ -653,6 +679,7 @@ jobs:
           finished: ${{ needs.build-18.outputs.finished }}
           from_artifact: 'auto'
           restore_run_id: ${{ inputs.resume_run_id || '' }}
+          arch: ${{ inputs.arch || 'arm64' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
@@ -685,6 +712,7 @@ jobs:
           finished: ${{ needs.build-19.outputs.finished }}
           from_artifact: 'auto'
           restore_run_id: ${{ inputs.resume_run_id || '' }}
+          arch: ${{ inputs.arch || 'arm64' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
@@ -717,6 +745,7 @@ jobs:
           finished: ${{ needs.build-20.outputs.finished }}
           from_artifact: 'auto'
           restore_run_id: ${{ inputs.resume_run_id || '' }}
+          arch: ${{ inputs.arch || 'arm64' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
@@ -749,6 +778,7 @@ jobs:
           finished: ${{ needs.build-21.outputs.finished }}
           from_artifact: 'auto'
           restore_run_id: ${{ inputs.resume_run_id || '' }}
+          arch: ${{ inputs.arch || 'arm64' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
@@ -781,6 +811,7 @@ jobs:
           finished: ${{ needs.build-22.outputs.finished }}
           from_artifact: 'auto'
           restore_run_id: ${{ inputs.resume_run_id || '' }}
+          arch: ${{ inputs.arch || 'arm64' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
@@ -813,6 +844,7 @@ jobs:
           finished: ${{ needs.build-23.outputs.finished }}
           from_artifact: 'auto'
           restore_run_id: ${{ inputs.resume_run_id || '' }}
+          arch: ${{ inputs.arch || 'arm64' }}
         env:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
@@ -829,7 +861,7 @@ jobs:
             exit 1
           fi
           if [ "${{ env.AERIUM_FLAVOR }}" = full ]; then
-            echo "Full build finished. The APK is in the aerium-full-arm64 artifact."
+            echo "Full build finished. The APK is in the aerium-full-${{ inputs.arch || 'arm64' }} artifact."
           else
-            echo "Core build finished. The APK is in the aerium-android-arm64 artifact."
+            echo "Core build finished. The APK is in the aerium-android-${{ inputs.arch || 'arm64' }} artifact."
           fi
