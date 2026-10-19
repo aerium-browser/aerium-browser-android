@@ -1,0 +1,93 @@
+# Copyright 2026 Dioide
+# SPDX-License-Identifier: GPL-3.0-only
+
+name: Publish
+
+on:
+  workflow_run:
+    workflows: ['Build']
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Full build run to publish'
+        type: string
+        required: true
+
+permissions:
+  contents: write
+  actions: read
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.display_title == 'Full build')
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Find the build
+        id: run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.run_id || github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          info=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID")
+          title=$(jq -r '.display_title' <<<"$info")
+          conclusion=$(jq -r '.conclusion' <<<"$info")
+          if [ "$title" != "Full build" ] || [ "$conclusion" != "success" ]; then
+            echo "Run $RUN_ID is a $title that ended in $conclusion, nothing to publish."
+            exit 1
+          fi
+          echo "id=$RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "number=$(jq -r '.run_number' <<<"$info")" >> "$GITHUB_OUTPUT"
+          echo "sha=$(jq -r '.head_sha' <<<"$info")" >> "$GITHUB_OUTPUT"
+
+      - name: Download the APK
+        uses: actions/download-artifact@v5
+        with:
+          name: aerium-full-arm64
+          path: release
+          run-id: ${{ steps.run.outputs.id }}
+          github-token: ${{ github.token }}
+
+      - name: Resolve version
+        id: ver
+        run: |
+          set -euo pipefail
+          V="$(tr -d '[:space:]' < release/version.txt)"
+          ls release/aerium-"$V"-arm64-v8a.apk
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+
+      - name: Compute checksum
+        run: |
+          set -euo pipefail
+          cd release
+          sha256sum aerium-*-arm64-v8a.apk > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Record build provenance
+        uses: actions/attest-build-provenance@v2
+        continue-on-error: true
+        with:
+          subject-path: release/aerium-*-arm64-v8a.apk
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          token: ${{ secrets.RELEASE_TOKEN || github.token }}
+          tag_name: v${{ steps.ver.outputs.version }}-b${{ steps.run.outputs.number }}
+          target_commitish: ${{ steps.run.outputs.sha }}
+          name: Aerium ${{ steps.ver.outputs.version }} (arm64, build ${{ steps.run.outputs.number }})
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            release/aerium-*-arm64-v8a.apk
+            release/SHA256SUMS.txt

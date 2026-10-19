@@ -15,6 +15,7 @@ on:
       - '.github/ISSUE_TEMPLATE/**'
       - '.github/workflows/triage.yml'
       - '.github/workflows/auto-resume.yml'
+      - '.github/workflows/publish.yml'
       - '.github/triage-rules.js'
   workflow_dispatch:
     inputs:
