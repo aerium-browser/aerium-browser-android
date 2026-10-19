@@ -13,5 +13,6 @@ aerium_bridge_java_sources = [
   "//aerium/bridge/java/src/io/dioide/aerium/bridge/CoreImpl.java",
   "//aerium/bridge/java/src/io/dioide/aerium/bridge/NavigationImpl.java",
   "//aerium/bridge/java/src/io/dioide/aerium/bridge/SettingsImpl.java",
+  "//aerium/bridge/java/src/io/dioide/aerium/bridge/SurfaceFragment.java",
   "//aerium/bridge/java/src/io/dioide/aerium/bridge/TabsImpl.java",
 ]

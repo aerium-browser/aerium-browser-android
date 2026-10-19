@@ -1,0 +1,33 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: fatih-gh <me@mehmetfatihyaman.me>
+Date: Thu, 1 Jan 2026 00:00:00 +0000
+Subject: [PATCH] Host the Aerium settings surface
+
+---
+ .../chrome/browser/settings/SettingsActivity.java      | 10 +++++++++-
+ 1 file changed, 9 insertions(+), 1 deletion(-)
+
+diff --git a/chrome/android/java/src/org/chromium/chrome/browser/settings/SettingsActivity.java b/chrome/android/java/src/org/chromium/chrome/browser/settings/SettingsActivity.java
+index 3b122d77bea21c69b941e90728a9de1d83960152..3adf2ac5839c75bf819583c6d9533cf0f3c3a047 100644
+--- a/chrome/android/java/src/org/chromium/chrome/browser/settings/SettingsActivity.java
++++ b/chrome/android/java/src/org/chromium/chrome/browser/settings/SettingsActivity.java
+@@ -562,10 +562,18 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
+ 
+     private Fragment instantiateMainFragment(Intent intent) {
+         String fragmentName = intent.getStringExtra(EXTRA_SHOW_FRAGMENT);
++        Bundle arguments = intent.getBundleExtra(EXTRA_SHOW_FRAGMENT_ARGUMENTS);
++        if (fragmentName == null
++                && io.dioide.aerium.bridge.AeriumUi.surface(io.dioide.aerium.api.Slot.SETTINGS)
++                        != null) {
++            fragmentName = io.dioide.aerium.bridge.SurfaceFragment.class.getName();
++            arguments =
++                    io.dioide.aerium.bridge.SurfaceFragment.arguments(
++                            io.dioide.aerium.api.Slot.SETTINGS);
++        }
+         if (fragmentName == null) {
+             fragmentName = MainSettings.class.getName();
+         }
+-        Bundle arguments = intent.getBundleExtra(EXTRA_SHOW_FRAGMENT_ARGUMENTS);
+ 
+         return Fragment.instantiate(this, fragmentName, arguments);
+     }
