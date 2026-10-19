@@ -10,9 +10,18 @@ public interface BrowsingDataApi {
         HISTORY,
         SITE_DATA,
         CACHE,
-        DOWNLOADS,
-        FORM_DATA
+        FORM_DATA,
+        SITE_SETTINGS
     }
 
-    void clear(Set<Kind> kinds, boolean keepRuledSites, Runnable done);
+    enum Period {
+        LAST_15_MINUTES,
+        LAST_HOUR,
+        LAST_DAY,
+        LAST_WEEK,
+        FOUR_WEEKS,
+        ALL_TIME
+    }
+
+    void clear(Set<Kind> kinds, Period period, Set<String> keepDomains, Runnable done);
 }

@@ -9,4 +9,10 @@ public interface AeriumCore {
     int apiVersion();
 
     SettingsApi settings();
+
+    TabsApi tabs();
+
+    NavigationApi navigation();
+
+    BrowsingDataApi browsingData();
 }

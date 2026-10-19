@@ -9,6 +9,9 @@ aerium_bridge_java_sources = [
   "//aerium/bridge/java/src/io/dioide/aerium/bridge/Aerium.java",
   "//aerium/bridge/java/src/io/dioide/aerium/bridge/AeriumPrefs.java",
   "//aerium/bridge/java/src/io/dioide/aerium/bridge/AeriumUi.java",
+  "//aerium/bridge/java/src/io/dioide/aerium/bridge/BrowsingDataImpl.java",
   "//aerium/bridge/java/src/io/dioide/aerium/bridge/CoreImpl.java",
+  "//aerium/bridge/java/src/io/dioide/aerium/bridge/NavigationImpl.java",
   "//aerium/bridge/java/src/io/dioide/aerium/bridge/SettingsImpl.java",
+  "//aerium/bridge/java/src/io/dioide/aerium/bridge/TabsImpl.java",
 ]
