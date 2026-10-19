@@ -1,0 +1,24 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: fatih-gh <me@mehmetfatihyaman.me>
+Date: Thu, 1 Jan 2026 00:00:00 +0000
+Subject: [PATCH] Host the Aerium new tab header
+
+---
+ .../java/src/org/chromium/chrome/browser/ntp/NewTabPage.java  | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/chrome/android/java/src/org/chromium/chrome/browser/ntp/NewTabPage.java b/chrome/android/java/src/org/chromium/chrome/browser/ntp/NewTabPage.java
+index 34e76fe0c4a0ab8ed374cf4b97bf044b5f349d13..db072c9323c0629fbbdcb49a2290cadadab052db 100644
+--- a/chrome/android/java/src/org/chromium/chrome/browser/ntp/NewTabPage.java
++++ b/chrome/android/java/src/org/chromium/chrome/browser/ntp/NewTabPage.java
+@@ -538,6 +538,10 @@ public class NewTabPage
+         // TODO(crbug.com/347509698): Remove the log statements after fixing the bug.
+         Log.d(TAG, "NewTabPageLayout inflate");
+         mNewTabPageLayout = (NewTabPageLayout) inflater.inflate(R.layout.new_tab_page_layout, null);
++        io.dioide.aerium.bridge.InlineSurface.insertBefore(
++                mNewTabPageLayout.findViewById(R.id.mv_tiles_layout_stub),
++                mTab,
++                io.dioide.aerium.api.Slot.NEW_TAB);
+         mNewTabPageCoordinator =
+                 new NewTabPageCoordinator(
+                         mNewTabPageManager,
