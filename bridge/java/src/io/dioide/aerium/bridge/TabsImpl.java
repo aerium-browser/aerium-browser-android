@@ -10,9 +10,11 @@ import androidx.annotation.Nullable;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.Callback;
 import org.chromium.chrome.browser.app.tabwindow.TabWindowManagerSingleton;
+import org.chromium.chrome.browser.desktop_site.DesktopSiteUtils;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabSelectionType;
+import org.chromium.chrome.browser.tab.TabUtils;
 import org.chromium.chrome.browser.tabmodel.TabClosureParams;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
@@ -44,6 +46,12 @@ final class TabsImpl implements TabsApi {
     public @Nullable TabInfo current() {
         TabModelSelector selector = selector();
         Tab tab = selector == null ? null : selector.getCurrentTab();
+        return tab == null ? null : info(tab);
+    }
+
+    @Override
+    public @Nullable TabInfo get(int tabId) {
+        Tab tab = tab(tabId);
         return tab == null ? null : info(tab);
     }
 
@@ -88,6 +96,15 @@ final class TabsImpl implements TabsApi {
     }
 
     @Override
+    public void setDesktopSite(int tabId, boolean desktopSite) {
+        Tab tab = tab(tabId);
+        if (tab == null || tab.getWebContents() == null) return;
+        DesktopSiteUtils.setRequestDesktopSiteContentSettingsForUrl(
+                tab.getProfile(), tab.getUrl(), desktopSite);
+        TabUtils.switchUserAgent(tab, desktopSite);
+    }
+
+    @Override
     public Subscription observe(TabsApi.Observer observer) {
         return new Watch(observer);
     }
@@ -122,7 +139,8 @@ final class TabsImpl implements TabsApi {
                 tab.isLoading(),
                 tab.getProgress(),
                 tab.canGoBack(),
-                tab.canGoForward());
+                tab.canGoForward(),
+                TabUtils.isUsingDesktopUserAgent(tab.getWebContents()));
     }
 
     private static final class Watch implements Subscription, TabWindowManager.Observer {

@@ -6,6 +6,9 @@ package io.dioide.aerium.api;
 import android.content.Context;
 import android.view.View;
 
+import androidx.annotation.Nullable;
+
 public interface SurfaceFactory {
+    @Nullable
     View create(Context context, SurfaceHost host);
 }

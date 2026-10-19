@@ -17,4 +17,8 @@ public interface AeriumCore {
     BrowsingDataApi browsingData();
 
     ExtensionsApi extensions();
+
+    SitesApi sites();
+
+    PrefsApi prefs();
 }

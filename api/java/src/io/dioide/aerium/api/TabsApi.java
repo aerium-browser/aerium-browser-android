@@ -13,6 +13,9 @@ public interface TabsApi {
     @Nullable
     TabInfo current();
 
+    @Nullable
+    TabInfo get(int tabId);
+
     int open(String url, OpenMode mode);
 
     void select(int tabId);
@@ -20,6 +23,8 @@ public interface TabsApi {
     void close(int tabId);
 
     void closeAll(boolean aerogel);
+
+    void setDesktopSite(int tabId, boolean desktopSite);
 
     Subscription observe(Observer observer);
 

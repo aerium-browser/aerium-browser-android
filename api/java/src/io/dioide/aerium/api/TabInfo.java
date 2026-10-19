@@ -12,6 +12,7 @@ public final class TabInfo {
     public final float progress;
     public final boolean canGoBack;
     public final boolean canGoForward;
+    public final boolean desktopSite;
 
     public TabInfo(
             int id,
@@ -21,7 +22,8 @@ public final class TabInfo {
             boolean loading,
             float progress,
             boolean canGoBack,
-            boolean canGoForward) {
+            boolean canGoForward,
+            boolean desktopSite) {
         this.id = id;
         this.url = url;
         this.title = title;
@@ -30,5 +32,6 @@ public final class TabInfo {
         this.progress = progress;
         this.canGoBack = canGoBack;
         this.canGoForward = canGoForward;
+        this.desktopSite = desktopSite;
     }
 }

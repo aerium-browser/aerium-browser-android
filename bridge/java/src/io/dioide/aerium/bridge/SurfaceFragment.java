@@ -3,6 +3,7 @@
 
 package io.dioide.aerium.bridge;
 
+import android.content.Context;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -13,6 +14,9 @@ import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
 import androidx.fragment.app.FragmentManager;
 
+import org.chromium.base.task.PostTask;
+import org.chromium.base.task.TaskTraits;
+import org.chromium.chrome.browser.settings.MainSettings;
 import org.chromium.chrome.browser.settings.SettingsNavigationFactory;
 
 import io.dioide.aerium.api.AeriumCore;
@@ -22,6 +26,11 @@ import io.dioide.aerium.api.SurfaceHost;
 
 public class SurfaceFragment extends Fragment implements SurfaceHost {
     private static final String SLOT = "aerium_slot";
+
+    public static void start(Context context, Slot slot) {
+        SettingsNavigationFactory.createSettingsNavigation()
+                .startSettings(context, SurfaceFragment.class, arguments(slot));
+    }
 
     public static Bundle arguments(Slot slot) {
         Bundle arguments = new Bundle();
@@ -35,13 +44,20 @@ public class SurfaceFragment extends Fragment implements SurfaceHost {
             @Nullable ViewGroup container,
             @Nullable Bundle savedInstanceState) {
         SurfaceFactory factory = AeriumUi.surface(slot());
-        if (factory == null) return new View(inflater.getContext());
-        return factory.create(inflater.getContext(), this);
+        View view = factory == null ? null : factory.create(inflater.getContext(), this);
+        if (view != null) return view;
+        PostTask.postTask(TaskTraits.UI_DEFAULT, this::showDefault);
+        return new View(inflater.getContext());
     }
 
     @Override
     public AeriumCore core() {
         return Aerium.core();
+    }
+
+    @Override
+    public int tabId() {
+        return NO_TAB;
     }
 
     @Override
@@ -58,8 +74,18 @@ public class SurfaceFragment extends Fragment implements SurfaceHost {
 
     @Override
     public void open(Slot slot) {
-        SettingsNavigationFactory.createSettingsNavigation()
-                .startSettings(requireContext(), SurfaceFragment.class, arguments(slot));
+        start(requireContext(), slot);
+    }
+
+    @Override
+    public void showDefault() {
+        Context context = getContext();
+        if (context == null) return;
+        if (slot() == Slot.SETTINGS) {
+            SettingsNavigationFactory.createSettingsNavigation()
+                    .startSettings(context, MainSettings.class);
+        }
+        close();
     }
 
     private Slot slot() {

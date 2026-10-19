@@ -1,0 +1,41 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: fatih-gh <me@mehmetfatihyaman.me>
+Date: Thu, 1 Jan 2026 00:00:00 +0000
+Subject: [PATCH] Host the Aerium site panel
+
+---
+ .../chrome/browser/page_info/ChromePageInfo.java   | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
+
+diff --git a/chrome/android/java/src/org/chromium/chrome/browser/page_info/ChromePageInfo.java b/chrome/android/java/src/org/chromium/chrome/browser/page_info/ChromePageInfo.java
+index 178bb7b17a950c307628c414011429fbc51c9f7a..6142afd6cbc4bd0dd0b5f6725e1ad681cce7909d 100644
+--- a/chrome/android/java/src/org/chromium/chrome/browser/page_info/ChromePageInfo.java
++++ b/chrome/android/java/src/org/chromium/chrome/browser/page_info/ChromePageInfo.java
+@@ -40,6 +40,7 @@ public class ChromePageInfo {
+     private final @Nullable Supplier<@Nullable EphemeralTabCoordinator>
+             mEphemeralTabCoordinatorSupplier;
+     private final @Nullable TabCreator mTabCreator;
++    private boolean mAeriumDefault;
+ 
+     /**
+      * @param modalDialogManagerSupplier Supplier of modal dialog manager.
+@@ -87,6 +88,19 @@ public class ChromePageInfo {
+         WebContents webContents = tab.getWebContents();
+         if (webContents == null || !ProfileManager.isInitialized()) return;
+ 
++        if (packageName == null
++                && !mAeriumDefault
++                && io.dioide.aerium.bridge.SurfaceDialog.show(
++                        tab,
++                        io.dioide.aerium.api.Slot.SITE_PANEL,
++                        () -> {
++                            mAeriumDefault = true;
++                            show(tab, pageInfoHighlight, null);
++                            mAeriumDefault = false;
++                        })) {
++            return;
++        }
++
+         BrowserControlsStateProvider stateProvider =
+                 BrowserControlsManagerSupplier.getValueOrNullFrom(
+                         webContents.getTopLevelNativeWindow());
