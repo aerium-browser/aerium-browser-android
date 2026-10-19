@@ -13,14 +13,6 @@ The core builds on Chromium. The files in patches/ change Chromium source
 files: Chromium's code keeps its BSD licence, and Aerium's changes are under
 the GPL above.
 
-EARLIER RELEASES
-
-Releases published before the core existed were built from earlier versions of
-this repository, which applied the GPL-2.0-only patch series of Vanadium
-(https://github.com/GrapheneOS/Vanadium) to Chromium. The complete source of
-every one of those releases stays available in this repository's history and
-in its release tags, under the licences it carried at the time.
-
 TRADEMARKS
 
 "Aerium", "Aerium Guard", the Aerium logo and every icon generated from it, and

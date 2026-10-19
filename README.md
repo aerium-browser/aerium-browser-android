@@ -11,6 +11,7 @@ uBlock Origin in full, Manifest V2 included, on current Chromium.
 [![Release](https://img.shields.io/github/v/release/aerium-browser/aerium-browser-core?style=flat-square&label=release&color=2A4485)](https://github.com/aerium-browser/aerium-browser-core/releases/latest)
 [![Downloads](https://img.shields.io/badge/downloads-10k%2B-2A4485?style=flat-square)](https://github.com/aerium-browser/aerium-browser-core/releases)
 [![Chromium](https://img.shields.io/badge/Chromium-155-2A4485?style=flat-square)](chromium.pin)
+[![Latest Chromium](https://img.shields.io/badge/dynamic/json?style=flat-square&color=2A4485&label=latest%20Chromium&query=%24%5B0%5D.version&url=https%3A%2F%2Fchromiumdash.appspot.com%2Ffetch_releases%3Fchannel%3DStable%26platform%3DAndroid%26num%3D1)](https://chromiumdash.appspot.com/releases?platform=Android)
 [![License](https://img.shields.io/badge/license-GPLv3-2A4485?style=flat-square)](LICENSE)
 
 [**Download APK**](https://github.com/aerium-browser/aerium-browser-core/releases/latest) &nbsp;&nbsp;|&nbsp;&nbsp; [Website](https://aerium-browser.github.io) &nbsp;&nbsp;|&nbsp;&nbsp; [Get it with Obtainium](https://aerium-browser.github.io/obtainium/)
