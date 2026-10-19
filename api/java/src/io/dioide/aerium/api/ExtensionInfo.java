@@ -10,7 +10,7 @@ public final class ExtensionInfo {
     public final boolean enabled;
     public final boolean allowedInAerogel;
     public final boolean pinned;
-    public final boolean hasPopup;
+    public final boolean hasOptions;
 
     public ExtensionInfo(
             String id,
@@ -19,13 +19,13 @@ public final class ExtensionInfo {
             boolean enabled,
             boolean allowedInAerogel,
             boolean pinned,
-            boolean hasPopup) {
+            boolean hasOptions) {
         this.id = id;
         this.name = name;
         this.version = version;
         this.enabled = enabled;
         this.allowedInAerogel = allowedInAerogel;
         this.pinned = pinned;
-        this.hasPopup = hasPopup;
+        this.hasOptions = hasOptions;
     }
 }

@@ -5,6 +5,7 @@ package io.dioide.aerium.bridge;
 
 import io.dioide.aerium.api.AeriumCore;
 import io.dioide.aerium.api.BrowsingDataApi;
+import io.dioide.aerium.api.ExtensionsApi;
 import io.dioide.aerium.api.NavigationApi;
 import io.dioide.aerium.api.SettingsApi;
 import io.dioide.aerium.api.TabsApi;
@@ -14,6 +15,7 @@ final class CoreImpl implements AeriumCore {
     private final TabsApi mTabs = new TabsImpl();
     private final NavigationApi mNavigation = new NavigationImpl();
     private final BrowsingDataApi mBrowsingData = new BrowsingDataImpl();
+    private final ExtensionsApi mExtensions = new ExtensionsImpl();
 
     @Override
     public int apiVersion() {
@@ -38,5 +40,10 @@ final class CoreImpl implements AeriumCore {
     @Override
     public BrowsingDataApi browsingData() {
         return mBrowsingData;
+    }
+
+    @Override
+    public ExtensionsApi extensions() {
+        return mExtensions;
     }
 }

@@ -4,12 +4,13 @@ Date: Thu, 1 Jan 2026 00:00:00 +0000
 Subject: [PATCH] Add core build targets
 
 ---
- chrome/android/BUILD.gn       | 6 ++++++
+ chrome/android/BUILD.gn       | 7 +++++++
+ chrome/browser/BUILD.gn       | 5 ++++-
  chrome/browser/prefs/BUILD.gn | 2 ++
- 2 files changed, 8 insertions(+)
+ 3 files changed, 13 insertions(+), 1 deletion(-)
 
 diff --git a/chrome/android/BUILD.gn b/chrome/android/BUILD.gn
-index 1b74cd83753feb11bf2571c635dbf32639f93677..1f864f5054aea27801b18c9cd8356bff791fdd1a 100644
+index 1b74cd83753feb11bf2571c635dbf32639f93677..49f72e0d9cd507df5a978712734f237d0a3fb13d 100644
 --- a/chrome/android/BUILD.gn
 +++ b/chrome/android/BUILD.gn
 @@ -8,6 +8,7 @@ import("//build/toolchain/gcc_toolchain.gni")
@@ -28,17 +29,34 @@ index 1b74cd83753feb11bf2571c635dbf32639f93677..1f864f5054aea27801b18c9cd8356bff
        ":base_module_java",
        ":chrome_app_java_resources",
        ":chrome_public_apk_template_resources",
-@@ -893,6 +895,10 @@ if (_is_default_toolchain) {
+@@ -893,6 +895,11 @@ if (_is_default_toolchain) {
  
      # From java_sources.gni.
      sources = chrome_java_sources
 +    sources += aerium_bridge_java_sources
++    srcjar_deps += [ "//aerium/bridge:jni_headers" ]
 +    if (aerium_ui_java != "") {
 +      deps += [ aerium_ui_java ]
 +    }
  
      # Include sources from feed_java_sources.gni.
      sources += feed_java_sources
+diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
+index b58905ddb371f96377320c2948fe64bb17257663..64eec5bc9c4d030ebd18cede7b77fadb3b110f35 100644
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -3255,7 +3255,10 @@ source_set("browser") {
+   # TODO(https://crbug.com/356905053): Add more dependencies here and merge this
+   # block with the `enable_extensions` block above.
+   if (enable_desktop_android_extensions) {
+-    deps += [ "//chrome/browser/ui/android/extensions" ]
++    deps += [
++      "//aerium/bridge:native",
++      "//chrome/browser/ui/android/extensions",
++    ]
+   }
+ 
+   if (enable_library_cdms) {
 diff --git a/chrome/browser/prefs/BUILD.gn b/chrome/browser/prefs/BUILD.gn
 index 817cd91bdac667c3165d33c55d01ca16842b75a7..3bac5fd177cc6609fb818ec3841d0ee7edcf6e97 100644
 --- a/chrome/browser/prefs/BUILD.gn

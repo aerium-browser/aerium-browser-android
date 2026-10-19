@@ -3,8 +3,6 @@
 
 package io.dioide.aerium.api;
 
-import android.net.Uri;
-
 import java.util.List;
 
 public interface ExtensionsApi {
@@ -16,13 +14,7 @@ public interface ExtensionsApi {
 
     void setPinned(String id, boolean pinned);
 
-    void installFromStore(String storeUrl);
-
-    void installFromFile(Uri file);
-
     void remove(String id);
-
-    void openPopup(String id);
 
     void openOptions(String id);
 
