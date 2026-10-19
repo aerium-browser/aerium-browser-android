@@ -18,6 +18,8 @@ public interface TabsApi {
 
     int open(String url, OpenMode mode);
 
+    void launch(String url);
+
     void select(int tabId);
 
     void close(int tabId);

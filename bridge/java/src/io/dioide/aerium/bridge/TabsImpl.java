@@ -4,13 +4,20 @@
 package io.dioide.aerium.bridge;
 
 import android.app.Activity;
+import android.content.Context;
+import android.content.Intent;
+import android.net.Uri;
+import android.provider.Browser;
 
 import androidx.annotation.Nullable;
 
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.Callback;
+import org.chromium.base.ContextUtils;
+import org.chromium.base.IntentUtils;
 import org.chromium.chrome.browser.app.tabwindow.TabWindowManagerSingleton;
 import org.chromium.chrome.browser.desktop_site.DesktopSiteUtils;
+import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabSelectionType;
@@ -67,6 +74,22 @@ final class TabsImpl implements TabsApi {
                 selector.openNewTab(
                         new LoadUrlParams(url), type, null, mode == OpenMode.AEROGEL);
         return tab == null ? Tab.INVALID_TAB_ID : tab.getId();
+    }
+
+    @Override
+    public void launch(String url) {
+        Context context = ContextUtils.getApplicationContext();
+        Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+        intent.setClass(context, ChromeLauncherActivity.class);
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        intent.putExtra(Browser.EXTRA_CREATE_NEW_TAB, true);
+        intent.putExtra(Browser.EXTRA_APPLICATION_ID, context.getPackageName());
+        IntentUtils.addTrustedIntentExtras(intent);
+        try {
+            context.startActivity(intent);
+        } catch (RuntimeException e) {
+            return;
+        }
     }
 
     @Override

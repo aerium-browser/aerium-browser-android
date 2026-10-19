@@ -15,7 +15,6 @@ import org.chromium.components.user_prefs.UserPrefs;
 
 import io.dioide.aerium.api.ExtensionInfo;
 import io.dioide.aerium.api.ExtensionsApi;
-import io.dioide.aerium.api.OpenMode;
 import io.dioide.aerium.api.Subscription;
 
 import java.util.ArrayList;
@@ -67,7 +66,7 @@ final class ExtensionsImpl implements ExtensionsApi {
     @Override
     public void openOptions(String id) {
         String url = ExtensionsImplJni.get().optionsUrl(profile(), id);
-        if (!url.isEmpty()) Aerium.core().tabs().open(url, OpenMode.FOREGROUND);
+        if (!url.isEmpty()) Aerium.core().tabs().launch(url);
     }
 
     @Override
