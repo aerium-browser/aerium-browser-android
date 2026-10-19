@@ -1,7 +1,14 @@
 # Copyright 2026 Dioide
 # SPDX-License-Identifier: GPL-3.0-only
 
+declare_args() {
+  aerium_ui_java = ""
+}
+
 aerium_bridge_java_sources = [
+  "//aerium/bridge/java/src/io/dioide/aerium/bridge/Aerium.java",
   "//aerium/bridge/java/src/io/dioide/aerium/bridge/AeriumPrefs.java",
   "//aerium/bridge/java/src/io/dioide/aerium/bridge/AeriumUi.java",
+  "//aerium/bridge/java/src/io/dioide/aerium/bridge/CoreImpl.java",
+  "//aerium/bridge/java/src/io/dioide/aerium/bridge/SettingsImpl.java",
 ]

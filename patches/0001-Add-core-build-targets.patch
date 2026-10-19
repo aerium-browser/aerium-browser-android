@@ -4,12 +4,12 @@ Date: Thu, 1 Jan 2026 00:00:00 +0000
 Subject: [PATCH] Add core build targets
 
 ---
- chrome/android/BUILD.gn       | 3 +++
+ chrome/android/BUILD.gn       | 6 ++++++
  chrome/browser/prefs/BUILD.gn | 2 ++
- 2 files changed, 5 insertions(+)
+ 2 files changed, 8 insertions(+)
 
 diff --git a/chrome/android/BUILD.gn b/chrome/android/BUILD.gn
-index 1b74cd83753feb11bf2571c635dbf32639f93677..dcc6fb5e1b18fafbbd86ae594b0777da4332533a 100644
+index 1b74cd83753feb11bf2571c635dbf32639f93677..1f864f5054aea27801b18c9cd8356bff791fdd1a 100644
 --- a/chrome/android/BUILD.gn
 +++ b/chrome/android/BUILD.gn
 @@ -8,6 +8,7 @@ import("//build/toolchain/gcc_toolchain.gni")
@@ -28,11 +28,14 @@ index 1b74cd83753feb11bf2571c635dbf32639f93677..dcc6fb5e1b18fafbbd86ae594b0777da
        ":base_module_java",
        ":chrome_app_java_resources",
        ":chrome_public_apk_template_resources",
-@@ -893,6 +895,7 @@ if (_is_default_toolchain) {
+@@ -893,6 +895,10 @@ if (_is_default_toolchain) {
  
      # From java_sources.gni.
      sources = chrome_java_sources
 +    sources += aerium_bridge_java_sources
++    if (aerium_ui_java != "") {
++      deps += [ aerium_ui_java ]
++    }
  
      # Include sources from feed_java_sources.gni.
      sources += feed_java_sources

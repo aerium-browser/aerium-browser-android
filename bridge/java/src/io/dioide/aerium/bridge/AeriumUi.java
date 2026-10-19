@@ -7,7 +7,6 @@ import androidx.annotation.Nullable;
 
 import org.chromium.base.ServiceLoaderUtil;
 
-import io.dioide.aerium.api.AeriumCore;
 import io.dioide.aerium.api.Slot;
 import io.dioide.aerium.api.SurfaceFactory;
 import io.dioide.aerium.api.UiProvider;
@@ -22,13 +21,9 @@ public final class AeriumUi {
         if (!sLoaded) {
             sLoaded = true;
             sProvider = ServiceLoaderUtil.maybeCreate(UiProvider.class);
+            if (sProvider != null) sProvider.attach(Aerium.core());
         }
         return sProvider;
-    }
-
-    public static void attach(AeriumCore core) {
-        UiProvider provider = get();
-        if (provider != null) provider.attach(core);
     }
 
     public static @Nullable SurfaceFactory surface(Slot slot) {
