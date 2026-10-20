@@ -36,6 +36,7 @@ Most Android browsers can't run extensions. The few that could stopped following
 | Chrome Web Store extensions | ✗ | ✓ | **✓** |
 | Manifest V2 (full uBlock Origin) | ✗ | ✓ | **✓** |
 | Up to date Chromium | ✓ | ✗ | **✓** |
+| Built straight on Chromium, no fork in between | ✓ | ✗ | **✓** |
 | Aerium Guard privacy presets | ✗ | ✗ | **✓** |
 
 ## Features
@@ -58,6 +59,8 @@ Prefer automatic updates? Add this repository to [Obtainium](https://aerium-brow
 ## How it's built
 
 This repository is the open core: Chromium plus every engine change Aerium makes.
+
+The patches go onto Chromium's own source from `chromium.googlesource.com`, pinned in [`chromium.pin`](chromium.pin). No other browser sits in between, so a new Chromium release never waits on anyone else.
 
 ```
 patches/     Chromium edits, one feature per patch
