@@ -6,8 +6,8 @@ Subject: [PATCH] Send only the needed headers with secure DNS
 ---
  net/base/load_flags_list.h              |  2 ++
  net/dns/dns_http_attempt.cc             |  2 +-
- net/url_request/url_request_http_job.cc | 13 ++++++++-----
- 3 files changed, 11 insertions(+), 6 deletions(-)
+ net/url_request/url_request_http_job.cc | 18 +++++++++++-------
+ 3 files changed, 14 insertions(+), 8 deletions(-)
 
 diff --git a/net/base/load_flags_list.h b/net/base/load_flags_list.h
 index c10df92f30b1292a8243f376025e81afcefba78d..c2814800f342e8c4fcbd95d1fe20dfbfff575cf2 100644
@@ -34,7 +34,7 @@ index 1f049eb708cd2ee3cecdab87e37adc4b0ece21b3..14f7a98c28af0631f3a2fa2e8309ba34
    request_->set_isolation_info(GetDohIsolationInfo());
  }
 diff --git a/net/url_request/url_request_http_job.cc b/net/url_request/url_request_http_job.cc
-index bc999401e55cff9052123a19f1e8832b9abc21a5..bbebed1a02f2825b9234c5696ab1c398112772dd 100644
+index bc999401e55cff9052123a19f1e8832b9abc21a5..a73f487a1a913b006cd931f23ce60d5be9552e5d 100644
 --- a/net/url_request/url_request_http_job.cc
 +++ b/net/url_request/url_request_http_job.cc
 @@ -524,10 +524,12 @@ void URLRequestHttpJob::Start() {
@@ -54,13 +54,21 @@ index bc999401e55cff9052123a19f1e8832b9abc21a5..bbebed1a02f2825b9234c5696ab1c398
  
    AddExtraHeaders();
  
-@@ -785,7 +787,8 @@ void URLRequestHttpJob::AddExtraHeaders() {
-       request()->context()->enable_brotli(),
-       request()->context()->enable_zstd());
+@@ -780,12 +782,14 @@ void URLRequestHttpJob::StartTransactionInternal() {
+ }
+ 
+ void URLRequestHttpJob::AddExtraHeaders() {
++  const bool skip_optional =
++      request_->load_flags() & LOAD_SKIP_OPTIONAL_HEADERS;
+   request_info_.extra_headers.SetAcceptEncodingIfMissing(
+       request()->url(), request()->accepted_stream_types(),
+-      request()->context()->enable_brotli(),
+-      request()->context()->enable_zstd());
++      !skip_optional && request()->context()->enable_brotli(),
++      !skip_optional && request()->context()->enable_zstd());
  
 -  if (http_user_agent_settings_) {
-+  if (http_user_agent_settings_ &&
-+      !(request_->load_flags() & LOAD_SKIP_OPTIONAL_HEADERS)) {
++  if (http_user_agent_settings_ && !skip_optional) {
      // Only add default Accept-Language if the request didn't have it
      // specified.
      std::string accept_language =

@@ -9,14 +9,14 @@ Subject: [PATCH] Fit DevTools to a phone screen
  2 files changed, 11 insertions(+)
 
 diff --git a/front_end/entrypoint_template.html b/front_end/entrypoint_template.html
-index e778aefef2c32caa29253d80ce46da0a02fa1f73..ad8cba9e04a0383c708c272f9410fb29429e69e6 100644
+index e778aefef2c32caa29253d80ce46da0a02fa1f73..a65cd32c6a735c655cd7ef39ae54558c3b69eb6b 100644
 --- a/front_end/entrypoint_template.html
 +++ b/front_end/entrypoint_template.html
 @@ -6,6 +6,7 @@
  <!DOCTYPE html>
  <html lang="en">
  <meta charset="utf-8">
-+<meta name="viewport" content="width=device-width, initial-scale=1">
++<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
  <title>DevTools</title>
  <style>
    @media (prefers-color-scheme: dark) {
