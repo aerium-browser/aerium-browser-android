@@ -1,0 +1,144 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: fatih-gh <me@mehmetfatihyaman.me>
+Date: Thu, 1 Jan 2026 00:00:00 +0000
+Subject: [PATCH] Let the UI clean copied and shared links
+
+---
+ .../ChromeContextMenuPopulator.java           |  7 +++--
+ .../browser/share/ShareDelegateImpl.java      |  2 +-
+ .../tab/TabContextMenuItemDelegate.java       |  6 +++-
+ chrome/browser/ui/android/omnibox/BUILD.gn    |  1 +
+ .../chrome/browser/omnibox/LinkCleaner.java   | 28 +++++++++++++++++++
+ .../browser/omnibox/UrlBarMediator.java       |  3 +-
+ 6 files changed, 41 insertions(+), 6 deletions(-)
+ create mode 100644 chrome/browser/ui/android/omnibox/java/src/org/chromium/chrome/browser/omnibox/LinkCleaner.java
+
+diff --git a/chrome/android/java/src/org/chromium/chrome/browser/contextmenu/ChromeContextMenuPopulator.java b/chrome/android/java/src/org/chromium/chrome/browser/contextmenu/ChromeContextMenuPopulator.java
+index 49b0d1590e367955d64b38eaf818577f31891df1..8635757c5b96bcf0d701c050ba1c44e7b3156df5 100644
+--- a/chrome/android/java/src/org/chromium/chrome/browser/contextmenu/ChromeContextMenuPopulator.java
++++ b/chrome/android/java/src/org/chromium/chrome/browser/contextmenu/ChromeContextMenuPopulator.java
+@@ -67,6 +67,7 @@ import org.chromium.chrome.browser.lens.LensMetrics;
+ import org.chromium.chrome.browser.lens.LensSupportStatusHelper;
+ import org.chromium.chrome.browser.locale.LocaleManager;
+ import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
++import org.chromium.chrome.browser.omnibox.LinkCleaner;
+ import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
+ import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
+ import org.chromium.chrome.browser.profiles.Profile;
+@@ -1204,7 +1205,7 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
+                     new ShareParams.Builder(
+                                     getWindow(),
+                                     ContextMenuUtils.getAltText(mParams),
+-                                    mParams.getPageUrl().getSpec())
++                                    LinkCleaner.clean(mParams.getPageUrl().getSpec()))
+                             .build();
+             assumeNonNull(mShareDelegateSupplier.get())
+                     .share(
+@@ -1255,7 +1256,7 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
+                     new ShareParams.Builder(
+                                     getWindow(),
+                                     ContextMenuUtils.getAltText(mParams),
+-                                    mParams.getUrl().getSpec())
++                                    LinkCleaner.clean(mParams.getUrl().getSpec()))
+                             .build();
+             assumeNonNull(mShareDelegateSupplier.get())
+                     .share(
+@@ -1271,7 +1272,7 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
+                     new ShareParams.Builder(
+                                     getWindow(),
+                                     ContextMenuUtils.getAltText(mParams),
+-                                    mParams.getUrl().getSpec())
++                                    LinkCleaner.clean(mParams.getUrl().getSpec()))
+                             .build();
+             assumeNonNull(mShareDelegateSupplier.get())
+                     .share(
+diff --git a/chrome/android/java/src/org/chromium/chrome/browser/share/ShareDelegateImpl.java b/chrome/android/java/src/org/chromium/chrome/browser/share/ShareDelegateImpl.java
+index e6f25a2139aa0bc838ca77c729fb5843216b7338..ea37586f6af5d86724a5c66cdc869546fe184c4e 100644
+--- a/chrome/android/java/src/org/chromium/chrome/browser/share/ShareDelegateImpl.java
++++ b/chrome/android/java/src/org/chromium/chrome/browser/share/ShareDelegateImpl.java
+@@ -297,7 +297,7 @@ public class ShareDelegateImpl implements ShareDelegate {
+                 return "";
+             }
+         }
+-        return visibleUrl.getSpec();
++        return org.chromium.chrome.browser.omnibox.LinkCleaner.clean(visibleUrl.getSpec());
+     }
+ 
+     private void printTab(Tab tab) {
+diff --git a/chrome/android/java/src/org/chromium/chrome/browser/tab/TabContextMenuItemDelegate.java b/chrome/android/java/src/org/chromium/chrome/browser/tab/TabContextMenuItemDelegate.java
+index 7a635b810488dc2cac64664cef0bdc00ad7ba755..3cafc182b445c0333240ad54fd1d2342de195eee 100644
+--- a/chrome/android/java/src/org/chromium/chrome/browser/tab/TabContextMenuItemDelegate.java
++++ b/chrome/android/java/src/org/chromium/chrome/browser/tab/TabContextMenuItemDelegate.java
+@@ -188,7 +188,11 @@ public class TabContextMenuItemDelegate implements ContextMenuItemDelegate {
+ 
+     @Override
+     public void onSaveToClipboard(String text, int clipboardType) {
+-        Clipboard.getInstance().setText(text);
++        Clipboard.getInstance()
++                .setText(
++                        clipboardType == ClipboardType.LINK_URL
++                                ? org.chromium.chrome.browser.omnibox.LinkCleaner.clean(text)
++                                : text);
+         if (clipboardType == ClipboardType.LINK_URL) {
+             // TODO(crbug.com/40732234): Find a better way of passing event for IPH.
+             mContextMenuCopyLinkObserver.run();
+diff --git a/chrome/browser/ui/android/omnibox/BUILD.gn b/chrome/browser/ui/android/omnibox/BUILD.gn
+index 95b7ea574ee40e190dde0d659f1bd018d8858620..c676c2c0d58221f4c9345aee92a31c8c33acdc17 100644
+--- a/chrome/browser/ui/android/omnibox/BUILD.gn
++++ b/chrome/browser/ui/android/omnibox/BUILD.gn
+@@ -35,6 +35,7 @@ android_library("java") {
+     "java/src/org/chromium/chrome/browser/omnibox/GlifStrokeDrawable.java",
+     "java/src/org/chromium/chrome/browser/omnibox/HintTextUpdater.java",
+     "java/src/org/chromium/chrome/browser/omnibox/KeyboardHideHelper.java",
++    "java/src/org/chromium/chrome/browser/omnibox/LinkCleaner.java",
+     "java/src/org/chromium/chrome/browser/omnibox/LocationBar.java",
+     "java/src/org/chromium/chrome/browser/omnibox/LocationBarBackgroundDrawable.java",
+     "java/src/org/chromium/chrome/browser/omnibox/LocationBarCoordinator.java",
+diff --git a/chrome/browser/ui/android/omnibox/java/src/org/chromium/chrome/browser/omnibox/LinkCleaner.java b/chrome/browser/ui/android/omnibox/java/src/org/chromium/chrome/browser/omnibox/LinkCleaner.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..d9cb680d900a6066371cec4b02e4c4227688d6a3
+--- /dev/null
++++ b/chrome/browser/ui/android/omnibox/java/src/org/chromium/chrome/browser/omnibox/LinkCleaner.java
+@@ -0,0 +1,28 @@
++// Copyright 2026 Dioide
++// SPDX-License-Identifier: GPL-3.0-only
++
++package org.chromium.chrome.browser.omnibox;
++
++import org.chromium.base.ServiceLoaderUtil;
++import org.chromium.build.annotations.NullMarked;
++import org.chromium.build.annotations.Nullable;
++
++@NullMarked
++public final class LinkCleaner {
++    public interface Cleaner {
++        String clean(String url);
++    }
++
++    private static boolean sLoaded;
++    private static @Nullable Cleaner sCleaner;
++
++    private LinkCleaner() {}
++
++    public static String clean(String url) {
++        if (!sLoaded) {
++            sLoaded = true;
++            sCleaner = ServiceLoaderUtil.maybeCreate(Cleaner.class);
++        }
++        return sCleaner == null ? url : sCleaner.clean(url);
++    }
++}
+diff --git a/chrome/browser/ui/android/omnibox/java/src/org/chromium/chrome/browser/omnibox/UrlBarMediator.java b/chrome/browser/ui/android/omnibox/java/src/org/chromium/chrome/browser/omnibox/UrlBarMediator.java
+index d95ea3b698b823cf4fe32611d7ac31e2f93d1b1e..f8dbfdd92f1a5ddfe6cf6476a52f28fc58344e9f 100644
+--- a/chrome/browser/ui/android/omnibox/java/src/org/chromium/chrome/browser/omnibox/UrlBarMediator.java
++++ b/chrome/browser/ui/android/omnibox/java/src/org/chromium/chrome/browser/omnibox/UrlBarMediator.java
+@@ -459,7 +459,8 @@ class UrlBarMediator implements UrlBarTextContextMenuDelegate {
+             return null;
+         }
+ 
+-        return originalUrlLocation + currentText.substring(formattedUrlLocation.length());
++        return LinkCleaner.clean(
++                originalUrlLocation + currentText.substring(formattedUrlLocation.length()));
+     }
+ 
+     @Override
