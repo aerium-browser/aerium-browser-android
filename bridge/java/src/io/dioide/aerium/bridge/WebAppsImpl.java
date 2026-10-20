@@ -50,7 +50,30 @@ final class WebAppsImpl implements WebAppsApi {
     public boolean launch(String id) {
         WebappDataStorage app = find(id);
         Intent launch = app == null ? null : app.createWebappLaunchIntent();
+        return launch != null && start(launch);
+    }
+
+    @Override
+    public @Nullable String findForUrl(String url) {
+        WebappDataStorage app;
+        try (StrictModeContext ignored = StrictModeContext.allowDiskReads()) {
+            WebappRegistry.warmUpSharedPrefs();
+            app = WebappRegistry.getInstance().getWebappDataStorageForUrl(url);
+        }
+        return app == null ? null : app.getId();
+    }
+
+    @Override
+    public boolean open(String id, String url) {
+        WebappDataStorage app = find(id);
+        Intent launch = app == null ? null : app.createWebappLaunchIntent();
         if (launch == null) return false;
+        launch.putExtra(WebappConstants.EXTRA_URL, url);
+        launch.putExtra(WebappConstants.EXTRA_FORCE_NAVIGATION, true);
+        return start(launch);
+    }
+
+    private static boolean start(Intent launch) {
         launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         IntentUtils.addTrustedIntentExtras(launch);
         return IntentUtils.safeStartActivity(ContextUtils.getApplicationContext(), launch);
