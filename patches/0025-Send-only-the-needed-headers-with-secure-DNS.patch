@@ -1,0 +1,66 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: fatih-gh <me@mehmetfatihyaman.me>
+Date: Thu, 1 Jan 2026 00:00:00 +0000
+Subject: [PATCH] Send only the needed headers with secure DNS
+
+---
+ net/base/load_flags_list.h              |  2 ++
+ net/dns/dns_http_attempt.cc             |  2 +-
+ net/url_request/url_request_http_job.cc | 13 ++++++++-----
+ 3 files changed, 11 insertions(+), 6 deletions(-)
+
+diff --git a/net/base/load_flags_list.h b/net/base/load_flags_list.h
+index c10df92f30b1292a8243f376025e81afcefba78d..c2814800f342e8c4fcbd95d1fe20dfbfff575cf2 100644
+--- a/net/base/load_flags_list.h
++++ b/net/base/load_flags_list.h
+@@ -123,4 +123,6 @@ LOAD_FLAG(SHOULD_BYPASS_HSTS, 1 << 18)
+ // compromised renderer concern is acceptable.
+ LOAD_FLAG(IS_MAIN_FRAME_ORIGIN_RECENTLY_ACCESSED, 1 << 19)
+ 
++LOAD_FLAG(SKIP_OPTIONAL_HEADERS, 1 << 20)
++
+ // See note at top of file about why adding LoadFlags is often a bad idea.
+diff --git a/net/dns/dns_http_attempt.cc b/net/dns/dns_http_attempt.cc
+index 1f049eb708cd2ee3cecdab87e37adc4b0ece21b3..14f7a98c28af0631f3a2fa2e8309ba34562f1d6a 100644
+--- a/net/dns/dns_http_attempt.cc
++++ b/net/dns/dns_http_attempt.cc
+@@ -176,7 +176,7 @@ DnsHTTPAttempt::DnsHTTPAttempt(base::WeakPtr<ResolveContext> resolve_context,
+   // avoid deadlock and enable the use of preconfigured IP addresses.
+   request_->SetSecureDnsPolicy(SecureDnsPolicy::kBootstrap);
+   request_->SetLoadFlags(request_->load_flags() | LOAD_DISABLE_CACHE |
+-                         LOAD_BYPASS_PROXY);
++                         LOAD_BYPASS_PROXY | LOAD_SKIP_OPTIONAL_HEADERS);
+   request_->set_disallow_credentials();
+   request_->set_isolation_info(GetDohIsolationInfo());
+ }
+diff --git a/net/url_request/url_request_http_job.cc b/net/url_request/url_request_http_job.cc
+index bc999401e55cff9052123a19f1e8832b9abc21a5..bbebed1a02f2825b9234c5696ab1c398112772dd 100644
+--- a/net/url_request/url_request_http_job.cc
++++ b/net/url_request/url_request_http_job.cc
+@@ -524,10 +524,12 @@ void URLRequestHttpJob::Start() {
+                                           referer_value);
+   }
+ 
+-  request_info_.extra_headers.SetHeaderIfMissing(
+-      HttpRequestHeaders::kUserAgent,
+-      http_user_agent_settings_ ? http_user_agent_settings_->GetUserAgent()
+-                                : std::string());
++  if (!(request_->load_flags() & LOAD_SKIP_OPTIONAL_HEADERS)) {
++    request_info_.extra_headers.SetHeaderIfMissing(
++        HttpRequestHeaders::kUserAgent,
++        http_user_agent_settings_ ? http_user_agent_settings_->GetUserAgent()
++                                  : std::string());
++  }
+ 
+   AddExtraHeaders();
+ 
+@@ -785,7 +787,8 @@ void URLRequestHttpJob::AddExtraHeaders() {
+       request()->context()->enable_brotli(),
+       request()->context()->enable_zstd());
+ 
+-  if (http_user_agent_settings_) {
++  if (http_user_agent_settings_ &&
++      !(request_->load_flags() & LOAD_SKIP_OPTIONAL_HEADERS)) {
+     // Only add default Accept-Language if the request didn't have it
+     // specified.
+     std::string accept_language =
