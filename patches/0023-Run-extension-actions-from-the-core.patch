@@ -1,0 +1,48 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: fatih-gh <me@mehmetfatihyaman.me>
+Date: Thu, 1 Jan 2026 00:00:00 +0000
+Subject: [PATCH] Run extension actions from the core
+
+---
+ .../toolbar/extensions/ExtensionsToolbarCoordinator.java   | 2 ++
+ .../extensions/ExtensionsToolbarCoordinatorImpl.java       | 7 +++++++
+ 2 files changed, 9 insertions(+)
+
+diff --git a/chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/extensions/ExtensionsToolbarCoordinator.java b/chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/extensions/ExtensionsToolbarCoordinator.java
+index 76af6b111c1ea94ebb40a64269b5aa0586db3463..75ccef7ba5aa5b62787bd8647c53d21dbc258dba 100644
+--- a/chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/extensions/ExtensionsToolbarCoordinator.java
++++ b/chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/extensions/ExtensionsToolbarCoordinator.java
+@@ -132,6 +132,8 @@ public interface ExtensionsToolbarCoordinator extends ChromeAndroidTaskFeature,
+     /** Shows the extensions menu programmatically. */
+     void showExtensionsMenu();
+ 
++    void runAction(String actionId);
++
+     /** Returns the {@link ToolbarWidthConsumer} for the popped out action. */
+     ToolbarWidthConsumer getPoppedOutActionWidthConsumer();
+ 
+diff --git a/chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/extensions/ExtensionsToolbarCoordinatorImpl.java b/chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/extensions/ExtensionsToolbarCoordinatorImpl.java
+index 770a58b5dc44c2d2767649a9caec8d68c1cf0d2c..f4d7708fac4c86ea99ec3963313fa6e9fda5a45c 100644
+--- a/chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/extensions/ExtensionsToolbarCoordinatorImpl.java
++++ b/chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/extensions/ExtensionsToolbarCoordinatorImpl.java
+@@ -37,6 +37,7 @@ import org.chromium.chrome.browser.ui.browser_window.ChromeAndroidTask;
+ import org.chromium.chrome.browser.ui.browser_window.ChromeAndroidTaskFeature.InitInfo;
+ import org.chromium.chrome.browser.ui.extensions.ExtensionActionsBridge;
+ import org.chromium.chrome.browser.ui.extensions.ExtensionsToolbarBridge;
++import org.chromium.chrome.browser.ui.toolbar.InvocationSource;
+ import org.chromium.chrome.browser.user_education.IphCommandBuilder;
+ import org.chromium.chrome.browser.user_education.UserEducationHelper;
+ import org.chromium.components.embedder_support.contextmenu.ContextMenuPopulatorFactory;
+@@ -310,6 +311,12 @@ public class ExtensionsToolbarCoordinatorImpl
+                 backgroundResource);
+     }
+ 
++    @Override
++    public void runAction(String actionId) {
++        if (mIsDestroyed) return;
++        mExtensionActionListCoordinator.executeUserAction(actionId, InvocationSource.MENU_ENTRY);
++    }
++
+     @Override
+     public void showExtensionsMenu() {
+         mShowExtensionsMenuPending = true;

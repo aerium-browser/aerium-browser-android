@@ -3,7 +3,11 @@
 
 package io.dioide.aerium.api;
 
+import android.app.Activity;
+
+import java.io.File;
 import java.util.List;
+import java.util.function.Consumer;
 
 public interface ExtensionsApi {
     List<ExtensionInfo> list();
@@ -17,6 +21,10 @@ public interface ExtensionsApi {
     void remove(String id);
 
     void openOptions(String id);
+
+    boolean openPopup(Activity activity, String id);
+
+    void install(File file, Consumer<Boolean> done);
 
     Subscription observe(Runnable onChange);
 }

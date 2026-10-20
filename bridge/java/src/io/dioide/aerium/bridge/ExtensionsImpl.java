@@ -3,13 +3,19 @@
 
 package io.dioide.aerium.bridge;
 
+import android.app.Activity;
+
 import org.jni_zero.JniType;
 import org.jni_zero.NativeMethods;
 
+import org.chromium.base.Callback;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileManager;
+import org.chromium.chrome.browser.toolbar.ToolbarManager;
+import org.chromium.chrome.browser.toolbar.extensions.ExtensionsToolbarCoordinator;
 import org.chromium.components.prefs.PrefChangeRegistrar;
 import org.chromium.components.user_prefs.UserPrefs;
 
@@ -17,8 +23,10 @@ import io.dioide.aerium.api.ExtensionInfo;
 import io.dioide.aerium.api.ExtensionsApi;
 import io.dioide.aerium.api.Subscription;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
 final class ExtensionsImpl implements ExtensionsApi {
     private static final String SETTINGS_PREF = "extensions.settings";
@@ -70,6 +78,23 @@ final class ExtensionsImpl implements ExtensionsApi {
     }
 
     @Override
+    public boolean openPopup(Activity activity, String id) {
+        if (!(activity instanceof ChromeActivity chrome)) return false;
+        ToolbarManager toolbar = chrome.getToolbarManager();
+        ExtensionsToolbarCoordinator extensions =
+                toolbar == null ? null : toolbar.getExtensionsToolbarCoordinator();
+        if (extensions == null) return false;
+        extensions.runAction(id);
+        return true;
+    }
+
+    @Override
+    public void install(File file, Consumer<Boolean> done) {
+        Callback<Boolean> result = done::accept;
+        ExtensionsImplJni.get().install(profile(), file.getAbsolutePath(), result);
+    }
+
+    @Override
     public Subscription observe(Runnable onChange) {
         PrefChangeRegistrar registrar = new PrefChangeRegistrar(UserPrefs.get(profile()));
         PrefChangeRegistrar.PrefObserver observer =
@@ -111,5 +136,10 @@ final class ExtensionsImpl implements ExtensionsApi {
 
         @JniType("std::string")
         String optionsUrl(@JniType("Profile*") Profile profile, @JniType("std::string") String id);
+
+        void install(
+                @JniType("Profile*") Profile profile,
+                @JniType("std::string") String path,
+                Callback<Boolean> done);
     }
 }
