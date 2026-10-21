@@ -72,8 +72,8 @@ jobs:
     steps:
       - name: Install base tools
         run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q git curl python3 lsb-release zstd openssl xz-utils file unzip
+          sudo apt-get -o DPkg::Lock::Timeout=1800 update -q
+          sudo apt-get -o DPkg::Lock::Timeout=1800 install -y -q git curl python3 lsb-release zstd openssl xz-utils file unzip
       - uses: actions/checkout@v5
         with:
           submodules: false
