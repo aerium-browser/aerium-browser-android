@@ -173,10 +173,15 @@ jobs:
             code=$?
             set -e
             if [ $code -ne 0 ]; then
-              mkdir -p stage-status
-              tail -n 3000 vm-build.log | zstd -q -T0 -19 \
+              mkdir -p stage-status d
+              tail -n 3000 vm-build.log > d/build-tail.txt
+              cp gn_gen.log d/ 2>/dev/null || true
+              cp chromium/src/out/Default/siso_output d/siso_output.txt 2>/dev/null || true
+              cp chromium/src/out/Default/.siso_failed_targets d/failed-targets.txt 2>/dev/null || true
+              tar -c -C d . | zstd -q -T0 -19 \
                 | openssl enc -aes-256-ctr -pbkdf2 -salt -pass env:AERIUM_CHECKPOINT_KEY \
                     -out stage-status/details.enc
+              rm -rf d
               echo "build failed, the details are in the encrypted failure marker"
             fi
             rm -f vm-build.log
