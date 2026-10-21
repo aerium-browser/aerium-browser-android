@@ -48,7 +48,7 @@ on:
         description: 'Build in one go on the aerium machine'
         type: boolean
         required: false
-        default: false
+        default: true
 
 permissions:
   contents: read
@@ -66,7 +66,7 @@ concurrency:
 
 jobs:
   vm:
-    if: ${{ inputs.vm == true }}
+    if: ${{ inputs.vm != false }}
     runs-on: [self-hosted, aerium]
     timeout-minutes: 2880
     steps:
@@ -85,7 +85,7 @@ jobs:
       - name: Build
         env:
           AERIUM_TARGET_CPU: ${{ inputs.arch || 'arm64' }}
-          NINJA_JOBS: '14'
+          NINJA_JOBS: '16'
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
         run: |
@@ -129,7 +129,7 @@ jobs:
           overwrite: true
 
   build-1:
-    if: ${{ inputs.vm != true }}
+    if: ${{ inputs.vm == false }}
     runs-on: ubuntu-24.04
     timeout-minutes: 350
     outputs:
@@ -921,7 +921,7 @@ jobs:
   check-completion:
     runs-on: ubuntu-24.04
     needs: build-24
-    if: ${{ !cancelled() && inputs.vm != true }}
+    if: ${{ !cancelled() && inputs.vm == false }}
     steps:
       - name: Verify build finished
         run: |

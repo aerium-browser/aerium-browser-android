@@ -1,11 +1,7 @@
 name: auto-resume
 
 on:
-  workflow_run:
-    workflows: ['Build']
-    types: [completed]
-  schedule:
-    - cron: '0 * * * *'
+  workflow_dispatch:
 
 permissions:
   actions: write
@@ -18,7 +14,7 @@ concurrency:
 jobs:
   resume:
     if: >-
-      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch' ||
       ((github.event.workflow_run.conclusion == 'failure' ||
         github.event.workflow_run.conclusion == 'cancelled') &&
        github.event.workflow_run.head_branch == 'main')
