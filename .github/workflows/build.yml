@@ -81,7 +81,7 @@ jobs:
           GH_TOKEN: ${{ secrets.RUNNER_PAT }}
           NAME: aerium-${{ github.run_id }}
           ZONE: ${{ vars.GCP_ZONE || 'europe-west1-b' }}
-          MACHINE: ${{ vars.GCP_MACHINE || 'n2-standard-16' }}
+          MACHINE: ${{ vars.GCP_MACHINE || 'c3-standard-44' }}
         run: |
           set -euo pipefail
           token=$(gh api -X POST "repos/$GITHUB_REPOSITORY/actions/runners/registration-token" --jq .token)
