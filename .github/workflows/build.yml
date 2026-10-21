@@ -65,9 +65,58 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'push' }}
 
 jobs:
-  vm:
+  machine-up:
     if: ${{ inputs.vm != false }}
-    runs-on: self-hosted
+    runs-on: ubuntu-24.04
+    outputs:
+      name: ${{ steps.up.outputs.name }}
+    steps:
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Start the build machine
+        id: up
+        env:
+          GH_TOKEN: ${{ secrets.RUNNER_PAT }}
+          NAME: aerium-${{ github.run_id }}
+          ZONE: ${{ vars.GCP_ZONE || 'europe-west1-b' }}
+          MACHINE: ${{ vars.GCP_MACHINE || 'n2-standard-16' }}
+        run: |
+          set -euo pipefail
+          token=$(gh api -X POST "repos/$GITHUB_REPOSITORY/actions/runners/registration-token" --jq .token)
+          echo "::add-mask::$token"
+          ver=$(gh api repos/actions/runner/releases/latest --jq .tag_name | sed 's/^v//')
+          cat > "$RUNNER_TEMP/startup.sh" <<EOF
+          #!/bin/bash
+          set -e
+          id runner >/dev/null 2>&1 || useradd -m -s /bin/bash runner
+          echo 'runner ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/runner
+          cd /home/runner
+          [ -f config.sh ] && exit 0
+          curl -sL https://github.com/actions/runner/releases/download/v$ver/actions-runner-linux-x64-$ver.tar.gz | sudo -u runner tar xz
+          ./bin/installdependencies.sh || true
+          sudo -u runner ./config.sh --unattended --ephemeral --url https://github.com/$GITHUB_REPOSITORY --token $token --labels $NAME --name $NAME
+          sudo -u runner nohup ./run.sh > /home/runner/run.log 2>&1 &
+          EOF
+          gcloud compute instances create "$NAME" \
+            --zone "$ZONE" \
+            --machine-type "$MACHINE" \
+            --image-family ubuntu-2404-lts-amd64 \
+            --image-project ubuntu-os-cloud \
+            --boot-disk-size 300GB \
+            --boot-disk-type pd-balanced \
+            --max-run-duration 30h \
+            --instance-termination-action DELETE \
+            --metadata-from-file startup-script="$RUNNER_TEMP/startup.sh" \
+            --quiet
+          rm -f "$RUNNER_TEMP/startup.sh"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+
+  vm:
+    needs: machine-up
+    if: ${{ inputs.vm != false }}
+    runs-on: [self-hosted, "aerium-${{ github.run_id }}"]
     timeout-minutes: 2880
     steps:
       - name: Install base tools
@@ -130,6 +179,21 @@ jobs:
           retention-days: 30
           compression-level: 0
           overwrite: true
+
+  machine-down:
+    needs: [machine-up, vm]
+    if: ${{ always() && needs.machine-up.result == 'success' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Delete the build machine
+        env:
+          NAME: ${{ needs.machine-up.outputs.name }}
+          ZONE: ${{ vars.GCP_ZONE || 'europe-west1-b' }}
+        run: gcloud compute instances delete "$NAME" --zone "$ZONE" --quiet || true
 
   build-1:
     if: ${{ inputs.vm == false }}
