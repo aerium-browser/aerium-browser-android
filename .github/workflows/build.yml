@@ -67,7 +67,7 @@ concurrency:
 jobs:
   vm:
     if: ${{ inputs.vm != false }}
-    runs-on: [self-hosted, aerium]
+    runs-on: self-hosted
     timeout-minutes: 2880
     steps:
       - uses: actions/checkout@v5
