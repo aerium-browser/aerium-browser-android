@@ -199,6 +199,13 @@ EOF
             echo "$aerium_arg" >> out/Default/args.gn
         done < "$AERIUM_UI_DIR/engine/args.gn"
     fi
+    if [ -n "${AERIUM_EXTRA_ARGS:-}" ]; then
+        while IFS= read -r extra_arg; do
+            [ -z "$extra_arg" ] && continue
+            sed -i "/^${extra_arg%% =*} = /d" out/Default/args.gn
+            echo "$extra_arg" >> out/Default/args.gn
+        done <<< "$AERIUM_EXTRA_ARGS"
+    fi
     if [ -n "${AERIUM_UI_DIR:-}" ]; then
         gn gen out/Default > "$SCRIPT_DIR/gn_gen.log" 2>&1 || {
             echo "[aerium] FATAL: gn gen failed, the log is in the encrypted failure marker" >&2
