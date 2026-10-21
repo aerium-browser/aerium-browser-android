@@ -12,10 +12,10 @@ Subject: [PATCH] Host the Aerium menu
  create mode 100644 chrome/browser/ui/android/appmenu/java/src/org/chromium/chrome/browser/ui/appmenu/AppMenuSheet.java
 
 diff --git a/chrome/android/java/src/org/chromium/chrome/browser/tabbed_mode/TabbedAppMenuPropertiesDelegate.java b/chrome/android/java/src/org/chromium/chrome/browser/tabbed_mode/TabbedAppMenuPropertiesDelegate.java
-index c16621be2e6d350925a7ceb5e05489f15c8a4e84..f5405d36b7601a6f0f29dd86cca0f3c493b46187 100644
+index ea3d8e0c6f39ecc57e1c33ab754f491ac02d9235..10c6663e481820e73617878f297e38aaf2fad383 100644
 --- a/chrome/android/java/src/org/chromium/chrome/browser/tabbed_mode/TabbedAppMenuPropertiesDelegate.java
 +++ b/chrome/android/java/src/org/chromium/chrome/browser/tabbed_mode/TabbedAppMenuPropertiesDelegate.java
-@@ -299,6 +299,9 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
+@@ -298,6 +298,9 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
          } else if (menuGroup == MenuGroup.TABLET_EMPTY_MODE_MENU) {
              populateTabletEmptyModeMenu(modelList);
          }
@@ -26,7 +26,7 @@ index c16621be2e6d350925a7ceb5e05489f15c8a4e84..f5405d36b7601a6f0f29dd86cca0f3c4
      }
  
 diff --git a/chrome/browser/ui/android/appmenu/BUILD.gn b/chrome/browser/ui/android/appmenu/BUILD.gn
-index a9bd2019312240738b2589c1d1d79424efd9bc4f..4b984f87d6b499293df2bacb341112062b9a24bf 100644
+index 67d0b39999f53544bd138373ed5c358316055882..d55041701cdead2793b556506ac3c02f1b298a90 100644
 --- a/chrome/browser/ui/android/appmenu/BUILD.gn
 +++ b/chrome/browser/ui/android/appmenu/BUILD.gn
 @@ -19,6 +19,7 @@ android_library("java") {

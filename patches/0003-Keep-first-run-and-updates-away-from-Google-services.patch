@@ -65,10 +65,10 @@ index 2f6cb317900b93a5f2be9e687bff34f031381c63..dad48b6d67e01c8cb17fd9a407efb323
    AppendFormattedComponent(
        spec, parsed.host,
 diff --git a/content/public/android/java/src/org/chromium/content/browser/font/AndroidFontLookupImpl.java b/content/public/android/java/src/org/chromium/content/browser/font/AndroidFontLookupImpl.java
-index 069b9bd6f160135f71f1ebb4c772eb9ed0fc6910..90768a0095bb721b065073684f8ed2d798736023 100644
+index 3329b9cb14779db778bb48020158ac3438caf4b6..979a5f721b11dd76d69e1c97469f94cf9a0b7e8e 100644
 --- a/content/public/android/java/src/org/chromium/content/browser/font/AndroidFontLookupImpl.java
 +++ b/content/public/android/java/src/org/chromium/content/browser/font/AndroidFontLookupImpl.java
-@@ -96,7 +96,7 @@ public class AndroidFontLookupImpl implements AndroidFontLookup {
+@@ -87,7 +87,7 @@ public class AndroidFontLookupImpl implements AndroidFontLookup {
              PostTask.createSequencedTaskRunner(TaskTraits.USER_BLOCKING_MAY_BLOCK);
  
      private AndroidFontLookupImpl(Context appContext) {

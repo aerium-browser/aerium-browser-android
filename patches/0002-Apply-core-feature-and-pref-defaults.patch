@@ -29,7 +29,7 @@ index 90e572fe4efe1baa00ca8218dbcb3a5d0ad36ddb..02e4f7e5bb847c8325151fec1ce08f53
    SetupInitialPrefs();
    SetUpFieldTrials();
 diff --git a/chrome/browser/prefs/browser_prefs.cc b/chrome/browser/prefs/browser_prefs.cc
-index 2653e37becbfa113d92456139d86c321f09ed8b5..9bbf85dff6f568fcd66beb9fdd7e59163ed243c4 100644
+index 35b02686a1d21b4311b222b85f2041a2c2cd5949..e832e772ef056f32709a3b028fabc013c9fff880 100644
 --- a/chrome/browser/prefs/browser_prefs.cc
 +++ b/chrome/browser/prefs/browser_prefs.cc
 @@ -9,6 +9,7 @@
@@ -40,7 +40,7 @@ index 2653e37becbfa113d92456139d86c321f09ed8b5..9bbf85dff6f568fcd66beb9fdd7e5916
  #include "ash/constants/ash_login_pref_names.h"
  #include "base/files/file_path.h"
  #include "base/files/file_util.h"
-@@ -1738,6 +1739,8 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
+@@ -1846,6 +1847,8 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
        policy::policy_prefs::kLocalNetworkAccessPermissionsPolicyDefaultEnabled,
        false);
  
@@ -49,7 +49,7 @@ index 2653e37becbfa113d92456139d86c321f09ed8b5..9bbf85dff6f568fcd66beb9fdd7e5916
    // This is intentionally last.
    RegisterLocalStatePrefsForMigration(registry);
  }
-@@ -2297,6 +2300,8 @@ void RegisterUserProfilePrefs(user_prefs::PrefRegistrySyncable* registry,
+@@ -2401,6 +2404,8 @@ void RegisterUserProfilePrefs(user_prefs::PrefRegistrySyncable* registry,
    ash::LegacyTokenHandleFetcher::RegisterPrefs(registry);
    ash::TokenHandleStoreImpl::RegisterPrefs(registry);
  #endif

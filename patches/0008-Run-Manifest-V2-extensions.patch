@@ -14,7 +14,7 @@ Subject: [PATCH] Run Manifest V2 extensions
  7 files changed, 14 insertions(+), 8 deletions(-)
 
 diff --git a/chrome/common/extensions/api/_api_features.json b/chrome/common/extensions/api/_api_features.json
-index 4255410af88106db0aa7cd9c1f55577e243595e2..5ea285475600c3246f5d6317ba3eedf098150334 100644
+index 0d0d4f878e597dfdc000c4bd258f0c2ffb593688..0e65f386a419aaf69790c761ab0136ecdf00d2ba 100644
 --- a/chrome/common/extensions/api/_api_features.json
 +++ b/chrome/common/extensions/api/_api_features.json
 @@ -100,6 +100,7 @@
@@ -26,7 +26,7 @@ index 4255410af88106db0aa7cd9c1f55577e243595e2..5ea285475600c3246f5d6317ba3eedf0
        "2FC374607C2DF285634B67C64A2E356C607091C3",  // Quickoffice
        "3727DD3E564B6055387425027AD74C58784ACC15",  // Quickoffice internal
 diff --git a/chrome/common/extensions/api/_manifest_features.json b/chrome/common/extensions/api/_manifest_features.json
-index 48adcf00acbdb323a737cd906c567dd47ff2222b..d2f91e25cbecf9f1ff6cba61596de3a3befdefe3 100644
+index e879f774ecd54ca2746193e186e28bb99d020377..3598e7762785ab1624f613c07cc607a43e850df0 100644
 --- a/chrome/common/extensions/api/_manifest_features.json
 +++ b/chrome/common/extensions/api/_manifest_features.json
 @@ -18,7 +18,7 @@
@@ -39,7 +39,7 @@ index 48adcf00acbdb323a737cd906c567dd47ff2222b..d2f91e25cbecf9f1ff6cba61596de3a3
    "file_browser_handlers": {
      "channel": "stable",
 diff --git a/chrome/common/extensions/api/api_sources.gni b/chrome/common/extensions/api/api_sources.gni
-index 194386bf5e2a788140a888a1dc9f58e4625538d2..b1721f2aabded260651c6dcc1773b2c3e52531ff 100644
+index 3f933694eafda218d4637bd997ab130dca930e2c..450d231f85cb6f4729de0d083cf3df4d38a8de38 100644
 --- a/chrome/common/extensions/api/api_sources.gni
 +++ b/chrome/common/extensions/api/api_sources.gni
 @@ -61,9 +61,11 @@ if (enable_guest_view) {
@@ -54,7 +54,7 @@ index 194386bf5e2a788140a888a1dc9f58e4625538d2..b1721f2aabded260651c6dcc1773b2c3
    "top_sites.json",
  ]
  
-@@ -162,11 +164,6 @@ if (enable_extensions) {
+@@ -157,11 +159,6 @@ if (enable_extensions) {
      schema_sources_ += [ "pdf_viewer_private.idl" ]
    }
  
@@ -111,10 +111,10 @@ index 5841d3dfbc88884916629485c70b7c2671a6bc6b..631c3c0430275fd28be5b6966f4c6494
  
  }  // namespace
 diff --git a/extensions/common/extension_features.cc b/extensions/common/extension_features.cc
-index 0aa262591d6f288b6b1e7707a7fc70f833ac852b..e6b8c817d79fd7ffcefff7059f7bc41166319b47 100644
+index 22d664c36b4474c0bc5b3a3e76e5936709e98275..710780ae3fcbe6cb8e7abcea78b32da2849947f5 100644
 --- a/extensions/common/extension_features.cc
 +++ b/extensions/common/extension_features.cc
-@@ -272,4 +272,6 @@ BASE_FEATURE(kOptimizeWebRequestProxy, base::FEATURE_ENABLED_BY_DEFAULT);
+@@ -268,4 +268,6 @@ BASE_FEATURE(kOptimizeWebRequestProxy, base::FEATURE_ENABLED_BY_DEFAULT);
  
  BASE_FEATURE(kUseSha256ForExtensionHashes, base::FEATURE_DISABLED_BY_DEFAULT);
  
@@ -122,10 +122,10 @@ index 0aa262591d6f288b6b1e7707a7fc70f833ac852b..e6b8c817d79fd7ffcefff7059f7bc411
 +
  }  // namespace extensions_features
 diff --git a/extensions/common/extension_features.h b/extensions/common/extension_features.h
-index 094c6b9928742c86ef079b057c93f8379ed999d7..fe5c2b96e21c29bf316a6e2de5404917934b33cd 100644
+index 8687d20dc65c0efee5f75b7e3f26213ee8f4ed92..e59eb0b9b27dc842f69b39eb1051476a51cd2046 100644
 --- a/extensions/common/extension_features.h
 +++ b/extensions/common/extension_features.h
-@@ -354,6 +354,8 @@ BASE_DECLARE_FEATURE(kWebRequestPerContextEventDispatch);
+@@ -351,6 +351,8 @@ BASE_DECLARE_FEATURE(kWebRequestPerContextEventDispatch);
  // If enabled, `HashedExtensionId` uses SHA-256 hashes instead of SHA-1.
  BASE_DECLARE_FEATURE(kUseSha256ForExtensionHashes);
  

@@ -10,7 +10,7 @@ Subject: [PATCH] Add core build targets
  3 files changed, 13 insertions(+), 1 deletion(-)
 
 diff --git a/chrome/android/BUILD.gn b/chrome/android/BUILD.gn
-index 1b74cd83753feb11bf2571c635dbf32639f93677..49f72e0d9cd507df5a978712734f237d0a3fb13d 100644
+index 6ed792010ee90f07562ce80b34afe5fe722df299..cb4645e7f40a99e119cfd31947a156d410a5322f 100644
 --- a/chrome/android/BUILD.gn
 +++ b/chrome/android/BUILD.gn
 @@ -8,6 +8,7 @@ import("//build/toolchain/gcc_toolchain.gni")
@@ -21,7 +21,7 @@ index 1b74cd83753feb11bf2571c635dbf32639f93677..49f72e0d9cd507df5a978712734f237d
  import("//components/supervised_user/buildflags.gni")
  
  assert(!is_cronet_build)
-@@ -312,6 +313,7 @@ if (_is_default_toolchain) {
+@@ -310,6 +311,7 @@ if (_is_default_toolchain) {
  
    android_library("chrome_java") {
      deps = [
@@ -42,10 +42,10 @@ index 1b74cd83753feb11bf2571c635dbf32639f93677..49f72e0d9cd507df5a978712734f237d
      # Include sources from feed_java_sources.gni.
      sources += feed_java_sources
 diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
-index b58905ddb371f96377320c2948fe64bb17257663..64eec5bc9c4d030ebd18cede7b77fadb3b110f35 100644
+index 33a6696fd803af080bb0a7d71b66e06d6950f86d..3382cc8d844e49ea54e35280fd8c9b21f0f887a6 100644
 --- a/chrome/browser/BUILD.gn
 +++ b/chrome/browser/BUILD.gn
-@@ -3255,7 +3255,10 @@ source_set("browser") {
+@@ -3285,7 +3285,10 @@ source_set("browser") {
    # TODO(https://crbug.com/356905053): Add more dependencies here and merge this
    # block with the `enable_extensions` block above.
    if (enable_desktop_android_extensions) {
@@ -58,7 +58,7 @@ index b58905ddb371f96377320c2948fe64bb17257663..64eec5bc9c4d030ebd18cede7b77fadb
  
    if (enable_library_cdms) {
 diff --git a/chrome/browser/prefs/BUILD.gn b/chrome/browser/prefs/BUILD.gn
-index 817cd91bdac667c3165d33c55d01ca16842b75a7..3bac5fd177cc6609fb818ec3841d0ee7edcf6e97 100644
+index 831aaa964eab5ee4d7fb40c60a101dcb4083478d..1a41f426fbea9af79f129ad084c491505df3ed26 100644
 --- a/chrome/browser/prefs/BUILD.gn
 +++ b/chrome/browser/prefs/BUILD.gn
 @@ -48,6 +48,8 @@ source_set("impl") {

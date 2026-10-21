@@ -9,7 +9,7 @@ Subject: [PATCH] Reduce client hints and report a steady battery
  2 files changed, 27 insertions(+), 6 deletions(-)
 
 diff --git a/components/embedder_support/user_agent_utils.cc b/components/embedder_support/user_agent_utils.cc
-index 5d96c604058070930d59de9b0d672cbdb6d32439..d9fe81dd3cffa96a52e937ce7aa93dfa9f3e1a7d 100644
+index e699a6a394fd7a41b441ff6edeb1a17bfe51bc85..99824935edad896bf4c93f12de526a2eb91806e8 100644
 --- a/components/embedder_support/user_agent_utils.cc
 +++ b/components/embedder_support/user_agent_utils.cc
 @@ -56,6 +56,10 @@
@@ -33,7 +33,7 @@ index 5d96c604058070930d59de9b0d672cbdb6d32439..d9fe81dd3cffa96a52e937ce7aa93dfa
  
    std::string brand_version =
        output_version_type == blink::UserAgentBrandVersionType::kFullVersion
-@@ -697,6 +704,21 @@ blink::UserAgentMetadata GetUserAgentMetadata(bool only_low_entropy_ch) {
+@@ -696,6 +703,21 @@ blink::UserAgentMetadata GetUserAgentMetadata(bool only_low_entropy_ch) {
    metadata.bitness = GetCpuBitness();
    metadata.wow64 = IsWoW64();
    metadata.platform_version = GetPlatformVersion();

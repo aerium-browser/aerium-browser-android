@@ -22,7 +22,7 @@ index 76af6b111c1ea94ebb40a64269b5aa0586db3463..75ccef7ba5aa5b62787bd8647c53d21d
      ToolbarWidthConsumer getPoppedOutActionWidthConsumer();
  
 diff --git a/chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/extensions/ExtensionsToolbarCoordinatorImpl.java b/chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/extensions/ExtensionsToolbarCoordinatorImpl.java
-index 770a58b5dc44c2d2767649a9caec8d68c1cf0d2c..f4d7708fac4c86ea99ec3963313fa6e9fda5a45c 100644
+index 8858367251bdd236931dbac97c2ffd2659b2e8f5..5861aba528f3d6465a291da6e9024c7196f8107d 100644
 --- a/chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/extensions/ExtensionsToolbarCoordinatorImpl.java
 +++ b/chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/extensions/ExtensionsToolbarCoordinatorImpl.java
 @@ -37,6 +37,7 @@ import org.chromium.chrome.browser.ui.browser_window.ChromeAndroidTask;

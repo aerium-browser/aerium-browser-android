@@ -18,10 +18,10 @@ Subject: [PATCH] Show the extensions toolbar and popups on phones
  11 files changed, 71 insertions(+), 10 deletions(-)
 
 diff --git a/chrome/android/java/src/org/chromium/chrome/browser/toolbar/ToolbarManager.java b/chrome/android/java/src/org/chromium/chrome/browser/toolbar/ToolbarManager.java
-index 1d8b14d51be39faacd0433ce2ca82c0ad375bf2f..8bdeffab69e68480e20b5c3cd38a5e33e42745e4 100644
+index 774d76e8da1ab8af60c8ba6eb031ce1155bda97a..4d7491c354160de781b3333ddf8bd59e6b4f6b24 100644
 --- a/chrome/android/java/src/org/chromium/chrome/browser/toolbar/ToolbarManager.java
 +++ b/chrome/android/java/src/org/chromium/chrome/browser/toolbar/ToolbarManager.java
-@@ -2765,7 +2765,7 @@ public class ToolbarManager
+@@ -2779,7 +2779,7 @@ public class ToolbarManager
                                                          mActivityTabProvider.asObservable(),
                                                          mTabCreatorManager.getTabCreator(false),
                                                          getBrowsingModeThemeColorProvider(),
@@ -95,10 +95,10 @@ index bc5311b8ec5c1aa4b38213331d20179bfbf4336a..d59786d4a18c3d6ef4d5b1250c7ba4ac
  
  input {
 diff --git a/chrome/browser/ui/android/extensions/extension_action_popup_contents.cc b/chrome/browser/ui/android/extensions/extension_action_popup_contents.cc
-index e2048698668578019201223c843dac69a9532098..c63ebb4279a3acf8cf3ae830329e62ae02281822 100644
+index f04766838b356898425f6a1fe7b8b2ce30dd02c0..007fdc60d3b884b52865b2aaf8311fe85e90ced4 100644
 --- a/chrome/browser/ui/android/extensions/extension_action_popup_contents.cc
 +++ b/chrome/browser/ui/android/extensions/extension_action_popup_contents.cc
-@@ -18,6 +18,7 @@
+@@ -17,6 +17,7 @@
  #include "extensions/browser/extension_action.h"
  #include "extensions/browser/extension_action_manager.h"
  #include "extensions/browser/extension_registry.h"
@@ -106,7 +106,7 @@ index e2048698668578019201223c843dac69a9532098..c63ebb4279a3acf8cf3ae830329e62ae
  
  // Must come after all headers that specialize FromJniType() / ToJniType().
  #include "chrome/browser/ui/android/extensions/jni_headers/ExtensionActionPopupContents_jni.h"
-@@ -36,6 +37,11 @@ namespace {
+@@ -35,6 +36,11 @@ namespace {
  // https://developer.chrome.com/docs/extensions/reference/api/action#popup
  constexpr gfx::Size kMinSize = {25, 25};
  constexpr gfx::Size kMaxSize = {800, 600};
@@ -118,7 +118,7 @@ index e2048698668578019201223c843dac69a9532098..c63ebb4279a3acf8cf3ae830329e62ae
  
  }  // namespace
  
-@@ -131,6 +137,11 @@ void ExtensionActionPopupContents::OnLoaded() {
+@@ -130,6 +136,11 @@ void ExtensionActionPopupContents::OnLoaded() {
    }
    Java_ExtensionActionPopupContents_onLoaded(AttachCurrentThread(),
                                               java_object_);
@@ -130,7 +130,7 @@ index e2048698668578019201223c843dac69a9532098..c63ebb4279a3acf8cf3ae830329e62ae
  }
  
  void ExtensionActionPopupContents::Destroy(JNIEnv* env) {
-@@ -143,6 +154,9 @@ void ExtensionActionPopupContents::LoadInitialPage(JNIEnv* env) {
+@@ -142,6 +153,9 @@ void ExtensionActionPopupContents::LoadInitialPage(JNIEnv* env) {
  
  void ExtensionActionPopupContents::SetUpNewMainFrame(
      RenderFrameHost* render_frame_host) {
@@ -210,7 +210,7 @@ index 2740f9c91e4191f4d985975e381bf18b87d5fbf0..d2c864efdb59459e3ee43cbce1973644
                          contents,
                          mContextMenuPopulatorFactory,
 diff --git a/chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/extensions/ExtensionActionPopup.java b/chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/extensions/ExtensionActionPopup.java
-index eddfde6b63e20f301827a5ba4b434163e1054d7f..3bbb1efb179e56cdafd832bdb9405412ae73bb59 100644
+index 157f6a21a919023ea9aa73819c28218a28bbef4e..5964e7c94aec7ad75cfbe8bb0cd47cda41430413 100644
 --- a/chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/extensions/ExtensionActionPopup.java
 +++ b/chrome/browser/ui/android/toolbar/java/src/org/chromium/chrome/browser/toolbar/extensions/ExtensionActionPopup.java
 @@ -33,6 +33,7 @@ import org.chromium.components.thinwebview.internal.ThinWebViewContextMenuItemDe

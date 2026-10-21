@@ -4,33 +4,18 @@ Date: Thu, 1 Jan 2026 00:00:00 +0000
 Subject: [PATCH] Bring DevTools to phones
 
 ---
- .../browser/contextmenu/ChromeContextMenuPopulator.java   | 3 +--
  .../chrome/browser/customtabs/BaseCustomTabActivity.java  | 3 +++
  .../chrome/browser/devtools/DevToolsActivity.java         | 6 +++++-
  .../browser/devtools/DevToolsIntentDataProvider.java      | 8 ++++++++
- .../chrome/browser/tabbed_mode/MoreToolsItemBuilder.java  | 2 --
+ .../chrome/browser/devtools/DevToolsWindowAndroid.java    | 4 +---
  .../renderer/core/css/resolver/viewport_style_resolver.cc | 5 +++--
- 6 files changed, 20 insertions(+), 7 deletions(-)
+ 5 files changed, 20 insertions(+), 6 deletions(-)
 
-diff --git a/chrome/android/java/src/org/chromium/chrome/browser/contextmenu/ChromeContextMenuPopulator.java b/chrome/android/java/src/org/chromium/chrome/browser/contextmenu/ChromeContextMenuPopulator.java
-index e783bf65be65ee6a38d2f9609c3f1baa9c83a752..49b0d1590e367955d64b38eaf818577f31891df1 100644
---- a/chrome/android/java/src/org/chromium/chrome/browser/contextmenu/ChromeContextMenuPopulator.java
-+++ b/chrome/android/java/src/org/chromium/chrome/browser/contextmenu/ChromeContextMenuPopulator.java
-@@ -503,8 +503,7 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
-     @VisibleForTesting
-     boolean shouldShowDeveloperMenu() {
-         return DevToolsWindowAndroid.isDevToolsAllowedFor(
--                        getProfile(), mItemDelegate.getWebContents())
--                && isTabletScreen();
-+                getProfile(), mItemDelegate.getWebContents());
-     }
- 
-     @VisibleForTesting
 diff --git a/chrome/android/java/src/org/chromium/chrome/browser/customtabs/BaseCustomTabActivity.java b/chrome/android/java/src/org/chromium/chrome/browser/customtabs/BaseCustomTabActivity.java
-index 2c2aceeeb34cc09084b3177cb8b1e17f12bab6d4..da6b30b364c0b15b28d131a670c5256da44bc2dd 100644
+index f6aacb92ed93e1a103e625f46e8ad3e82fa9450f..88070621df68e742aeb79256dda2390c6929e8c5 100644
 --- a/chrome/android/java/src/org/chromium/chrome/browser/customtabs/BaseCustomTabActivity.java
 +++ b/chrome/android/java/src/org/chromium/chrome/browser/customtabs/BaseCustomTabActivity.java
-@@ -473,6 +473,9 @@ public abstract class BaseCustomTabActivity extends ChromeActivity {
+@@ -488,6 +488,9 @@ public abstract class BaseCustomTabActivity extends ChromeActivity {
              protected OtrProfileId createOffTheRecordProfileId() {
                  switch (getIntentDataProvider().getCustomTabMode()) {
                      case CustomTabProfileType.INCOGNITO:
@@ -97,26 +82,28 @@ index 6b03859660fb2fa2df8a6c6d77e51024a1264711..7768e0038e74a72e457ee945cb31a5a9
      @Override
      public Intent getIntent() {
          return mIntent;
-diff --git a/chrome/android/java/src/org/chromium/chrome/browser/tabbed_mode/MoreToolsItemBuilder.java b/chrome/android/java/src/org/chromium/chrome/browser/tabbed_mode/MoreToolsItemBuilder.java
-index ce4411afa49bc04ebb1979bdf1e07b9ddd4aa1b4..c1577bc3e6e5eff27431645a30aae3ec8ba2c55a 100644
---- a/chrome/android/java/src/org/chromium/chrome/browser/tabbed_mode/MoreToolsItemBuilder.java
-+++ b/chrome/android/java/src/org/chromium/chrome/browser/tabbed_mode/MoreToolsItemBuilder.java
-@@ -28,7 +28,6 @@ import org.chromium.components.embedder_support.util.UrlUtilities;
+diff --git a/chrome/browser/devtools/android/java/src/org/chromium/chrome/browser/devtools/DevToolsWindowAndroid.java b/chrome/browser/devtools/android/java/src/org/chromium/chrome/browser/devtools/DevToolsWindowAndroid.java
+index c96056e2843a418022181202d62588688b76fd54..0e634a6a66b4b022c555c472674d5ff2090f474f 100644
+--- a/chrome/browser/devtools/android/java/src/org/chromium/chrome/browser/devtools/DevToolsWindowAndroid.java
++++ b/chrome/browser/devtools/android/java/src/org/chromium/chrome/browser/devtools/DevToolsWindowAndroid.java
+@@ -14,7 +14,6 @@ import org.chromium.chrome.browser.profiles.Profile;
  import org.chromium.content_public.browser.ContentFeatureList;
  import org.chromium.content_public.browser.ContentFeatureMap;
  import org.chromium.content_public.browser.WebContents;
 -import org.chromium.ui.base.DeviceFormFactor;
- import org.chromium.ui.modelutil.MVCListAdapter.ListItem;
- import org.chromium.ui.modelutil.PropertyModel;
- import org.chromium.url.GURL;
-@@ -252,7 +251,6 @@ public class MoreToolsItemBuilder {
-      */
-     public boolean shouldShowDevToolsItem(@Nullable Tab currentTab) {
-         if (!ContentFeatureMap.isEnabled(ContentFeatureList.ANDROID_DEV_TOOLS_FRONTEND)
--                || !DeviceFormFactor.isNonMultiDisplayContextOnTablet(mContext)
-                 || currentTab == null
-                 || currentTab.isNativePage()) {
-             return false;
+ 
+ /** DevToolsWindowAndroid provides an interface to control DevTools windows. */
+ @NullMarked
+@@ -24,8 +23,7 @@ public class DevToolsWindowAndroid {
+     private DevToolsWindowAndroid() {}
+ 
+     public static boolean isDevToolsAvailable(Context context) {
+-        return ContentFeatureMap.isEnabled(ContentFeatureList.ANDROID_DEV_TOOLS_FRONTEND)
+-                && DeviceFormFactor.isNonMultiDisplayContextOnTablet(context);
++        return ContentFeatureMap.isEnabled(ContentFeatureList.ANDROID_DEV_TOOLS_FRONTEND);
+     }
+ 
+     public static boolean isDevToolsAllowedFor(
 diff --git a/third_party/blink/renderer/core/css/resolver/viewport_style_resolver.cc b/third_party/blink/renderer/core/css/resolver/viewport_style_resolver.cc
 index 386519f0b17502baba5f1fbd50fbfcd1d247e523..6d086a43b49d9e187fe63823098bea6851c01ef0 100644
 --- a/third_party/blink/renderer/core/css/resolver/viewport_style_resolver.cc

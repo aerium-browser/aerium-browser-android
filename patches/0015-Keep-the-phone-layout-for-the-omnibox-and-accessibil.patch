@@ -43,10 +43,10 @@ index aca2c0f617170073aa2b6c97df80959c897060bb..c2168a2daa8c8e2b7f6df793cb5790b1
              flags |= (1 << (int) LockReason.A11Y_ENABLED);
          }
 diff --git a/chrome/browser/flag-metadata.json b/chrome/browser/flag-metadata.json
-index e7b5be616ece35f7c418bdef468da8a5042dc1d2..72ff2dfeff8076e3f4d12b3506ea7c1772052228 100644
+index c13a2b3ccacdaef04a7ac1fe774560fafcdcc924..4430e30afe3168e348790a9e3a83ce26dfee805c 100644
 --- a/chrome/browser/flag-metadata.json
 +++ b/chrome/browser/flag-metadata.json
-@@ -218,7 +218,7 @@
+@@ -223,7 +223,7 @@
      "owners": [
        "etiennep@google.com", "fdoray@google.com"
      ],
@@ -55,7 +55,7 @@ index e7b5be616ece35f7c418bdef468da8a5042dc1d2..72ff2dfeff8076e3f4d12b3506ea7c17
    },
    {
      "name": "allow-all-sites-to-initiate-mirroring",
-@@ -331,7 +331,7 @@
+@@ -350,7 +350,7 @@
    {
      "name": "android-bottom-bar",
      "owners": [ "polardz@google.com", "ckitagawa@chromium.com", "clank-tab-dev@google.com" ],
@@ -64,7 +64,7 @@ index e7b5be616ece35f7c418bdef468da8a5042dc1d2..72ff2dfeff8076e3f4d12b3506ea7c17
    },
    {
      "name": "android-bricks-native-page",
-@@ -1789,7 +1789,7 @@
+@@ -1812,7 +1812,7 @@
    {
      "name": "cct-open-in-browser-button-if-allowed-by-embedder",
      "owners": ["kamalchoudhury@google.com", "edmundw@google.com"],
@@ -73,7 +73,7 @@ index e7b5be616ece35f7c418bdef468da8a5042dc1d2..72ff2dfeff8076e3f4d12b3506ea7c17
    },
    {
      "name": "cct-open-in-browser-button-if-enabled-by-embedder",
-@@ -2564,7 +2564,7 @@
+@@ -2613,7 +2613,7 @@
    {
      "name": "darken-websites-checkbox-in-themes-setting",
      "owners": [ "nemco@google.com", "wenyufu@google.com", "twellington@chromium.org" ],
@@ -82,7 +82,7 @@ index e7b5be616ece35f7c418bdef468da8a5042dc1d2..72ff2dfeff8076e3f4d12b3506ea7c17
    },
    {
      "name": "data-controls-search-with",
-@@ -3267,7 +3267,7 @@
+@@ -3296,7 +3296,7 @@
    {
      "name": "enable-accessibility-sequential-focus",
      "owners": [ "jocelyntran@google.com", "//ui/accessibility/OWNERS" ],
@@ -91,7 +91,7 @@ index e7b5be616ece35f7c418bdef468da8a5042dc1d2..72ff2dfeff8076e3f4d12b3506ea7c17
    },
    {
      "name": "enable-accessibility-set-selectable-on-all-nodes-with-text",
-@@ -4845,7 +4845,7 @@
+@@ -4856,7 +4856,7 @@
    {
      "name": "enforce-incognito-isolation",
      "owners": [ "shuyng@google.com", "clank-large-form-factors@google.com" ],
@@ -100,7 +100,7 @@ index e7b5be616ece35f7c418bdef468da8a5042dc1d2..72ff2dfeff8076e3f4d12b3506ea7c17
    },
    {
      "name": "enforce-management-disclaimer",
-@@ -6368,7 +6368,7 @@
+@@ -6362,7 +6362,7 @@
    {
      "name": "inline-pdf-v2",
      "owners": [ "rathomas@google.com", "clank-large-form-factors@google.com" ],
@@ -109,7 +109,7 @@ index e7b5be616ece35f7c418bdef468da8a5042dc1d2..72ff2dfeff8076e3f4d12b3506ea7c17
    },
    {
      "name": "inline-pdf-v2-incognito",
-@@ -6671,7 +6671,7 @@
+@@ -6665,7 +6665,7 @@
    {
      "name": "jump-start-omnibox",
      "owners": [ "ender@google.com", "chrome-mobile-search@google.com" ],
@@ -118,7 +118,7 @@ index e7b5be616ece35f7c418bdef468da8a5042dc1d2..72ff2dfeff8076e3f4d12b3506ea7c17
    },
    {
      "name": "jupiter-screensaver",
-@@ -6937,7 +6937,7 @@
+@@ -6919,7 +6919,7 @@
        "twellington@chromium.org",
        "skavuluru@google.com"
      ],
@@ -127,7 +127,7 @@ index e7b5be616ece35f7c418bdef468da8a5042dc1d2..72ff2dfeff8076e3f4d12b3506ea7c17
    },
    {
      "name": "long-screenshots-lenient-memory-check",
-@@ -7555,7 +7555,7 @@
+@@ -7552,7 +7552,7 @@
    {
      "name": "offline-auto-fetch",
      "owners": [ "tbansal@google.com" ],
@@ -136,7 +136,7 @@ index e7b5be616ece35f7c418bdef468da8a5042dc1d2..72ff2dfeff8076e3f4d12b3506ea7c17
    },
    {
      "name": "omaha-min-sdk-version-android",
-@@ -10025,7 +10025,7 @@
+@@ -10000,7 +10000,7 @@
    {
      "name": "use-fullscreen-insets-api",
      "owners": [ "clhager@google.com"],
@@ -175,10 +175,10 @@ index a255312f65554016510ffb50bb3f787c153185b5..c5ebb8368dec5e35f04b5f1b03cf7c74
                          : durationMs;
  
 diff --git a/components/omnibox/browser/autocomplete_result.cc b/components/omnibox/browser/autocomplete_result.cc
-index 6aea0872679b3425dad14bb257803633fae80da2..3dcd4acf8fb36e4169e42ba7d01737438a074dd2 100644
+index 0ec4c826bf222e697f792c639c6651f666570373..fbedd81ecbcf28c238e717d21db2c3961d1acaf7 100644
 --- a/components/omnibox/browser/autocomplete_result.cc
 +++ b/components/omnibox/browser/autocomplete_result.cc
-@@ -79,7 +79,7 @@ typedef AutocompleteMatchType ACMatchType;
+@@ -79,7 +79,7 @@ using AutocompleteMatchType = omnibox::AutocompleteMatchType;
  namespace {
  
  constexpr bool is_android_any = !!BUILDFLAG(IS_ANDROID);
@@ -188,7 +188,7 @@ index 6aea0872679b3425dad14bb257803633fae80da2..3dcd4acf8fb36e4169e42ba7d0173743
  constexpr bool is_ios = !!BUILDFLAG(IS_IOS);
  constexpr bool is_desktop = !(is_android_mobile || is_ios);
 diff --git a/components/omnibox/browser/zero_suggest_verbatim_match_provider.cc b/components/omnibox/browser/zero_suggest_verbatim_match_provider.cc
-index 69cfb055fc782f06da7a4bf710e810aed013e6ea..4d360a96ac64b9f0d866e5baecac48099c2dc528 100644
+index f3775921610c4f64fa93736ac6234153b8222bb9..cd4753f253840691f74e9ad360e465d3af47ec72 100644
 --- a/components/omnibox/browser/zero_suggest_verbatim_match_provider.cc
 +++ b/components/omnibox/browser/zero_suggest_verbatim_match_provider.cc
 @@ -28,7 +28,7 @@

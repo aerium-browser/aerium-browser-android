@@ -15,10 +15,10 @@ Subject: [PATCH] Give extensions their own Aerogel window
  8 files changed, 37 insertions(+), 12 deletions(-)
 
 diff --git a/chrome/android/java/src/org/chromium/chrome/browser/ChromeTabbedActivity.java b/chrome/android/java/src/org/chromium/chrome/browser/ChromeTabbedActivity.java
-index fa74541a751674dcc0c3b569cb95a8c487f9e22b..33a52bad0973acf16d7e57337fd4b638b0e5c6ac 100644
+index 7381e0dab618830bded7ec49813b4a1454537bc9..d3f291dcd9c8f7d6ad26db393a0cdf7bd1cd410c 100644
 --- a/chrome/android/java/src/org/chromium/chrome/browser/ChromeTabbedActivity.java
 +++ b/chrome/android/java/src/org/chromium/chrome/browser/ChromeTabbedActivity.java
-@@ -1284,15 +1284,17 @@ public class ChromeTabbedActivity extends ChromeActivity implements PreAttachInt
+@@ -1285,15 +1285,17 @@ public class ChromeTabbedActivity extends ChromeActivity implements PreAttachInt
                          defaultPaneId);
          // TODO(crbug.com/444024982): Preserve default pane via PaneListBuilder.
          var builder = mHubProvider.getPaneListBuilder();
@@ -55,10 +55,10 @@ index 2db787ec0edeecc0149799eecce66587678ac34c..e00628aa131ba8f8199933fe29105080
              Pair<Boolean, Boolean> backPressAction = determineBackPressAction(tab);
              boolean minimizeApp = backPressAction.first;
 diff --git a/chrome/browser/extensions/api/tabs/tabs_api.cc b/chrome/browser/extensions/api/tabs/tabs_api.cc
-index 0892d1b23ea62ab466d946a787bf6b7197cc4239..ef45f1b97742553e0f8e705686c068aa813d098d 100644
+index 2a631eb9fc793cbe52e820e86d6434a73caa6fae..f0425028726dbad6a8d46c714d09bd13e9e5a9c0 100644
 --- a/chrome/browser/extensions/api/tabs/tabs_api.cc
 +++ b/chrome/browser/extensions/api/tabs/tabs_api.cc
-@@ -1904,6 +1904,9 @@ base::ListValue TabsQueryFunction::BuildTabList(
+@@ -1918,6 +1918,9 @@ base::ListValue TabsQueryFunction::BuildTabList(
      }
  
      TabListInterface* tab_list = TabListInterface::From(browser);
@@ -119,10 +119,10 @@ index d08378d6b30fe4d91ec847e77a3ed92a5bd4e9c2..b4db68a6018cb22ea073908262edbbed
                "ProfileDestroyer::DestroyOTRProfileWhenAppropriateWithTimeout",
                [&](perfetto::EventContext ctx) {
 diff --git a/content/browser/web_contents/web_contents_impl.cc b/content/browser/web_contents/web_contents_impl.cc
-index 6d6d0947faf0be9203085344fce2998dbba586c8..54fb90e79de336039dae6ca8994559ef8149eb44 100644
+index f038e08ea02c4f60ccad698018fa7505b3dc10bd..e01d1cac5d35e34a2a046b3441824913bf89dd08 100644
 --- a/content/browser/web_contents/web_contents_impl.cc
 +++ b/content/browser/web_contents/web_contents_impl.cc
-@@ -826,6 +826,15 @@ WebContents* WebContents::FromRenderViewHost(RenderViewHost* rvh) {
+@@ -837,6 +837,15 @@ WebContents* WebContents::FromRenderViewHost(RenderViewHost* rvh) {
        static_cast<RenderViewHostImpl*>(rvh)->GetDelegate());
  }
  
@@ -139,7 +139,7 @@ index 6d6d0947faf0be9203085344fce2998dbba586c8..54fb90e79de336039dae6ca8994559ef
    OPTIONAL_TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("content.verbose"),
                          "WebContents::FromRenderFrameHost", "render_frame_host",
 diff --git a/content/public/browser/web_contents.h b/content/public/browser/web_contents.h
-index 286c61111d622b0bf0a4b84769a6d223019bdf63..3288d217079cbfd43dcfc3b56bce93cb05a9bc74 100644
+index 29358322a5dc5983109cb0350ef3914e36efcf9f..4a5e06555dde2c344e223aace1e03c6f6b0b811a 100644
 --- a/content/public/browser/web_contents.h
 +++ b/content/public/browser/web_contents.h
 @@ -447,6 +447,9 @@ class WebContents : public PageNavigator, public base::SupportsUserData {

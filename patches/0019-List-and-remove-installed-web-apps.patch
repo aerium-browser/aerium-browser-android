@@ -8,10 +8,10 @@ Subject: [PATCH] List and remove installed web apps
  1 file changed, 18 insertions(+)
 
 diff --git a/chrome/android/java/src/org/chromium/chrome/browser/webapps/WebappRegistry.java b/chrome/android/java/src/org/chromium/chrome/browser/webapps/WebappRegistry.java
-index 0fc9f4a3d752b0be1e7b280b109ec5758499aedd..654aa1903682e50fff809735adfa411176973c35 100644
+index 380df10d2a57c12c3589d0ef0c3071571fe2d1c3..dfb30f54a8a7727153ec7bc0efd7d7b6e6bf35be 100644
 --- a/chrome/android/java/src/org/chromium/chrome/browser/webapps/WebappRegistry.java
 +++ b/chrome/android/java/src/org/chromium/chrome/browser/webapps/WebappRegistry.java
-@@ -291,6 +291,24 @@ public class WebappRegistry {
+@@ -289,6 +289,24 @@ public class WebappRegistry {
          return bestMatch;
      }
  

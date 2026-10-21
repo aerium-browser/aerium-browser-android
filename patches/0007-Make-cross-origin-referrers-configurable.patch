@@ -71,10 +71,10 @@ index e5258679dd876490012a756f7e10cfb64541cbe6..a4a8e6717dab2d724780e12adc32b190
  }
  
 diff --git a/net/base/features.cc b/net/base/features.cc
-index 91baaef2c5b4d1f02d74330a518782c9e3dade25..9b888dd70b21f563ae6a85a3b9b64128be6841e9 100644
+index 2876df4285aa69236208e784991f3240cec3ded9..a1146f08de3276dfbe11e4faeeee305505ce3a15 100644
 --- a/net/base/features.cc
 +++ b/net/base/features.cc
-@@ -1082,5 +1082,12 @@ BASE_FEATURE_PARAM(int,
+@@ -1076,5 +1076,12 @@ BASE_FEATURE_PARAM(int,
                     &kQuicSocketSendBufferSize,
                     -1);
  
@@ -88,10 +88,10 @@ index 91baaef2c5b4d1f02d74330a518782c9e3dade25..9b888dd70b21f563ae6a85a3b9b64128
  }  // namespace net::features
  
 diff --git a/net/base/features.h b/net/base/features.h
-index 58a2623a745e37138137040d618ab8ee0ebe489a..364c64f8af5bbc42b57218329cc24d818e4a0476 100644
+index 96c005fd5295c2439134171561e140081dd8682c..4eaf60bca508366f2511d8e240c291dc65247055 100644
 --- a/net/base/features.h
 +++ b/net/base/features.h
-@@ -1066,6 +1066,9 @@ NET_EXPORT BASE_DECLARE_FEATURE(kEnableWindowsTcpLoopbackFastFail);
+@@ -1064,6 +1064,9 @@ NET_EXPORT BASE_DECLARE_FEATURE(kEnableWindowsTcpLoopbackFastFail);
  NET_EXPORT BASE_DECLARE_FEATURE(kQuicSocketSendBufferSize);
  NET_EXPORT BASE_DECLARE_FEATURE_PARAM(int, kQuicSocketSendBufferSizeParam);
  
@@ -102,10 +102,10 @@ index 58a2623a745e37138137040d618ab8ee0ebe489a..364c64f8af5bbc42b57218329cc24d81
  
  #endif  // NET_BASE_FEATURES_H_
 diff --git a/net/url_request/url_request_http_job.cc b/net/url_request/url_request_http_job.cc
-index f93d02b8024ee7348ca8a975d813be0408e1def7..bc999401e55cff9052123a19f1e8832b9abc21a5 100644
+index c909310d202002b724941bd4e2b4fede56b69d45..29610dd99f5d240939bf086c9aac807228019f1b 100644
 --- a/net/url_request/url_request_http_job.cc
 +++ b/net/url_request/url_request_http_job.cc
-@@ -513,7 +513,8 @@ void URLRequestHttpJob::Start() {
+@@ -470,7 +470,8 @@ void URLRequestHttpJob::Start() {
  
    // URLRequest::SetReferrer ensures that we do not send username and password
    // fields in the referrer.
@@ -116,7 +116,7 @@ index f93d02b8024ee7348ca8a975d813be0408e1def7..bc999401e55cff9052123a19f1e8832b
    // Our consumer should have made sure that this is a safe referrer (e.g. via
    // URLRequestJob::ComputeReferrerForPolicy).
 diff --git a/net/url_request/url_request_job.cc b/net/url_request/url_request_job.cc
-index ebc70925cb064e29c6258f8b6b1a085b55b1133d..908730667ea539d12789cb3430d649d7b2969263 100644
+index 80a9c132c2939c1750ae5b1cb6832c095dd75272..4e14ee2ff0810d9b7f6bc2b8b6f1edd152a23171 100644
 --- a/net/url_request/url_request_job.cc
 +++ b/net/url_request/url_request_job.cc
 @@ -42,6 +42,7 @@
@@ -155,7 +155,7 @@ index ebc70925cb064e29c6258f8b6b1a085b55b1133d..908730667ea539d12789cb3430d649d7
      ReferrerPolicy policy,
      const GURL& original_referrer,
 diff --git a/net/url_request/url_request_job.h b/net/url_request/url_request_job.h
-index 4c662ac8b9d7017be0bbaf92d0fa99f6ef62c749..2ed99930a978259d09e505c3cd0a1e789d285fa6 100644
+index 001d35d3529f36c04e4351678f2fd9ca1f34ee0a..1f04f87467b0f466c38abaa3f2e652aca11e6c2f 100644
 --- a/net/url_request/url_request_job.h
 +++ b/net/url_request/url_request_job.h
 @@ -300,6 +300,9 @@ class NET_EXPORT URLRequestJob {

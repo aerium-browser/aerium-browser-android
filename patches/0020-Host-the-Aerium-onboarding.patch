@@ -8,13 +8,13 @@ Subject: [PATCH] Host the Aerium onboarding
  1 file changed, 4 insertions(+)
 
 diff --git a/chrome/android/java/src/org/chromium/chrome/browser/ChromeTabbedActivity.java b/chrome/android/java/src/org/chromium/chrome/browser/ChromeTabbedActivity.java
-index 33a52bad0973acf16d7e57337fd4b638b0e5c6ac..bfc22d71636948f9c513db61c8f742d2c5510c66 100644
+index d3f291dcd9c8f7d6ad26db393a0cdf7bd1cd410c..2395e13c20318f69e858d14faf5aa93c5866dcd2 100644
 --- a/chrome/android/java/src/org/chromium/chrome/browser/ChromeTabbedActivity.java
 +++ b/chrome/android/java/src/org/chromium/chrome/browser/ChromeTabbedActivity.java
-@@ -1663,6 +1663,10 @@ public class ChromeTabbedActivity extends ChromeActivity implements PreAttachInt
-             var profileProvider = assertNonNull(getProfileProviderSupplier().get());
-             var profile = profileProvider.getOriginalProfile();
-             new NavigationPredictorBridge(profile, getLifecycleDispatcher(), this::isWarmOnResume);
+@@ -1654,6 +1654,10 @@ public class ChromeTabbedActivity extends ChromeActivity implements PreAttachInt
+             var originalProfile = profileProvider.getOriginalProfile();
+             new NavigationPredictorBridge(
+                     originalProfile, getLifecycleDispatcher(), this::isWarmOnResume);
 +            if (!isIncognitoWindow()) {
 +                io.dioide.aerium.bridge.SurfaceDialog.show(
 +                        this, io.dioide.aerium.api.Slot.ONBOARDING, getLifecycleDispatcher());
