@@ -94,6 +94,7 @@ jobs:
           tag_name: v${{ steps.ver.outputs.version }}-${{ steps.run.outputs.arch == 'x64' && 'x64-' || '' }}b${{ steps.run.outputs.number }}
           target_commitish: ${{ steps.run.outputs.sha }}
           name: Aerium ${{ steps.ver.outputs.version }} (${{ steps.run.outputs.arch }}, build ${{ steps.run.outputs.number }})
+          draft: true
           prerelease: ${{ steps.run.outputs.arch == 'x64' }}
           make_latest: ${{ steps.run.outputs.arch == 'x64' && 'false' || 'true' }}
           generate_release_notes: true
