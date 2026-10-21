@@ -128,7 +128,7 @@ jobs:
         run: |
           echo 'DPkg::Lock::Timeout "1800";' | sudo tee /etc/apt/apt.conf.d/90aerium-wait >/dev/null
           sudo apt-get update -q
-          sudo apt-get install -y -q git curl python3 lsb-release zstd openssl xz-utils file unzip bzip2 patch rsync
+          sudo apt-get install -y -q git curl python3 lsb-release zstd openssl xz-utils file unzip bzip2 patch rsync ca-certificates tar gzip perl procps pkg-config
       - uses: actions/checkout@v5
         with:
           submodules: false
