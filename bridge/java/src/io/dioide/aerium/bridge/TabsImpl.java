@@ -6,6 +6,7 @@ package io.dioide.aerium.bridge;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Bitmap;
 import android.net.Uri;
 import android.provider.Browser;
 
@@ -19,17 +20,20 @@ import org.chromium.chrome.browser.app.tabwindow.TabWindowManagerSingleton;
 import org.chromium.chrome.browser.desktop_site.DesktopSiteUtils;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabFavicon;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.browser.tab.TabUtils;
 import org.chromium.chrome.browser.tabmodel.TabClosureParams;
 import org.chromium.chrome.browser.tabmodel.TabModel;
+import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.chrome.browser.tabwindow.TabWindowManager;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.NavigationHandle;
+import org.chromium.url.GURL;
 
 import io.dioide.aerium.api.OpenMode;
 import io.dioide.aerium.api.Subscription;
@@ -66,8 +70,24 @@ final class TabsImpl implements TabsApi {
     }
 
     @Override
+    public List<TabInfo> list(Activity window) {
+        List<TabInfo> tabs = new ArrayList<>();
+        TabModelSelector selector = selector(window);
+        if (selector == null) return tabs;
+        for (Tab tab : selector.getCurrentModel()) tabs.add(info(tab));
+        return tabs;
+    }
+
+    @Override
     public @Nullable TabInfo current() {
         TabModelSelector selector = selector();
+        Tab tab = selector == null ? null : selector.getCurrentTab();
+        return tab == null ? null : info(tab);
+    }
+
+    @Override
+    public @Nullable TabInfo current(Activity window) {
+        TabModelSelector selector = selector(window);
         Tab tab = selector == null ? null : selector.getCurrentTab();
         return tab == null ? null : info(tab);
     }
@@ -145,6 +165,19 @@ final class TabsImpl implements TabsApi {
     }
 
     @Override
+    public void move(Activity window, int tabId, int index) {
+        TabModelSelector selector = selector(window);
+        TabModel model = selector == null ? null : selector.getModelForTabId(tabId);
+        if (model != null) model.moveTab(tabId, index);
+    }
+
+    @Override
+    public @Nullable Bitmap favicon(int tabId) {
+        Tab tab = tab(tabId);
+        return tab == null ? null : TabFavicon.getBitmap(tab);
+    }
+
+    @Override
     public void setDesktopSite(int tabId, boolean desktopSite) {
         Tab tab = tab(tabId);
         if (tab == null || tab.getWebContents() == null) return;
@@ -155,7 +188,20 @@ final class TabsImpl implements TabsApi {
 
     @Override
     public Subscription observe(TabsApi.Observer observer) {
-        return new Watch(observer);
+        return new Watch(observer, null);
+    }
+
+    @Override
+    public Subscription observe(Activity window, TabsApi.Observer observer) {
+        return new Watch(observer, window);
+    }
+
+    static @Nullable TabModelSelector selector(Activity window) {
+        TabWindowManager manager = TabWindowManagerSingleton.getInstance();
+        int id = manager.getIdForWindow(window);
+        return id == TabWindowManager.INVALID_WINDOW_ID
+                ? null
+                : manager.getTabModelSelectorById(id);
     }
 
     static @Nullable TabModelSelector selector() {
@@ -194,15 +240,24 @@ final class TabsImpl implements TabsApi {
 
     private static final class Watch implements Subscription, TabWindowManager.Observer {
         private final TabsApi.Observer mObserver;
+        private final @Nullable Activity mWindow;
         private final Callback<Tab> mCurrent;
+        private final TabModelObserver mOrder =
+                new TabModelObserver() {
+                    @Override
+                    public void didMoveTab(Tab tab, int newIndex, int curIndex) {
+                        mObserver.onTabListChanged();
+                    }
+                };
         private @Nullable TabModelSelector mSelector;
         private @Nullable TabModelSelectorTabObserver mTabs;
         private boolean mCancelled;
 
-        Watch(TabsApi.Observer observer) {
+        Watch(TabsApi.Observer observer, @Nullable Activity window) {
             mObserver = observer;
+            mWindow = window;
             mCurrent = tab -> mObserver.onCurrentTabChanged(tab == null ? null : info(tab));
-            TabModelSelector selector = selector();
+            TabModelSelector selector = window == null ? selector() : selector(window);
             if (selector != null) {
                 attach(selector);
             } else {
@@ -213,6 +268,7 @@ final class TabsImpl implements TabsApi {
         @Override
         public void onTabModelSelectorAdded(TabModelSelector selector) {
             if (mCancelled || mSelector != null) return;
+            if (mWindow != null && selector != selector(mWindow)) return;
             TabWindowManagerSingleton.getInstance().removeObserver(this);
             attach(selector);
         }
@@ -223,7 +279,10 @@ final class TabsImpl implements TabsApi {
             mCancelled = true;
             TabWindowManagerSingleton.getInstance().removeObserver(this);
             if (mTabs != null) mTabs.destroy();
-            if (mSelector != null) mSelector.getCurrentTabSupplier().removeObserver(mCurrent);
+            if (mSelector != null) {
+                mSelector.getCurrentTabSupplier().removeObserver(mCurrent);
+                mSelector.removeObserverFromAllModels(mOrder);
+            }
             mTabs = null;
             mSelector = null;
         }
@@ -235,11 +294,19 @@ final class TabsImpl implements TabsApi {
                         @Override
                         protected void onTabRegistered(Tab tab) {
                             mObserver.onTabAdded(info(tab));
+                            mObserver.onTabListChanged();
                         }
 
                         @Override
                         protected void onTabUnregistered(Tab tab) {
                             mObserver.onTabRemoved(tab.getId());
+                            mObserver.onTabListChanged();
+                        }
+
+                        @Override
+                        public void onFaviconUpdated(
+                                Tab tab, @Nullable Bitmap icon, @Nullable GURL iconUrl) {
+                            changed(tab);
                         }
 
                         @Override
@@ -274,6 +341,7 @@ final class TabsImpl implements TabsApi {
                         }
                     };
             selector.getCurrentTabSupplier().addSyncObserver(mCurrent);
+            selector.addObserverToAllModels(mOrder);
         }
 
         private void changed(Tab tab) {
