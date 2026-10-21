@@ -44,6 +44,11 @@ on:
           - arm64
           - x64
         default: arm64
+      machine:
+        description: 'Machine type for the build, empty for the default'
+        type: string
+        required: false
+        default: ''
       vm:
         description: 'Build in one go on the aerium machine'
         type: boolean
@@ -81,7 +86,7 @@ jobs:
           GH_TOKEN: ${{ secrets.RUNNER_PAT }}
           NAME: aerium-${{ github.run_id }}
           ZONE: ${{ vars.GCP_ZONE || 'europe-west1-b' }}
-          MACHINE: ${{ vars.GCP_MACHINE || 'c3-standard-44' }}
+          MACHINE: ${{ inputs.machine || vars.GCP_MACHINE || 'c3-standard-44' }}
         run: |
           set -euo pipefail
           token=$(gh api -X POST "repos/$GITHUB_REPOSITORY/actions/runners/registration-token" --jq .token)
