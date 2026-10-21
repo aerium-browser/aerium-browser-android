@@ -105,7 +105,7 @@ jobs:
             --image-family ubuntu-2404-lts-amd64 \
             --image-project ubuntu-os-cloud \
             --boot-disk-size 300GB \
-            --boot-disk-type pd-balanced \
+            --boot-disk-type "${{ vars.GCP_DISK || 'pd-ssd' }}" \
             --max-run-duration 30h \
             --instance-termination-action DELETE \
             --metadata-from-file startup-script="$RUNNER_TEMP/startup.sh" \
@@ -139,10 +139,10 @@ jobs:
       - name: Build
         env:
           AERIUM_TARGET_CPU: ${{ inputs.arch || 'arm64' }}
-          NINJA_JOBS: '16'
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
         run: |
+          export NINJA_JOBS=$(nproc)
           cd "$GITHUB_WORKSPACE"
           rm -rf release stage-status chromium/src chromium/.gclient chromium/.gclient_entries chromium/.gclient_previous_sync_commits chromium/.cipd
           chmod +x ./*.sh
