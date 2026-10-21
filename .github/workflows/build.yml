@@ -70,6 +70,10 @@ jobs:
     runs-on: self-hosted
     timeout-minutes: 2880
     steps:
+      - name: Install base tools
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q git curl python3 lsb-release zstd openssl xz-utils file unzip
       - uses: actions/checkout@v5
         with:
           submodules: false
@@ -89,8 +93,6 @@ jobs:
           LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
           STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
         run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q git curl python3 lsb-release zstd openssl xz-utils file unzip
           cd "$GITHUB_WORKSPACE"
           rm -rf release stage-status chromium/src chromium/.gclient chromium/.gclient_entries chromium/.gclient_previous_sync_commits chromium/.cipd
           chmod +x ./*.sh
