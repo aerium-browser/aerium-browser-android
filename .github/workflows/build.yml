@@ -44,6 +44,11 @@ on:
           - arm64
           - x64
         default: arm64
+      vm:
+        description: 'Build in one go on the aerium machine'
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -60,7 +65,69 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'push' }}
 
 jobs:
+  vm:
+    if: ${{ inputs.vm == true }}
+    runs-on: [self-hosted, aerium]
+    timeout-minutes: 2880
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: false
+          clean: false
+      - name: Check out the Aerium layer
+        if: ${{ env.AERIUM_FLAVOR == 'full' }}
+        uses: actions/checkout@v5
+        with:
+          repository: aerium-browser/aerium-browser-ui
+          ssh-key: ${{ secrets.AERIUM_UI_KEY }}
+          path: ui
+          persist-credentials: false
+      - name: Build
+        env:
+          AERIUM_TARGET_CPU: ${{ inputs.arch || 'arm64' }}
+          NINJA_JOBS: '14'
+          LOCAL_TEST_JKS: ${{ secrets.LOCAL_TEST_JKS }}
+          STORE_TEST_JKS: ${{ secrets.STORE_TEST_JKS }}
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          rm -rf release stage-status chromium/src chromium/.gclient chromium/.gclient_entries chromium/.gclient_previous_sync_commits chromium/.cipd
+          chmod +x ./*.sh
+          df -h "$GITHUB_WORKSPACE"
+          if [ -n "${AERIUM_UI_DIR:-}" ]; then
+            set +e
+            ./build.sh > vm-build.log 2>&1
+            code=$?
+            set -e
+            if [ $code -ne 0 ]; then
+              mkdir -p stage-status
+              tail -n 3000 vm-build.log | zstd -q -T0 -19 \
+                | openssl enc -aes-256-ctr -pbkdf2 -salt -pass env:AERIUM_CHECKPOINT_KEY \
+                    -out stage-status/details.enc
+              echo "build failed, the details are in the encrypted failure marker"
+            fi
+            rm -f vm-build.log
+            exit $code
+          fi
+          ./build.sh
+      - name: Upload failure marker
+        if: ${{ failure() && env.AERIUM_FLAVOR == 'full' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: build-error-aerium-${{ inputs.arch || 'arm64' }}
+          path: ${{ github.workspace }}/stage-status/
+          retention-days: 10
+          overwrite: true
+      - name: Upload final APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.AERIUM_FLAVOR == 'full' && 'aerium-full' || 'aerium-android' }}-${{ inputs.arch || 'arm64' }}
+          path: ${{ github.workspace }}/release/
+          retention-days: 30
+          compression-level: 0
+          overwrite: true
+
   build-1:
+    if: ${{ inputs.vm != true }}
     runs-on: ubuntu-24.04
     timeout-minutes: 350
     outputs:
@@ -852,7 +919,7 @@ jobs:
   check-completion:
     runs-on: ubuntu-24.04
     needs: build-24
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && inputs.vm != true }}
     steps:
       - name: Verify build finished
         run: |
