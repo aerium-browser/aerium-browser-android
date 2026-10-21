@@ -160,7 +160,7 @@ EOF
     gclient runhooks
     rm -rf third_party/angle/third_party/VK-GL-CTS/
 
-    ./build/install-build-deps.sh --no-prompt
+    ./build/install-build-deps.sh --no-prompt --unsupported
     sudo apt-get clean
     sudo rm -rf /var/lib/apt/lists/*
 
@@ -222,7 +222,7 @@ cd chromium/src
 
 
 # compile prerequisites must exist on every fresh runner
-./build/install-build-deps.sh --no-prompt || true
+./build/install-build-deps.sh --no-prompt --unsupported || true
 # ...and its .debs must not be left sitting on the small root filesystem.
 sudo apt-get clean || true
 sudo rm -rf /var/lib/apt/lists/* || true
