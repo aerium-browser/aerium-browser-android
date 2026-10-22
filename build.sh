@@ -442,7 +442,7 @@ if [ $MODE_CI = 1 ]; then
         exit $RET
     fi
 else
-    autoninja -j "${NINJA_JOBS:-2}" -C out/Default chrome_public_apk
+    autoninja -j "${NINJA_JOBS:-2}" -k "${NINJA_KEEP_GOING:-1}" -C out/Default chrome_public_apk
 fi
 
 # --- sign & finish ------------------------------------------------------------
