@@ -156,7 +156,8 @@ jobs:
           echo "SCCACHE_GCS_BUCKET=$CACHE_BUCKET" >> "$GITHUB_ENV"
           echo "SCCACHE_GCS_RW_MODE=READ_WRITE" >> "$GITHUB_ENV"
           echo "SCCACHE_GCS_KEY_PATH=$GOOGLE_APPLICATION_CREDENTIALS" >> "$GITHUB_ENV"
-          echo "SCCACHE_GCS_KEY_PREFIX=${{ inputs.arch || 'arm64' }}" >> "$GITHUB_ENV"
+          echo "SCCACHE_ERROR_LOG=$RUNNER_TEMP/sccache.log" >> "$GITHUB_ENV"
+          echo "SCCACHE_LOG=warn" >> "$GITHUB_ENV"
           printf 'AERIUM_EXTRA_ARGS<<EOF\ncc_wrapper = "sccache"\nenable_precompiled_headers = false\nuse_clang_modules = false\nEOF\n' >> "$GITHUB_ENV"
       - name: Build
         env:
@@ -192,7 +193,9 @@ jobs:
           ./build.sh
       - name: Cache stats
         if: ${{ always() && env.CACHE_BUCKET != '' }}
-        run: sccache --show-stats || true
+        run: |
+          sccache --show-stats || true
+          grep -v -i "aerium" "$RUNNER_TEMP/sccache.log" 2>/dev/null | sort | uniq -c | sort -rn | head -20 || true
       - name: Upload failure marker
         if: ${{ failure() && env.AERIUM_FLAVOR == 'full' }}
         uses: actions/upload-artifact@v7
