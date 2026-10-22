@@ -21,10 +21,9 @@ enable_reporting = false
 proprietary_codecs = true
 ffmpeg_branding = "Chrome"
 
-enable_vr = false
 enable_arcore = false
 enable_openxr = false
-enable_cardboard = false
+enable_cardboard = true
 enable_remoting = false
 build_contextual_search = false
 rtc_build_examples = false
