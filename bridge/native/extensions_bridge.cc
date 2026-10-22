@@ -29,6 +29,7 @@
 #include "extensions/browser/zipfile_installer.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/manifest_handlers/options_page_info.h"
+#include "third_party/jni_zero/jni_zero.h"
 #include "url/gurl.h"
 
 #include "aerium/bridge/jni_headers/ExtensionsImpl_jni.h"
@@ -147,7 +148,7 @@ static void JNI_ExtensionsImpl_Install(
     JNIEnv* env,
     Profile* profile,
     const std::string& path,
-    const base::android::JavaParamRef<jobject>& done) {
+    const jni_zero::JavaParamRef<jobject>& done) {
   const base::FilePath file(path);
   base::android::ScopedJavaGlobalRef<jobject> callback(done);
   if (file.MatchesExtension(FILE_PATH_LITERAL(".zip"))) {
