@@ -10,7 +10,7 @@ Subject: [PATCH] Add core build targets
  3 files changed, 13 insertions(+), 1 deletion(-)
 
 diff --git a/chrome/android/BUILD.gn b/chrome/android/BUILD.gn
-index 6ed792010ee90f07562ce80b34afe5fe722df299..cb4645e7f40a99e119cfd31947a156d410a5322f 100644
+index 6ed792010ee90f07562ce80b34afe5fe722df299..cd22f08b2c083dcdb7f9e8ac09a29291dda9b4a8 100644
 --- a/chrome/android/BUILD.gn
 +++ b/chrome/android/BUILD.gn
 @@ -8,6 +8,7 @@ import("//build/toolchain/gcc_toolchain.gni")
@@ -29,18 +29,25 @@ index 6ed792010ee90f07562ce80b34afe5fe722df299..cb4645e7f40a99e119cfd31947a156d4
        ":base_module_java",
        ":chrome_app_java_resources",
        ":chrome_public_apk_template_resources",
-@@ -893,6 +895,11 @@ if (_is_default_toolchain) {
+@@ -893,6 +895,10 @@ if (_is_default_toolchain) {
  
      # From java_sources.gni.
      sources = chrome_java_sources
 +    sources += aerium_bridge_java_sources
-+    srcjar_deps += [ "//aerium/bridge:jni_headers" ]
 +    if (aerium_ui_java != "") {
 +      deps += [ aerium_ui_java ]
 +    }
  
      # Include sources from feed_java_sources.gni.
      sources += feed_java_sources
+@@ -3014,6 +3020,7 @@ if (_is_default_toolchain) {
+ 
+   generate_jni("chrome_jni_headers") {
+     sources = [
++      "//aerium/bridge/java/src/io/dioide/aerium/bridge/ExtensionsImpl.java",
+       "../browser/share/android/java/src/org/chromium/chrome/browser/share/BitmapDownloadRequest.java",
+       "../browser/share/android/java/src/org/chromium/chrome/browser/share/link_to_text/LinkToTextBridge.java",
+       "../browser/share/android/java/src/org/chromium/chrome/browser/share/long_screenshots/bitmap_generation/LongScreenshotsTabService.java",
 diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
 index 33a6696fd803af080bb0a7d71b66e06d6950f86d..3382cc8d844e49ea54e35280fd8c9b21f0f887a6 100644
 --- a/chrome/browser/BUILD.gn
