@@ -1,0 +1,60 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: fatih-gh <me@mehmetfatihyaman.me>
+Date: Thu, 1 Jan 2026 00:00:00 +0000
+Subject: [PATCH] Build the omnibox without VR icons
+
+---
+ chrome/browser/ui/omnibox/omnibox_edit_model.cc               | 4 ++++
+ .../ui/webui/cr_components/searchbox/searchbox_handler.cc     | 4 ++++
+ 2 files changed, 8 insertions(+)
+
+diff --git a/chrome/browser/ui/omnibox/omnibox_edit_model.cc b/chrome/browser/ui/omnibox/omnibox_edit_model.cc
+index 34572bb41b54d01f1b8b7bd713afb1bcb1cdd126..d7a16bdb87614f7665470486d65c61c30b756dd9 100644
+--- a/chrome/browser/ui/omnibox/omnibox_edit_model.cc
++++ b/chrome/browser/ui/omnibox/omnibox_edit_model.cc
+@@ -1996,11 +1996,15 @@ gfx::Image OmniboxEditModel::GetMatchIcon(const AutocompleteMatch& match,
+     }
+   }
+ 
++#if !BUILDFLAG(IS_ANDROID) || BUILDFLAG(ENABLE_VR)
+   bool is_starred_match = IsStarredMatch(match);
+   const auto& vector_icon_type = match.GetVectorIcon(is_starred_match, turl);
+ 
+   return controller_->client()->GetSizedIcon(vector_icon_type,
+                                              vector_icon_color);
++#else
++  return gfx::Image();
++#endif
+ }
+ 
+ gfx::Image OmniboxEditModel::GetMatchIconIfExtension(
+diff --git a/chrome/browser/ui/webui/cr_components/searchbox/searchbox_handler.cc b/chrome/browser/ui/webui/cr_components/searchbox/searchbox_handler.cc
+index 2990268524a24b718532357d2200bbd202964121..74e96bd9c257d4839cab85a666ce05b13214cc48 100644
+--- a/chrome/browser/ui/webui/cr_components/searchbox/searchbox_handler.cc
++++ b/chrome/browser/ui/webui/cr_components/searchbox/searchbox_handler.cc
+@@ -1000,6 +1000,7 @@ SearchboxHandler::CreateAutocompleteMatch(
+   mojom_match->destination_url = match.destination_url;
+   mojom_match->suggestion_group_id =
+       match.suggestion_group_id.value_or(omnibox::GROUP_INVALID);
++#if !BUILDFLAG(IS_ANDROID) || BUILDFLAG(ENABLE_VR)
+   const bool is_bookmarked =
+       bookmark_model->IsBookmarked(match.destination_url);
+   // For starter pack suggestions, use template url to generate proper vector
+@@ -1010,6 +1011,7 @@ SearchboxHandler::CreateAutocompleteMatch(
+           : turl_service->GetTemplateURLForKeyword(match.associated_keyword);
+   mojom_match->icon_path = AutocompleteIconToResourceName(
+       match.GetVectorIcon(is_bookmarked, associated_keyword_turl));
++#endif
+   OverrideIconPaths(match, mojom_match.get());
+   mojom_match->icon_url = match.icon_url;
+   // For featured enterprise search suggestions, use template url to generate
+@@ -1057,7 +1059,9 @@ SearchboxHandler::CreateAutocompleteMatch(
+ #endif
+       std::string icon_path;
+       if (action->GetIconImage().IsEmpty()) {
++#if !BUILDFLAG(IS_ANDROID) || BUILDFLAG(ENABLE_VR)
+         icon_path = AutocompleteIconToResourceName(action->GetVectorIcon());
++#endif
+       } else {
+         icon_path = webui::GetBitmapDataUrl(action->GetIconImage().AsBitmap());
+       }
