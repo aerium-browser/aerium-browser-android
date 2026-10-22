@@ -76,10 +76,10 @@ jobs:
     outputs:
       name: ${{ steps.up.outputs.name }}
     steps:
-      - uses: google-github-actions/auth@v2
+      - uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
-      - uses: google-github-actions/setup-gcloud@v2
+      - uses: google-github-actions/setup-gcloud@v3
       - name: Start the build machine
         id: up
         env:
@@ -143,7 +143,7 @@ jobs:
           ssh-key: ${{ secrets.AERIUM_UI_KEY }}
           path: ui
           persist-credentials: false
-      - uses: google-github-actions/auth@v2
+      - uses: google-github-actions/auth@v3
         if: ${{ env.CACHE_BUCKET != '' }}
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
@@ -215,10 +215,10 @@ jobs:
     if: ${{ always() && needs.machine-up.result == 'success' }}
     runs-on: ubuntu-24.04
     steps:
-      - uses: google-github-actions/auth@v2
+      - uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
-      - uses: google-github-actions/setup-gcloud@v2
+      - uses: google-github-actions/setup-gcloud@v3
       - name: Delete the build machine
         env:
           NAME: ${{ needs.machine-up.outputs.name }}
