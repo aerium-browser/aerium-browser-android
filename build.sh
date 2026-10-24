@@ -164,6 +164,8 @@ EOF
     sudo apt-get clean
     sudo rm -rf /var/lib/apt/lists/*
 
+    python3 "$SCRIPT_DIR/refresh.py" save --src . --cache out/aerium-pristine \
+        "$SCRIPT_DIR/patches" ${AERIUM_UI_DIR:+"$AERIUM_UI_DIR/engine/patches"}
     source $SCRIPT_DIR/apply.sh
     if [ -n "${AERIUM_UI_DIR:-}" ]; then
         source "$AERIUM_UI_DIR/engine/apply.sh"
@@ -223,9 +225,24 @@ EOF
     rm -rf .git
 
     cd $SCRIPT_DIR
+    AERIUM_FRESH=1
 fi
 
 cd chromium/src
+
+if [ -z "${AERIUM_FRESH:-}" ]; then
+    for part in api bridge defaults; do
+        if [ -d "$SCRIPT_DIR/$part" ]; then
+            python3 "$SCRIPT_DIR/refresh.py" copy --label "core $part" "$SCRIPT_DIR/$part" "aerium/$part"
+        fi
+    done
+    if [ -n "${AERIUM_UI_DIR:-}" ]; then
+        source "$AERIUM_UI_DIR/engine/refresh.sh"
+    else
+        python3 "$SCRIPT_DIR/refresh.py" refresh --src . --cache out/aerium-pristine \
+            --version "$VERSION" "$SCRIPT_DIR/patches"
+    fi
+fi
 
 
 # compile prerequisites must exist on every fresh runner
