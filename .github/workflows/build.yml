@@ -54,6 +54,13 @@ on:
         type: boolean
         required: false
         default: false
+      cloud:
+        description: 'Where the aerium machine runs'
+        type: choice
+        options:
+          - oracle
+          - gcp
+        default: oracle
 
 permissions:
   contents: read
@@ -71,7 +78,7 @@ concurrency:
 
 jobs:
   machine-up:
-    if: ${{ inputs.vm == true }}
+    if: ${{ inputs.vm == true && inputs.cloud == 'gcp' }}
     runs-on: ubuntu-24.04
     outputs:
       name: ${{ steps.up.outputs.name }}
@@ -118,13 +125,84 @@ jobs:
           rm -f "$RUNNER_TEMP/startup.sh"
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
 
+  oracle-up:
+    if: ${{ inputs.vm == true && inputs.cloud == 'oracle' }}
+    runs-on: ubuntu-24.04
+    outputs:
+      id: ${{ steps.up.outputs.id }}
+    env:
+      OCI_CLI_USER: ${{ secrets.OCI_USER }}
+      OCI_CLI_TENANCY: ${{ secrets.OCI_TENANCY }}
+      OCI_CLI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
+      OCI_CLI_KEY_CONTENT: ${{ secrets.OCI_KEY }}
+      OCI_CLI_REGION: ${{ vars.OCI_REGION }}
+      OCI_CLI_SUPPRESS_FILE_PERMISSIONS_WARNING: 'True'
+    steps:
+      - name: Install the Oracle CLI
+        run: |
+          set -euo pipefail
+          pipx install oci-cli >/dev/null
+          mkdir -p ~/.oci
+          printf '%s\n' "$OCI_CLI_KEY_CONTENT" > ~/.oci/key.pem
+          chmod 600 ~/.oci/key.pem
+          printf '[DEFAULT]\nuser=%s\nfingerprint=%s\ntenancy=%s\nregion=%s\nkey_file=%s\n' \
+            "$OCI_CLI_USER" "$OCI_CLI_FINGERPRINT" "$OCI_CLI_TENANCY" "$OCI_CLI_REGION" "$HOME/.oci/key.pem" > ~/.oci/config
+          chmod 600 ~/.oci/config
+      - name: Start the build machine
+        id: up
+        env:
+          GH_TOKEN: ${{ secrets.RUNNER_PAT }}
+          NAME: aerium-${{ github.run_id }}
+          SHAPE: ${{ inputs.machine || vars.OCI_SHAPE || 'VM.Standard.E5.Flex' }}
+          OCPUS: ${{ vars.OCI_OCPUS || '16' }}
+          MEMORY: ${{ vars.OCI_MEMORY || '96' }}
+          SUBNET: ${{ vars.OCI_SUBNET }}
+          COMPARTMENT: ${{ vars.OCI_COMPARTMENT || secrets.OCI_TENANCY }}
+        run: |
+          set -euo pipefail
+          token=$(gh api -X POST "repos/$GITHUB_REPOSITORY/actions/runners/registration-token" --jq .token)
+          echo "::add-mask::$token"
+          ver=$(gh api repos/actions/runner/releases/latest --jq .tag_name | sed 's/^v//')
+          cat > "$RUNNER_TEMP/startup.sh" <<EOF
+          #!/bin/bash
+          set -e
+          shutdown -h +1800 || true
+          id runner >/dev/null 2>&1 || useradd -m -s /bin/bash runner
+          echo 'runner ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/runner
+          cd /home/runner
+          [ -f config.sh ] && exit 0
+          curl -sL https://github.com/actions/runner/releases/download/v$ver/actions-runner-linux-x64-$ver.tar.gz | sudo -u runner tar xz
+          ./bin/installdependencies.sh || true
+          sudo -u runner ./config.sh --unattended --ephemeral --url https://github.com/$GITHUB_REPOSITORY --token $token --labels $NAME --name $NAME
+          sudo -u runner nohup ./run.sh > /home/runner/run.log 2>&1 &
+          EOF
+          ad=$(oci iam availability-domain list --compartment-id "$COMPARTMENT" --query 'data[0].name' --raw-output)
+          image=$(oci compute image list --compartment-id "$COMPARTMENT" \
+            --operating-system 'Canonical Ubuntu' --operating-system-version '24.04' --shape "$SHAPE" \
+            --sort-by TIMECREATED --sort-order DESC --all \
+            --query "data[?!contains(\"display-name\", 'Minimal') && !contains(\"display-name\", 'aarch64')] | [0].id" --raw-output)
+          id=$(oci compute instance launch \
+            --availability-domain "$ad" \
+            --compartment-id "$COMPARTMENT" \
+            --display-name "$NAME" \
+            --shape "$SHAPE" \
+            --shape-config "{\"ocpus\": $OCPUS, \"memoryInGBs\": $MEMORY}" \
+            --image-id "$image" \
+            --subnet-id "$SUBNET" \
+            --assign-public-ip true \
+            --boot-volume-size-in-gbs 300 \
+            --user-data-file "$RUNNER_TEMP/startup.sh" \
+            --query 'data.id' --raw-output)
+          rm -f "$RUNNER_TEMP/startup.sh"
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+
   vm:
-    needs: machine-up
-    if: ${{ inputs.vm == true }}
+    needs: [machine-up, oracle-up]
+    if: ${{ always() && inputs.vm == true && (needs.machine-up.result == 'success' || needs.oracle-up.result == 'success') }}
     runs-on: [self-hosted, "aerium-${{ github.run_id }}"]
     timeout-minutes: 2880
     env:
-      CACHE_BUCKET: ${{ vars.SCCACHE_BUCKET || secrets.SCCACHE_BUCKET }}
+      CACHE_BUCKET: ${{ inputs.cloud == 'gcp' && (vars.SCCACHE_BUCKET || secrets.SCCACHE_BUCKET) || '' }}
     steps:
       - name: Install base tools
         run: |
@@ -228,6 +306,38 @@ jobs:
           NAME: ${{ needs.machine-up.outputs.name }}
           ZONE: ${{ vars.GCP_ZONE || 'europe-west1-b' }}
         run: gcloud compute instances delete "$NAME" --zone "$ZONE" --quiet || true
+
+  oracle-down:
+    needs: [oracle-up, vm]
+    if: ${{ always() && needs.oracle-up.result == 'success' }}
+    runs-on: ubuntu-24.04
+    env:
+      OCI_CLI_USER: ${{ secrets.OCI_USER }}
+      OCI_CLI_TENANCY: ${{ secrets.OCI_TENANCY }}
+      OCI_CLI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
+      OCI_CLI_KEY_CONTENT: ${{ secrets.OCI_KEY }}
+      OCI_CLI_REGION: ${{ vars.OCI_REGION }}
+      OCI_CLI_SUPPRESS_FILE_PERMISSIONS_WARNING: 'True'
+    steps:
+      - name: Install the Oracle CLI
+        run: |
+          set -euo pipefail
+          pipx install oci-cli >/dev/null
+          mkdir -p ~/.oci
+          printf '%s\n' "$OCI_CLI_KEY_CONTENT" > ~/.oci/key.pem
+          chmod 600 ~/.oci/key.pem
+          printf '[DEFAULT]\nuser=%s\nfingerprint=%s\ntenancy=%s\nregion=%s\nkey_file=%s\n' \
+            "$OCI_CLI_USER" "$OCI_CLI_FINGERPRINT" "$OCI_CLI_TENANCY" "$OCI_CLI_REGION" "$HOME/.oci/key.pem" > ~/.oci/config
+          chmod 600 ~/.oci/config
+      - name: Delete the build machine
+        env:
+          ID: ${{ needs.oracle-up.outputs.id }}
+        run: |
+          for attempt in 1 2 3; do
+            oci compute instance terminate --instance-id "$ID" --preserve-boot-volume false --force && exit 0
+            sleep 30
+          done
+          exit 1
 
   build-1:
     if: ${{ inputs.vm != true }}
