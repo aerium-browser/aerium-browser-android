@@ -142,6 +142,7 @@ jobs:
           repository: aerium-browser/aerium-browser-ui
           ssh-key: ${{ secrets.AERIUM_UI_KEY }}
           path: ui
+          fetch-depth: 0
           persist-credentials: false
       - uses: google-github-actions/auth@v3
         if: ${{ env.CACHE_BUCKET != '' }}
@@ -246,6 +247,7 @@ jobs:
           repository: aerium-browser/aerium-browser-ui
           ssh-key: ${{ secrets.AERIUM_UI_KEY }}
           path: ui
+          fetch-depth: 0
           persist-credentials: false
       - name: Stage 1
         id: stage
@@ -279,6 +281,7 @@ jobs:
           repository: aerium-browser/aerium-browser-ui
           ssh-key: ${{ secrets.AERIUM_UI_KEY }}
           path: ui
+          fetch-depth: 0
           persist-credentials: false
       - name: Stage 2
         id: stage
@@ -312,6 +315,7 @@ jobs:
           repository: aerium-browser/aerium-browser-ui
           ssh-key: ${{ secrets.AERIUM_UI_KEY }}
           path: ui
+          fetch-depth: 0
           persist-credentials: false
       - name: Stage 3
         id: stage
@@ -345,6 +349,7 @@ jobs:
           repository: aerium-browser/aerium-browser-ui
           ssh-key: ${{ secrets.AERIUM_UI_KEY }}
           path: ui
+          fetch-depth: 0
           persist-credentials: false
       - name: Stage 4
         id: stage
@@ -378,6 +383,7 @@ jobs:
           repository: aerium-browser/aerium-browser-ui
           ssh-key: ${{ secrets.AERIUM_UI_KEY }}
           path: ui
+          fetch-depth: 0
           persist-credentials: false
       - name: Stage 5
         id: stage
@@ -411,6 +417,7 @@ jobs:
           repository: aerium-browser/aerium-browser-ui
           ssh-key: ${{ secrets.AERIUM_UI_KEY }}
           path: ui
+          fetch-depth: 0
           persist-credentials: false
       - name: Stage 6
         id: stage
@@ -444,6 +451,7 @@ jobs:
           repository: aerium-browser/aerium-browser-ui
           ssh-key: ${{ secrets.AERIUM_UI_KEY }}
           path: ui
+          fetch-depth: 0
           persist-credentials: false
       - name: Stage 7
         id: stage
@@ -477,6 +485,7 @@ jobs:
           repository: aerium-browser/aerium-browser-ui
           ssh-key: ${{ secrets.AERIUM_UI_KEY }}
           path: ui
+          fetch-depth: 0
           persist-credentials: false
       - name: Stage 8
         id: stage
@@ -510,6 +519,7 @@ jobs:
           repository: aerium-browser/aerium-browser-ui
           ssh-key: ${{ secrets.AERIUM_UI_KEY }}
           path: ui
+          fetch-depth: 0
           persist-credentials: false
       - name: Stage 9
         id: stage
@@ -543,6 +553,7 @@ jobs:
           repository: aerium-browser/aerium-browser-ui
           ssh-key: ${{ secrets.AERIUM_UI_KEY }}
           path: ui
+          fetch-depth: 0
           persist-credentials: false
       - name: Stage 10
         id: stage
@@ -576,6 +587,7 @@ jobs:
           repository: aerium-browser/aerium-browser-ui
           ssh-key: ${{ secrets.AERIUM_UI_KEY }}
           path: ui
+          fetch-depth: 0
           persist-credentials: false
       - name: Stage 11
         id: stage
@@ -609,6 +621,7 @@ jobs:
           repository: aerium-browser/aerium-browser-ui
           ssh-key: ${{ secrets.AERIUM_UI_KEY }}
           path: ui
+          fetch-depth: 0
           persist-credentials: false
       - name: Stage 12
         id: stage
@@ -642,6 +655,7 @@ jobs:
           repository: aerium-browser/aerium-browser-ui
           ssh-key: ${{ secrets.AERIUM_UI_KEY }}
           path: ui
+          fetch-depth: 0
           persist-credentials: false
       - name: Stage 13
         id: stage
@@ -675,6 +689,7 @@ jobs:
           repository: aerium-browser/aerium-browser-ui
           ssh-key: ${{ secrets.AERIUM_UI_KEY }}
           path: ui
+          fetch-depth: 0
           persist-credentials: false
       - name: Stage 14
         id: stage
@@ -708,6 +723,7 @@ jobs:
           repository: aerium-browser/aerium-browser-ui
           ssh-key: ${{ secrets.AERIUM_UI_KEY }}
           path: ui
+          fetch-depth: 0
           persist-credentials: false
       - name: Stage 15
         id: stage
@@ -741,6 +757,7 @@ jobs:
           repository: aerium-browser/aerium-browser-ui
           ssh-key: ${{ secrets.AERIUM_UI_KEY }}
           path: ui
+          fetch-depth: 0
           persist-credentials: false
       - name: Stage 16
         id: stage
@@ -774,6 +791,7 @@ jobs:
           repository: aerium-browser/aerium-browser-ui
           ssh-key: ${{ secrets.AERIUM_UI_KEY }}
           path: ui
+          fetch-depth: 0
           persist-credentials: false
       - name: Stage 17
         id: stage
@@ -807,6 +825,7 @@ jobs:
           repository: aerium-browser/aerium-browser-ui
           ssh-key: ${{ secrets.AERIUM_UI_KEY }}
           path: ui
+          fetch-depth: 0
           persist-credentials: false
       - name: Stage 18
         id: stage
@@ -840,6 +859,7 @@ jobs:
           repository: aerium-browser/aerium-browser-ui
           ssh-key: ${{ secrets.AERIUM_UI_KEY }}
           path: ui
+          fetch-depth: 0
           persist-credentials: false
       - name: Stage 19
         id: stage
@@ -873,6 +893,7 @@ jobs:
           repository: aerium-browser/aerium-browser-ui
           ssh-key: ${{ secrets.AERIUM_UI_KEY }}
           path: ui
+          fetch-depth: 0
           persist-credentials: false
       - name: Stage 20
         id: stage
@@ -906,6 +927,7 @@ jobs:
           repository: aerium-browser/aerium-browser-ui
           ssh-key: ${{ secrets.AERIUM_UI_KEY }}
           path: ui
+          fetch-depth: 0
           persist-credentials: false
       - name: Stage 21
         id: stage
@@ -939,6 +961,7 @@ jobs:
           repository: aerium-browser/aerium-browser-ui
           ssh-key: ${{ secrets.AERIUM_UI_KEY }}
           path: ui
+          fetch-depth: 0
           persist-credentials: false
       - name: Stage 22
         id: stage
@@ -972,6 +995,7 @@ jobs:
           repository: aerium-browser/aerium-browser-ui
           ssh-key: ${{ secrets.AERIUM_UI_KEY }}
           path: ui
+          fetch-depth: 0
           persist-credentials: false
       - name: Stage 23
         id: stage
@@ -1005,6 +1029,7 @@ jobs:
           repository: aerium-browser/aerium-browser-ui
           ssh-key: ${{ secrets.AERIUM_UI_KEY }}
           path: ui
+          fetch-depth: 0
           persist-credentials: false
       - name: Stage 24
         id: stage

@@ -240,7 +240,7 @@ if [ -z "${AERIUM_FRESH:-}" ]; then
         source "$AERIUM_UI_DIR/engine/refresh.sh"
     else
         python3 "$SCRIPT_DIR/refresh.py" refresh --src . --cache out/aerium-pristine \
-            --version "$VERSION" "$SCRIPT_DIR/patches"
+            --base "$SCRIPT_DIR/patches" "$SCRIPT_DIR/patches"
     fi
 fi
 

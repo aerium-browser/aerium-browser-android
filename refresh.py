@@ -2,17 +2,12 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
 import argparse
-import base64
-import concurrent.futures
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
-import time
-import urllib.request
 
-GITILES = 'https://chromium.googlesource.com/chromium/src/+/refs/tags/{}/{}?format=TEXT'
 SKIP = ('*.grd', '*.grdp', '*.xtb')
 
 
@@ -49,18 +44,6 @@ def skipped(path, extra):
     return any(path.endswith(s[1:]) for s in SKIP)
 
 
-def fetch(version, path):
-    url = GITILES.format(version, path)
-    for attempt in range(6):
-        try:
-            with urllib.request.urlopen(url, timeout=60) as r:
-                return base64.b64decode(r.read())
-        except Exception as e:
-            if attempt == 5:
-                raise RuntimeError(f'{path}: {e}')
-            time.sleep(5 * (attempt + 1))
-
-
 def same(a, b):
     if not os.path.isfile(a) or not os.path.isfile(b):
         return False
@@ -89,6 +72,47 @@ def save(args):
     print(f'[aerium] pristine copies kept: {n}')
 
 
+def git_env(tmp):
+    env = dict(os.environ, GIT_CEILING_DIRECTORIES=os.path.dirname(tmp))
+    env.pop('GIT_DIR', None)
+    env.pop('GIT_WORK_TREE', None)
+    return env
+
+
+def rebuild(args, missing, extra, tmp):
+    if not args.base:
+        print('[aerium] FATAL: no pristine copies and no base patches', file=sys.stderr)
+        sys.exit(1)
+    base = patch_files(args.base)
+    bseen, _ = touched(base)
+    bset = set(bseen)
+    tb = tempfile.mkdtemp(prefix='aerium-base-')
+    try:
+        for path in bseen:
+            if skipped(path, extra):
+                continue
+            src = os.path.join(args.src, path)
+            if os.path.isfile(src):
+                put(src, os.path.join(tb, path))
+        excludes = [f'--exclude={s}' for s in SKIP] + [f'--exclude={p}' for p in extra]
+        for p in reversed(base):
+            r = subprocess.run(['git', 'apply', '-R', '--whitespace=nowarn', *excludes, p],
+                               cwd=tb, capture_output=True, text=True, env=git_env(tb))
+            if r.returncode:
+                print(f'[aerium] FATAL: {os.path.basename(p)} did not reverse', file=sys.stderr)
+                sys.exit(1)
+        for path in missing:
+            orig = os.path.join(tb, path) if path in bset else os.path.join(args.src, path)
+            if not os.path.isfile(orig):
+                print('[aerium] FATAL: a pristine file could not be rebuilt', file=sys.stderr)
+                sys.exit(1)
+            put(orig, os.path.join(tmp, path))
+            put(orig, os.path.join(args.cache, path))
+        print(f'[aerium] pristine copies rebuilt: {len(missing)}')
+    finally:
+        shutil.rmtree(tb, ignore_errors=True)
+
+
 def refresh(args):
     patches = patch_files(args.patches)
     seen, created = touched(patches)
@@ -104,17 +128,10 @@ def refresh(args):
                 put(cached, os.path.join(tmp, path))
             else:
                 missing.append(path)
-        with concurrent.futures.ThreadPoolExecutor(4) as pool:
-            for path, data in zip(missing, pool.map(lambda p: fetch(args.version, p), missing)):
-                dst = os.path.join(tmp, path)
-                os.makedirs(os.path.dirname(dst), exist_ok=True)
-                with open(dst, 'wb') as f:
-                    f.write(data)
-                put(dst, os.path.join(args.cache, path))
+        if missing:
+            rebuild(args, missing, extra, tmp)
         excludes = [f'--exclude={s}' for s in SKIP] + [f'--exclude={p}' for p in extra]
-        env = dict(os.environ, GIT_CEILING_DIRECTORIES=os.path.dirname(tmp))
-        env.pop('GIT_DIR', None)
-        env.pop('GIT_WORK_TREE', None)
+        env = git_env(tmp)
         for p in patches:
             r = subprocess.run(['git', 'apply', '--whitespace=nowarn', *excludes, p],
                                cwd=tmp, capture_output=True, text=True, env=env)
@@ -138,7 +155,7 @@ def refresh(args):
             if os.path.isfile(new) and not same(new, cur):
                 put(new, cur)
                 n += 1
-        print(f'[aerium] patched files refreshed: {n} of {len(work)} ({len(missing)} fetched)')
+        print(f'[aerium] patched files refreshed: {n} of {len(work)}')
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -165,7 +182,8 @@ def main():
     r = sub.add_parser('refresh')
     r.add_argument('--src', required=True)
     r.add_argument('--cache', required=True)
-    r.add_argument('--version', required=True)
+    r.add_argument('--version', default='')
+    r.add_argument('--base', action='append')
     r.add_argument('--skip', action='append')
     r.add_argument('patches', nargs='+')
     c = sub.add_parser('copy')
