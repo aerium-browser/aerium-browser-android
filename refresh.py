@@ -112,11 +112,24 @@ def refresh(args):
                     f.write(data)
                 put(dst, os.path.join(args.cache, path))
         excludes = [f'--exclude={s}' for s in SKIP] + [f'--exclude={p}' for p in extra]
+        env = dict(os.environ, GIT_CEILING_DIRECTORIES=os.path.dirname(tmp))
+        env.pop('GIT_DIR', None)
+        env.pop('GIT_WORK_TREE', None)
         for p in patches:
             r = subprocess.run(['git', 'apply', '--whitespace=nowarn', *excludes, p],
-                               cwd=tmp, capture_output=True, text=True)
+                               cwd=tmp, capture_output=True, text=True, env=env)
             if r.returncode:
                 print(f'[aerium] FATAL: {os.path.basename(p)} did not refresh', file=sys.stderr)
+                sys.exit(1)
+        for path in need:
+            new = os.path.join(tmp, path)
+            cached = os.path.join(args.cache, path)
+            if os.path.isfile(new) and same(new, cached):
+                print('[aerium] FATAL: patches were not applied during refresh', file=sys.stderr)
+                sys.exit(1)
+        for path in work:
+            if path in created and not os.path.isfile(os.path.join(tmp, path)):
+                print('[aerium] FATAL: patches were not applied during refresh', file=sys.stderr)
                 sys.exit(1)
         n = 0
         for path in work:
